@@ -1,0 +1,135 @@
+<section class="min-h-screen bg-background px-6 md:px-16 lg:px-24 py-16">
+    <div class="max-w-5xl mx-auto w-full">
+        <!-- Back navigation button -->
+        <div class="mb-8 flex justify-between items-center">
+            <button ng-click="$ctrl.onBack()"
+                class="text-secondary text-sm hover:text-primary transition-colors font-mono">
+                ← Quay lại Dashboard
+            </button>
+            <span class="text-xs font-mono text-accent">SECURE COMMAND OS v1.0</span>
+        </div>
+
+        <!-- Main Header -->
+        <div class="mb-12">
+            <span class="text-xs font-mono text-accent tracking-widest uppercase opacity-80">
+                Portfolio Command Center · Trung tâm điều hành
+            </span>
+            <h2 class="font-tight font-black text-primary text-4xl sm:text-5xl tracking-tightest leading-tight mt-4">
+                AI Recovery Clusters (Top 3)
+            </h2>
+            <p class="text-secondary text-sm mt-3 max-w-xl">
+                AI tự động gom nhóm hàng chậm/chết vào 3 cụm ưu tiên cao nhất theo tính chất ngành nghề để bạn thực hiện
+                chiến dịch giải phóng hàng loạt.
+            </p>
+        </div>
+
+        <!-- Loading screen placeholder -->
+        <div ng-if="$ctrl.loading" class="py-24 text-center">
+            <div class="text-accent font-mono text-lg animate-pulse">Đang chỉ huy phân tích các cụm tồn kho...</div>
+        </div>
+
+        <!-- Dashboard metrics summary -->
+        <div ng-if="!$ctrl.loading && $ctrl.portfolioData" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            <div class="border border-border-base bg-[#0e0e0e] p-6 rounded-2xl">
+                <div class="text-xs font-mono text-secondary/50 uppercase tracking-widest mb-2">Giá trị dự kiến thu hồi
+                </div>
+                <div class="font-tight font-black text-accent text-3xl tabular-nums">{{
+                    $ctrl.formatVND($ctrl.portfolioData.totalExpectedRecovery) }}</div>
+                <div class="text-xs text-secondary/40 mt-1 font-mono">Tại tỷ lệ chiết khấu đề xuất</div>
+            </div>
+            <div class="border border-border-base bg-[#0e0e0e] p-6 rounded-2xl">
+                <div class="text-xs font-mono text-secondary/50 uppercase tracking-widest mb-2">Số lượng SKU xả hàng
+                </div>
+                <div class="font-tight font-black text-primary text-3xl tabular-nums">{{
+                    $ctrl.portfolioData.totalSkuCount }} SKUs</div>
+                <div class="text-xs text-secondary/40 mt-1 font-mono">Tập trung cụm rủi ro cao nhất</div>
+            </div>
+            <div class="border border-border-base bg-[#0e0e0e] p-6 rounded-2xl">
+                <div class="text-xs font-mono text-secondary/50 uppercase tracking-widest mb-2">Diện tích kho giải phóng
+                </div>
+                <div class="font-tight font-black text-green-400 text-3xl tabular-nums">
+                    {{ $ctrl.portfolioData.estimatedWarehouseSpaceFreedPct }}%
+                </div>
+                <div class="text-xs text-secondary/40 mt-1 font-mono">Horizon: {{ $ctrl.portfolioData.planHorizonDays }}
+                    ngày</div>
+            </div>
+        </div>
+
+        <!-- Clusters list -->
+        <div ng-if="!$ctrl.loading && $ctrl.portfolioData" class="space-y-6">
+            <div ng-repeat="cluster in $ctrl.portfolioData.priorityClusters"
+                class="border border-border-base bg-surface rounded-2xl p-6 sm:p-8 hover:border-accent/30 transition-all duration-300">
+                <div class="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6">
+                    <div>
+                        <span
+                            class="inline-block text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded mb-3"
+                            ng-class="{
+                                  'bg-danger/10 text-danger': cluster.urgencyLevel === 'CRITICAL',
+                                  'bg-warn/10 text-warn': cluster.urgencyLevel === 'HIGH',
+                                  'bg-blue-400/10 text-blue-400': cluster.urgencyLevel === 'MEDIUM'
+                              }">
+                            {{ cluster.urgencyLevel }} URGENCY (Risk Score: {{ cluster.averageRiskScore }})
+                        </span>
+                        <h3 class="font-tight font-black text-primary text-2xl">{{ cluster.clusterName }}</h3>
+                        <p class="text-secondary text-sm mt-2 font-mono opacity-80">{{ cluster.rationale }}</p>
+                    </div>
+
+                    <button ng-click="$ctrl.selectCluster(cluster)"
+                        class="bg-accent text-background font-tight font-black text-xs px-6 py-3.5 rounded-xl hover:bg-[#deff5a] active:scale-[0.98] transition-all flex-shrink-0">
+                        Chi tiết chiến dịch →
+                    </button>
+                </div>
+
+                <!-- Cluster details grids -->
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-6 pt-6 border-t border-[#1c1c1c]">
+                    <div>
+                        <div class="text-xs font-mono text-secondary/40 uppercase tracking-widest mb-1">Số lượng hàng
+                            hóa</div>
+                        <div class="text-base text-primary font-bold font-mono">{{ cluster.skuCount }} SKU</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-mono text-secondary/40 uppercase tracking-widest mb-1">Giá trị chôn vốn
+                        </div>
+                        <div class="text-base text-danger font-bold font-mono">{{
+                            $ctrl.formatVND(cluster.totalFrozenValue) }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-mono text-secondary/40 uppercase tracking-widest mb-1">Dự thu tối thiểu
+                        </div>
+                        <div class="text-base text-accent font-bold font-mono">{{
+                            $ctrl.formatVND(cluster.totalPotentialRecovery) }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-mono text-secondary/40 uppercase tracking-widest mb-1">Hành động hàng
+                            loạt</div>
+                        <div class="text-xs text-primary font-bold leading-normal truncate"
+                            title="{{ cluster.recommendedBatchAction }}">
+                            {{ cluster.recommendedBatchAction }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top 3 sample items inside cluster -->
+                <div class="mt-6 pt-4 border-t border-[#1c1c1c]/50">
+                    <div class="text-[10px] font-mono text-secondary/30 uppercase tracking-widest mb-2">Các SKU rủi ro
+                        hàng đầu trong cụm:</div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div ng-repeat="sample in cluster.topSkuSamples"
+                            class="bg-background/40 border border-border-base/50 p-3 rounded-lg flex justify-between items-center">
+                            <div class="truncate mr-2">
+                                <div class="text-xs text-primary font-bold truncate" title="{{ sample.name }}">{{
+                                    sample.name }}</div>
+                                <div class="text-[9px] text-secondary/40 font-mono mt-0.5">{{ sample.daysInInventory }}
+                                    ngày tồn kho</div>
+                            </div>
+                            <span class="text-[10px] font-mono font-bold text-danger">{{
+                                $ctrl.formatVND(sample.frozenValueVnd) }}</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+</section>

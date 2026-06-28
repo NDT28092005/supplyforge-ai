@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SupplyForge AI — Supply Chain OS</title>
+    
+    <!-- Google Fonts: Inter and Inter Tight -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Inter+Tight:wght@500;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              background: '#F8F9FA',
+              surface: '#FFFFFF',
+              'surface-hover': '#F1F5F9',
+              primary: '#2C3E50',
+              secondary: '#6C757D',
+              accent: '#3498DB',
+              'border-base': '#E2E8F0',
+              danger: '#E74C3C',
+              warn: '#F39C12',
+              success: '#2ECC71',
+            },
+            fontFamily: {
+              sans: ['Inter', 'system-ui', 'sans-serif'],
+              tight: ['Inter Tight', 'Inter', 'system-ui', 'sans-serif'],
+            },
+            letterSpacing: {
+              tightest: '-0.04em',
+            },
+            boxShadow: {
+              'material': '0 2px 8px -1px rgba(0, 0, 0, 0.08), 0 1px 4px -1px rgba(0, 0, 0, 0.04)',
+              'material-lg': '0 10px 25px -3px rgba(0, 0, 0, 0.08), 0 4px 10px -2px rgba(0, 0, 0, 0.04)',
+            }
+          }
+        }
+      }
+    </script>
+    
+    <!-- Custom Scrollbar styling -->
+    <style>
+        :root {
+            --background: #F8F9FA;
+            --foreground: #2C3E50;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            color: var(--foreground);
+            background: var(--background);
+            margin: 0;
+            font-family: 'Inter', system-ui, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        ::selection {
+            background: #3498DB22;
+            color: #3498DB;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #F1F5F9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #CBD5E1;
+            border-radius: 3px;
+        }
+        .animate-blink {
+            animation: cursor-blink 1s step-end infinite;
+        }
+        @keyframes cursor-blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+    </style>
+    
+    <!-- AngularJS -->
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.2/angular.min.js"></script>
+</head>
+<body ng-app="supplyForgeApp" ng-controller="MainController as mainCtrl" class="bg-background text-primary min-h-screen">
+
+    <!-- Screen stage switcher -->
+    <div class="min-h-screen flex">
+        
+        <!-- Fixed Left Sidebar (B2B SaaS Navigation) -->
+        <aside ng-if="mainCtrl.stage !== 'hero' && mainCtrl.stage !== 'processing' && mainCtrl.stage !== 'mapping'" 
+               class="w-64 bg-surface border-r border-border-base fixed inset-y-0 left-0 z-30 flex flex-col justify-between p-6 shadow-material">
+            <div>
+                <!-- Brand Header -->
+                <div class="flex items-center gap-3 pb-6 mb-6 border-b border-border-base">
+                    <div class="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-white font-black text-lg shadow-material">⚡</div>
+                    <div>
+                        <h1 class="font-tight font-black text-primary text-base tracking-tight leading-none">SupplyForge</h1>
+                        <span class="text-[10px] font-mono text-secondary uppercase tracking-widest block mt-1">Supply Chain OS</span>
+                    </div>
+                </div>
+
+                <!-- Navigation Links -->
+                <nav class="space-y-1.5">
+                    <button ng-click="mainCtrl.stage = 'dashboard'" 
+                            class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all text-left"
+                            ng-class="{'bg-accent text-white shadow-material': mainCtrl.stage === 'dashboard', 'text-secondary hover:bg-surface-hover hover:text-primary': mainCtrl.stage !== 'dashboard'}">
+                        <span class="text-base">📊</span>
+                        <span>Tổng quan Dòng tiền &amp; Tồn kho</span>
+                    </button>
+
+                    <button ng-click="mainCtrl.handleOpenRecovery()" 
+                            class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all text-left"
+                            ng-class="{'bg-accent text-white shadow-material': mainCtrl.stage === 'aging', 'text-secondary hover:bg-surface-hover hover:text-primary': mainCtrl.stage !== 'aging'}">
+                        <span class="text-base">🕒</span>
+                        <span>Phân tích Tuổi hàng Tồn kho</span>
+                    </button>
+
+                    <button ng-click="mainCtrl.handleOpenCommandCenter()" 
+                            class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all text-left"
+                            ng-class="{'bg-accent text-white shadow-material': mainCtrl.stage === 'command-center', 'text-secondary hover:bg-surface-hover hover:text-primary': mainCtrl.stage !== 'command-center'}">
+                        <span class="text-base">🎯</span>
+                        <span>Trợ lý Thu hồi Vốn hàng loạt</span>
+                    </button>
+
+                    <button ng-click="mainCtrl.handleFetchAndOpenTinder()" 
+                            class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all text-left"
+                            ng-class="{'bg-accent text-white shadow-material': mainCtrl.stage === 'dedup', 'text-secondary hover:bg-surface-hover hover:text-primary': mainCtrl.stage !== 'dedup'}">
+                        <span class="text-base">🔗</span>
+                        <span>Rà soát Mã trùng lặp</span>
+                    </button>
+
+                    <button ng-if="mainCtrl.stage === 'recovery-copilot'"
+                            class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold bg-accent text-white shadow-material text-left">
+                        <span class="text-base">🚀</span>
+                        <span>Chi tiết Đề xuất Xả hàng</span>
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Footer Quick Action -->
+            <div class="pt-4 border-t border-border-base space-y-3">
+                <div class="bg-gray-50 p-3 rounded-xl border border-border-base">
+                    <div class="text-[10px] font-mono text-secondary uppercase font-semibold">Workspace</div>
+                    <div class="text-xs font-bold text-primary truncate mt-0.5">Demo E-com Store</div>
+                </div>
+                <button ng-click="mainCtrl.clearAllDataAndRestart()" class="w-full bg-red-50 text-danger border border-danger/20 hover:bg-danger hover:text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2">
+                    <span>📥 Import File Mới</span>
+                </button>
+            </div>
+        </aside>
+        
+        <!-- Main Content (with 1440px Max-Width Grid) -->
+        <main class="flex-1 transition-all" ng-class="{'pl-64': mainCtrl.stage !== 'hero' && mainCtrl.stage !== 'processing' && mainCtrl.stage !== 'mapping'}">
+            <div class="max-w-[1440px] mx-auto w-full">
+                <!-- 1. Hero Stage -->
+                <div ng-if="mainCtrl.stage === 'hero'" class="fade-in">
+                    <trust-theater-hero on-upload="mainCtrl.startProcessing(file)"></trust-theater-hero>
+                </div>
+
+                <!-- 2. Processing Stage -->
+                <div ng-if="mainCtrl.stage === 'processing'" class="fade-in">
+                    <processing-screen file="mainCtrl.uploadFile" on-mapping-ready="mainCtrl.handleMappingReady(data)"></processing-screen>
+                </div>
+
+                <div ng-if="mainCtrl.stage === 'mapping'">
+                    <div ng-if="mainCtrl.isProcessingBatch" class="min-h-screen flex items-center justify-center">
+                        <div class="text-accent font-mono text-xl animate-pulse">Đang nạp dữ liệu vào CSDL siêu tốc...</div>
+                    </div>
+                    <div ng-if="!mainCtrl.isProcessingBatch" class="min-h-screen bg-background flex flex-col justify-center px-6 md:px-16 lg:px-24 py-16">
+                        <div class="max-w-3xl mx-auto w-full">
+                            <!-- Header -->
+                            <div class="mb-12">
+                                <p class="text-xs font-mono text-accent tracking-widest uppercase mb-4 opacity-85">
+                                    Bước 3: AI Column Mapping
+                                </p>
+                                <h2 class="font-tight font-black text-primary text-4xl sm:text-5xl tracking-tightest leading-tight">
+                                    Xác nhận ánh xạ trường dữ liệu.
+                                </h2>
+                                <p class="text-secondary text-sm mt-3 max-w-xl">
+                                    AI đã đề xuất ánh xạ các cột từ file của bạn. Vui lòng kiểm tra lại sự chuẩn xác bên dưới để bắt đầu nạp cơ sở dữ liệu.
+                                </p>
+                            </div>
+
+                            <!-- Form mapping card -->
+                            <div class="bg-surface border border-border-base rounded-2xl p-6 sm:p-8 space-y-6">
+                                <div class="text-xs font-mono text-secondary uppercase tracking-widest pb-4 border-b border-border-base font-bold">
+                                    Ánh xạ trường cơ sở dữ liệu (Database Mapping)
+                                </div>
+
+                                <div class="space-y-4">
+                                    <div ng-repeat="field in mainCtrl.mappingFields" class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-border-base bg-gray-50 hover:bg-gray-100 transition-colors">
+                                        <div>
+                                            <div class="text-sm font-bold text-primary">{{ field.label }}</div>
+                                            <div class="text-xs text-secondary mt-0.5">{{ field.desc }}</div>
+                                        </div>
+                                        <div class="flex items-center gap-4">
+                                            <select ng-model="mainCtrl.finalMapping[field.key]" 
+                                                    class="bg-surface border border-border-base rounded-xl px-3 py-2 text-xs text-primary font-mono outline-none focus:ring-2 focus:ring-accent">
+                                                <option value="">-- Bỏ qua cột --</option>
+                                                <option ng-repeat="h in mainCtrl.mappingData.headers" ng-value="h">{{ h }}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Confirm button -->
+                                <div class="pt-6 border-t border-border-base flex items-center justify-between">
+                                    <span class="text-xs font-mono text-accent font-bold">
+                                        AI Confidence: {{ mainCtrl.mappingData.aiSuggestions.confidence || 'Medium' }}
+                                    </span>
+                                    <button ng-click="mainCtrl.handleConfirmMapping(mainCtrl.finalMapping)" class="bg-accent text-white font-tight font-bold text-xs px-8 py-3.5 rounded-xl hover:bg-blue-600 active:scale-[0.98] transition-all shadow-material">
+                                        Đồng ý &amp; Nạp dữ liệu →
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Dashboard (CashflowVault) Stage -->
+                <div ng-if="mainCtrl.stage === 'dashboard'" class="fade-in px-6 md:px-10 py-8">
+                    <cashflow-vault 
+                        data="mainCtrl.dashboardData" 
+                        on-proceed="mainCtrl.handleFetchAndOpenTinder()" 
+                        on-recovery="mainCtrl.handleOpenRecovery()" 
+                        on-command-center="mainCtrl.handleOpenCommandCenter()"
+                        on-import-new="mainCtrl.clearAllDataAndRestart()">
+                    </cashflow-vault>
+                </div>
+
+                <!-- 5. Aging Radar Stage -->
+                <div ng-if="mainCtrl.stage === 'aging'" class="fade-in px-6 md:px-10 py-8">
+                    <inventory-aging-radar data="mainCtrl.agingData" on-trigger-copilot="mainCtrl.handleTriggerCopilot(item)"></inventory-aging-radar>
+                </div>
+
+                <!-- 6. Recovery Copilot Stage -->
+                <div ng-if="mainCtrl.stage === 'recovery-copilot'" class="fade-in px-6 md:px-10 py-8">
+                    <recovery-copilot cluster="mainCtrl.activeCluster"></recovery-copilot>
+                </div>
+
+                <!-- 7. Sku Deduplication (Tinder Deck) Stage -->
+                <div ng-if="mainCtrl.stage === 'dedup'" class="fade-in px-6 md:px-10 py-8">
+                    <sku-deduplication-tinder 
+                        proposals="mainCtrl.dedupProposals" 
+                        on-merge="mainCtrl.handlePerformMerge(a, b)" 
+                        on-complete="mainCtrl.handleTinderComplete(merged, ignored)">
+                    </sku-deduplication-tinder>
+                </div>
+
+                <!-- 8. Command Center Stage -->
+                <div ng-if="mainCtrl.stage === 'command-center'" class="fade-in px-6 md:px-10 py-8">
+                    <command-center-dashboard 
+                        portfolio-data="mainCtrl.portfolioData" 
+                        loading="mainCtrl.portfolioLoading" 
+                        on-back="mainCtrl.stage = 'dashboard'"
+                        on-select-cluster="mainCtrl.handleSelectCluster(cluster)">
+                    </command-center-dashboard>
+                </div>
+            </div>
+        </main>
+        
+    </div>
+
+    <!-- AngularJS App and Services script inclusion -->
+    <!-- App Services & Features -->
+    <script src="app.js?v=4"></script>
+    <script src="services/apiService.js?v=4"></script>
+    <script src="services/telemetryService.js?v=4"></script>
+    <script src="features/ingestion/trust-theater-hero.component.js?v=4"></script>
+    <script src="features/ingestion/processing-screen.component.js?v=4"></script>
+    <script src="features/ingestion/data-mapping-confirm.component.js?v=4"></script>
+    <script src="features/ingestion/cashflow-vault.component.js?v=4"></script>
+    <script src="features/sku_tinder/sku-deduplication-tinder.component.js?v=4"></script>
+    <script src="features/leak_detector/inventory-aging-radar.component.js?v=4"></script>
+    <script src="features/recovery_copilot/recovery-copilot.component.js?v=4"></script>
+    <script src="features/recovery_copilot/command-center-dashboard.component.js?v=4"></script>
+</body>
+</html>

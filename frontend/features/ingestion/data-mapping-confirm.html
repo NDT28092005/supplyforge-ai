@@ -1,0 +1,56 @@
+<div class="min-h-screen bg-background flex flex-col justify-center px-6 md:px-16 lg:px-24 py-16">
+    <div class="max-w-3xl mx-auto w-full">
+        <!-- Header -->
+        <div class="mb-12">
+            <p class="text-xs font-mono text-accent tracking-widest uppercase mb-4 opacity-85">
+                Bước 3: AI Column Mapping
+            </p>
+            <h2 class="font-tight font-black text-primary text-4xl sm:text-5xl tracking-tightest leading-tight">
+                Xác nhận ánh xạ trường dữ liệu.
+            </h2>
+            <p class="text-secondary text-sm mt-3 max-w-xl">
+                AI đã đề xuất ánh xạ các cột từ file của bạn. Vui lòng kiểm tra lại sự chuẩn xác bên dưới để bắt đầu nạp cơ sở dữ liệu.
+            </p>
+        </div>
+
+        <!-- Form mapping card -->
+        <div class="bg-surface border border-border-base rounded-2xl p-6 sm:p-8 space-y-6">
+            <div class="text-xs font-mono text-secondary/30 uppercase tracking-widest pb-4 border-b border-[#1c1c1c]">
+                Ánh xạ trường cơ sở dữ liệu (Database Mapping)
+            </div>
+
+            <div class="space-y-4">
+                <!-- Field rows loop -->
+                <div ng-repeat="field in $ctrl.fields" class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-border-base bg-[#0e0e0e] hover:bg-[#121212] transition-colors">
+                    <div>
+                        <div class="text-sm font-bold text-primary">{{ field.label }}</div>
+                        <div class="text-xs text-secondary/60 mt-0.5">{{ field.desc }}</div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <!-- Sample preview value from CSV -->
+                        <span ng-if="$ctrl.sampleData" class="text-xs font-mono text-secondary/40 max-w-[150px] truncate" title="Mẫu: {{ $ctrl.getSampleValue(field.key) }}">
+                            Mẫu: {{ $ctrl.getSampleValue(field.key) || '—' }}
+                        </span>
+                        <!-- Column selector select box -->
+                        <select ng-model="$ctrl.finalMapping[field.key]" 
+                                ng-change="$ctrl.updateMapping(field.key)"
+                                class="bg-surface border border-border-base rounded px-3 py-2 text-xs text-primary font-mono outline-none focus:border-accent">
+                            <option value="">-- Bỏ qua cột --</option>
+                            <option ng-repeat="h in $ctrl.headers" value="{{ h }}">{{ h }}</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Confirm button -->
+            <div class="pt-6 border-t border-[#1c1c1c] flex items-center justify-between">
+                <span class="text-xs font-mono text-accent">
+                    AI Confidence: {{ $ctrl.aiSuggestions.confidence || 'Medium' }}
+                </span>
+                <button ng-click="$ctrl.confirm()" class="bg-accent text-background font-tight font-black text-xs px-8 py-3.5 rounded-xl hover:bg-[#deff5a] active:scale-[0.98] transition-all">
+                    Đồng ý & Nạp dữ liệu →
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

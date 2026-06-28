@@ -1,25 +1,30 @@
-# --- Stage 1: compile
-FROM maven:3.9.9-eclipse-temurin-21-alpine AS builder
-WORKDIR /build
+# Use official light-weight Python image
+FROM python:3.11-slim
 
-COPY pom.xml .
-RUN mvn -q -e dependency:go-offline
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
-COPY src ./src
-RUN mvn -q -e -DskipTests package \
-    && mv target/supplyforge-ai-*.jar /build/app.jar
-
-# --- Stage 2: runtime (chỉ JRE — tiết kiệm RAM trên VPS)
-FROM eclipse-temurin:21-jre-alpine AS runner
+# Set work directory
 WORKDIR /app
 
-RUN addgroup -g 1000 appgroup && adduser -u 1000 -G appgroup -D appuser
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libmariadb-dev-compat \
+    libmariadb-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /build/app.jar app.jar
+# Install Python dependencies
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
 
-USER appuser
+# Copy project files
+COPY . /app/
+
+# Expose backend port
 EXPOSE 8080
 
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=40.0"
-
-ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]
+# Command to run migrations and start server
+CMD python manage.py makemigrations core && python manage.py migrate && python manage.py seed_db && python manage.py runserver 0.0.0.0:8080

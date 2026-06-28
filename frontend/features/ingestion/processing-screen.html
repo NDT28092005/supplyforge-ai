@@ -1,0 +1,31 @@
+<div class="min-h-screen bg-background flex flex-col items-center justify-center px-6">
+    <div class="w-full max-w-md">
+        <p class="text-xs font-mono text-secondary tracking-widest uppercase mb-12 text-center opacity-50">
+            SupplyForge AI · Đang xử lý
+        </p>
+
+        <div class="w-full bg-surface border border-border-base rounded-full h-px mb-8 overflow-hidden">
+            <div class="bg-accent h-px rounded-full transition-all duration-500" ng-style="{ width: $ctrl.progress + '%' }"></div>
+        </div>
+
+        <div class="space-y-3">
+            <div ng-repeat="step in $ctrl.steps" 
+                 class="flex items-center gap-3 transition-all duration-500"
+                 ng-class="{ 'opacity-30': $index < $ctrl.stepIndex, 'opacity-100': $index === $ctrl.stepIndex, 'opacity-10': $index > $ctrl.stepIndex }">
+                <div class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                     ng-class="{ 'bg-primary': $index < $ctrl.stepIndex, 'bg-accent': $index === $ctrl.stepIndex, 'bg-border-base': $index > $ctrl.stepIndex }">
+                </div>
+                <span class="text-sm font-mono" ng-class="{ 'text-primary': $index === $ctrl.stepIndex, 'text-secondary': $index !== $ctrl.stepIndex }">
+                    {{ step.label }}
+                    <span ng-if="$index === $ctrl.stepIndex" class="animate-blink text-accent ml-1">▋</span>
+                </span>
+            </div>
+        </div>
+
+        <div class="mt-10 text-right">
+            <span class="font-tight font-black text-2xl tracking-tightest text-accent">
+                {{ $ctrl.progress }}%
+            </span>
+        </div>
+    </div>
+</div>

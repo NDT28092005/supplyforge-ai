@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: supplyforge_db
+    restart: always
+    environment:
+      MYSQL_DATABASE: supplyforge
+      MYSQL_USER: supplyforge
+      MYSQL_PASSWORD: supplyforge_secret_pass
+      MYSQL_ROOT_PASSWORD: supplyforge_root_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    container_name: supplyforge_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: .
+    container_name: supplyforge_backend
+    restart: always
+    command: sh -c "python manage.py makemigrations core && python manage.py migrate && python manage.py seed_db && gunicorn supplyforge_ai.wsgi:application --bind 0.0.0.0:8080 --workers 3"
+    volumes:
+      - .:/app
+    ports:
+      - "8080:8080"
+    environment:
+      - MYSQL_DATABASE=supplyforge
+      - MYSQL_USER=supplyforge
+      - MYSQL_PASSWORD=supplyforge_secret_pass
+      - MYSQL_HOST=db
+      - MYSQL_PORT=3306
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - db
+      - redis
+
+  celery_worker:
+    build: .
+    container_name: supplyforge_celery_worker
+    restart: always
+    command: celery -A supplyforge_ai worker --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - MYSQL_DATABASE=supplyforge
+      - MYSQL_USER=supplyforge
+      - MYSQL_PASSWORD=supplyforge_secret_pass
+      - MYSQL_HOST=db
+      - MYSQL_PORT=3306
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - db
+      - redis
+      - backend
+
+volumes:
+  mysql_data:

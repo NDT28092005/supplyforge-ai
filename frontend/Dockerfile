@@ -1,39 +1,36 @@
-# --- deps
-FROM node:20-alpine AS deps
+# Stage 1: Build stage
+FROM node:18-alpine AS build
+
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
 
-# --- build
-FROM node:20-alpine AS builder
-WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
-ARG NEXT_PUBLIC_API_URL=http://localhost:8080
-ARG NEXT_PUBLIC_WORKSPACE_ID=1
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_WORKSPACE_ID=$NEXT_PUBLIC_WORKSPACE_ID
+# Copy package descriptors and install dependencies
+COPY package.json ./
+RUN npm install
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+# Copy config and source files
+COPY tsconfig.json ./
+COPY app.ts ./
+COPY services/ ./services/
+COPY features/ ./features/
 
+# Compile TypeScript
 RUN npm run build
 
-# --- run (standalone — nhẹ cho VPS)
-FROM node:20-alpine AS runner
-WORKDIR /app
+# Stage 2: Serve stage
+FROM nginx:alpine
 
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
-ENV HOSTNAME=0.0.0.0
+# Copy custom nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-RUN addgroup -g 1001 nodejs && adduser -u 1001 -S nodejs -G nodejs
+# Copy static index file
+COPY index.html /usr/share/nginx/html/
 
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nodejs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nodejs:nodejs /app/.next/static ./.next/static
+# Copy compiled JavaScript files and templates from build stage
+COPY --from=build /app/app.js /usr/share/nginx/html/
+COPY --from=build /app/app.js.map /usr/share/nginx/html/
+COPY --from=build /app/services/ /usr/share/nginx/html/services/
+COPY --from=build /app/features/ /usr/share/nginx/html/features/
 
-USER nodejs
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["nginx", "-g", "daemon off;"]
