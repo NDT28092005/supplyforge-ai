@@ -1,0 +1,108 @@
+<div class="space-y-12">
+  <!-- Skeleton Loading State -->
+  <div *ngIf="!data" class="w-full space-y-8 animate-pulse">
+    <div class="h-8 bg-gray-200 rounded-lg w-1/3"></div>
+    <div class="h-16 bg-gray-200 rounded-2xl w-3/4"></div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+      <div class="h-32 bg-gray-200 rounded-3xl"></div>
+      <div class="h-32 bg-gray-200 rounded-3xl"></div>
+      <div class="h-32 bg-gray-200 rounded-3xl"></div>
+    </div>
+    <div class="h-64 bg-gray-200 rounded-3xl"></div>
+  </div>
+
+  <div *ngIf="data" class="w-full space-y-12">
+    <!-- Main Header (Loss Aversion Framing) -->
+    <div class="mb-12">
+      <span class="text-xs font-mono text-danger tracking-widest uppercase font-bold">
+        Cảnh báo thất thoát dòng tiền (Loss Aversion)
+      </span>
+      <h2 class="font-tight font-black tracking-tightest text-primary text-4xl sm:text-6xl leading-tight mt-6 mb-4">
+        Kho hàng đang đóng băng
+        <br />
+        <span class="text-danger tabular-nums">{{ formatVND(data.totalDeadStockValueVnd) }}</span>
+      </h2>
+      <p class="text-secondary text-sm max-w-xl leading-relaxed">
+        Số vốn này đang chôn vùi trong {{ data.staleSkuCount }} mặt hàng cũ bán chậm (trên 45 ngày). 
+        Ước tính tổn hao chi phí cơ hội là <span class="text-danger font-bold font-mono tabular-nums">{{ formatVND(data.estimatedLoss30DaysVnd) }}</span> trong 30 ngày tới.
+      </p>
+    </div>
+
+    <!-- Strategic KPIs Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+      <div class="border border-border-base bg-surface p-6 rounded-3xl shadow-material">
+        <div class="text-xs font-mono text-secondary uppercase tracking-widest mb-2 font-semibold">Vốn Đang Đóng Băng</div>
+        <div class="font-tight font-black text-danger text-3xl tabular-nums">{{ formatVND(data.totalDeadStockValueVnd) }}</div>
+        <div class="text-xs text-secondary mt-1 font-mono">Hàng tồn > 45 ngày</div>
+      </div>
+      <div class="border border-border-base bg-surface p-6 rounded-3xl shadow-material">
+        <div class="text-xs font-mono text-secondary uppercase tracking-widest mb-2 font-semibold">Tổng Vốn Lưu Động Kho</div>
+        <div class="font-tight font-black text-primary text-3xl tabular-nums">{{ formatVND(data.totalInventoryValueVnd) }}</div>
+        <div class="text-xs text-secondary mt-1 font-mono">{{ data.totalRootSkuCount }} SKUs trong cơ sở dữ liệu</div>
+      </div>
+      <div class="border border-border-base bg-surface p-6 rounded-3xl shadow-material">
+        <div class="text-xs font-mono text-secondary uppercase tracking-widest mb-2 font-semibold">Tỷ Lệ Hàng Cần Xử Lý</div>
+        <div class="font-tight font-black text-accent text-3xl tabular-nums">
+          {{ getPct(data.totalDeadStockValueVnd, data.totalInventoryValueVnd) }}%
+        </div>
+        <div class="text-xs text-secondary mt-1 font-mono">{{ data.staleSkuCount }} SKUs lỗi mùa/chậm</div>
+      </div>
+    </div>
+
+    <!-- Call to action block -->
+    <div class="flex flex-wrap items-center gap-4 mb-12">
+      <button (click)="commandCenter.emit()" class="bg-accent text-white font-tight font-bold text-xs px-8 py-4 rounded-xl hover:bg-blue-600 active:scale-[0.98] transition-all flex items-center gap-2.5">
+        <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <circle cx="12" cy="12" r="4"></circle>
+        </svg>
+        <span>Trợ lý Thu hồi Vốn hàng loạt</span>
+      </button>
+      <button (click)="recovery.emit()" class="bg-surface border border-border-base text-primary font-tight font-bold text-xs px-8 py-4 rounded-xl hover:bg-surface-hover active:scale-[0.98] transition-all flex items-center gap-2.5">
+        <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        <span>Phân tích Tuổi hàng Tồn kho</span>
+      </button>
+      <button (click)="importNew.emit()" class="bg-red-950/20 border border-danger/30 text-danger font-tight font-bold text-xs px-8 py-4 rounded-xl hover:bg-danger hover:text-white active:scale-[0.98] transition-all">
+        Xóa &amp; Import mới
+      </button>
+      <button (click)="proceed.emit()" class="text-secondary hover:text-accent transition-colors font-mono font-bold text-xs ml-auto flex items-center gap-2">
+        <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+        </svg>
+        <span>Rà soát Mã trùng lặp →</span>
+      </button>
+    </div>
+
+    <!-- Top Stale SKU List table -->
+    <div class="border border-border-base bg-surface rounded-3xl shadow-material overflow-hidden">
+      <div class="px-6 py-5 border-b border-border-base flex items-center justify-between bg-gray-50/50">
+        <span class="text-xs font-mono text-primary uppercase tracking-widest font-bold">
+          Top 5 SKU Bị Đóng Băng Giá Trị Cao Nhất
+        </span>
+        <span class="text-xs font-mono text-secondary">
+          Sắp xếp: Vốn đóng băng giảm dần
+        </span>
+      </div>
+
+      <div class="divide-y divide-border-base text-xs font-mono">
+        <div *ngFor="let item of data.topStaleSkus; let i = index" class="px-6 py-3.5 flex items-center justify-between hover:bg-surface-hover transition-colors even:bg-gray-50/50">
+          <div class="flex items-center gap-4 text-left">
+            <span class="text-secondary text-sm font-semibold opacity-50">{{ i + 1 }}</span>
+            <div>
+              <div class="text-sm font-bold text-primary font-sans">{{ item.name }}</div>
+              <div class="text-xs text-secondary font-mono mt-0.5">Mã SKU | Nhập gần nhất: {{ item.lastRecordDate }}</div>
+            </div>
+          </div>
+          <div class="text-right tabular-nums">
+            <div class="text-sm font-bold text-danger font-mono">{{ formatVND(item.frozenValueVnd) }}</div>
+            <div class="text-xs text-secondary font-mono mt-0.5">Vốn chôn kho</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

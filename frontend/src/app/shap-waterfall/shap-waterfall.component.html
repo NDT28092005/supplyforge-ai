@@ -1,0 +1,106 @@
+<div class="shap-waterfall-wrapper">
+  <!-- Chart Title or Info -->
+  <div class="flex justify-between items-center mb-4">
+    <span class="text-[11px] font-mono text-secondary uppercase tracking-widest font-semibold">
+      Đóng góp thuộc tính (SHAP Attribute Contributions)
+    </span>
+    <span class="text-[10px] font-mono bg-border-base/10 text-secondary border border-border-base px-2 py-0.5 rounded">
+      Waterfall SVG
+    </span>
+  </div>
+
+  <!-- SVG Chart Area -->
+  <div class="relative bg-surface border border-border-base rounded-2xl p-4 shadow-inner overflow-hidden select-none">
+    <svg [attr.width]="svgWidth" [attr.height]="svgHeight" viewBox="0 0 550 310" class="w-full h-auto">
+      <!-- Grid lines (X-Axis helper lines) -->
+      <g class="grid-lines">
+        <line *ngFor="let tick of getTickValues()"
+              [attr.x1]="getTickX(tick)"
+              [attr.y1]="paddingTop"
+              [attr.x2]="getTickX(tick)"
+              [attr.y2]="svgHeight - paddingBottom"
+              class="stroke-border-base/30 stroke-1 stroke-dash"
+              stroke-dasharray="3,3" />
+      </g>
+
+      <!-- Connection Lines between Steps -->
+      <g class="connectors">
+        <path *ngFor="let step of steps; let idx = index; let last = last"
+              [attr.d]="!last ? getConnectorPath(step, steps[idx + 1]) : ''"
+              class="stroke-secondary/40 stroke-1 fill-none stroke-dash"
+              stroke-dasharray="3,3" />
+      </g>
+
+      <!-- Bars -->
+      <g class="bars">
+        <g *ngFor="let step of steps" class="bar-group" (mousemove)="onHoverBar($event, step)" (mouseleave)="onLeaveBar()">
+          <!-- Feature Name Text (Left Y-Axis Labels) -->
+          <text [attr.x]="paddingLeft - 15"
+                [attr.y]="step.y + step.height / 2 + 4"
+                class="text-[11px] fill-primary font-tight text-right font-semibold select-none cursor-help"
+                text-anchor="end">
+            {{ step.label }}
+          </text>
+
+          <!-- The Bar Rectangle -->
+          <rect [attr.x]="step.x"
+                [attr.y]="step.y"
+                [attr.width]="step.width"
+                [attr.height]="step.height"
+                [attr.rx]="4"
+                [attr.ry]="4"
+                [ngClass]="{
+                  'bar-base': step.type === 'base',
+                  'bar-positive': step.type === 'positive',
+                  'bar-negative': step.type === 'negative',
+                  'bar-final': step.type === 'final'
+                }"
+                class="transition-all duration-300 hover:brightness-110 cursor-help" />
+
+          <!-- Value Text inside or beside the bar -->
+          <text [attr.x]="step.x + step.width + 6"
+                [attr.y]="step.y + step.height / 2 + 4"
+                class="text-[10px] font-mono font-bold select-none"
+                [ngClass]="{
+                  'text-primary': step.type === 'base' || step.type === 'final',
+                  'text-danger': step.type === 'positive',
+                  'text-accent': step.type === 'negative'
+                }">
+            {{ step.detail }}
+          </text>
+        </g>
+      </g>
+
+      <!-- X-Axis line and Ticks -->
+      <g class="x-axis">
+        <line [attr.x1]="paddingLeft"
+              [attr.y1]="svgHeight - paddingBottom"
+              [attr.x2]="svgWidth - paddingRight"
+              [attr.y2]="svgHeight - paddingBottom"
+              class="stroke-border-base stroke-1" />
+
+        <g *ngFor="let tick of getTickValues()" class="tick">
+          <line [attr.x1]="getTickX(tick)"
+                [attr.y1]="svgHeight - paddingBottom"
+                [attr.x2]="getTickX(tick)"
+                [attr.y2]="svgHeight - paddingBottom + 5"
+                class="stroke-border-base stroke-1" />
+          <text [attr.x]="getTickX(tick)"
+                [attr.y]="svgHeight - paddingBottom + 18"
+                class="text-[9px] font-mono text-secondary text-center"
+                text-anchor="middle">
+            {{ (tick * 100).toFixed(0) }}%
+          </text>
+        </g>
+      </g>
+    </svg>
+
+    <!-- Custom Interactive HTML Tooltip -->
+    <div *ngIf="showTooltip"
+         [style.left.px]="tooltipX"
+         [style.top.px]="tooltipY"
+         class="absolute pointer-events-none bg-primary/95 text-background px-3 py-1.5 rounded-lg text-[10px] font-mono shadow-material-lg border border-border-base/10 max-w-xs transition-opacity duration-150 z-50">
+      {{ tooltipText }}
+    </div>
+  </div>
+</div>

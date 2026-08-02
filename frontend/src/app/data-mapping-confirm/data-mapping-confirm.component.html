@@ -1,0 +1,67 @@
+<main class="min-h-screen bg-background flex flex-col justify-center px-6 md:px-16 lg:px-24 py-16">
+  <section class="max-w-3xl mx-auto w-full space-y-8" aria-labelledby="mapping-heading">
+    <!-- Header -->
+    <header class="space-y-2">
+      <span class="text-[10px] font-mono text-accent tracking-widest uppercase font-bold bg-accent/10 border border-accent/20 px-3 py-1 rounded-full inline-block">
+        Bước 3 · AI Column Mapping
+      </span>
+      <h1 id="mapping-heading" class="font-tight font-black text-primary text-3xl sm:text-5xl tracking-tightest leading-tight">
+        Xác nhận ánh xạ trường dữ liệu
+      </h1>
+      <p class="text-secondary text-xs sm:text-sm max-w-xl leading-relaxed">
+        Trí tuệ nhân tạo (Gemini AI) đã tự động phân tích và đề xuất ánh xạ các cột từ tệp CSV của bạn. Vui lòng kiểm tra lại sự chuẩn xác trước khi nạp vào hệ thống.
+      </p>
+    </header>
+
+    <!-- Form mapping card -->
+    <div class="bg-surface border border-border-base rounded-3xl p-6 sm:p-8 space-y-6 shadow-material">
+      <div class="flex items-center gap-2.5 text-xs font-mono text-secondary uppercase tracking-widest pb-4 border-b border-border-base">
+        <svg class="w-4 h-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path>
+          <path d="m22 2-7.5 7.5L9 4 2 11"></path>
+        </svg>
+        <span class="font-bold">Ánh xạ trường cơ sở dữ liệu (Database Mapping)</span>
+      </div>
+
+      <div class="space-y-3.5">
+        <!-- Field rows loop -->
+        <article *ngFor="let field of fields" class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-border-base bg-surface-hover/20 hover:bg-surface-hover/50 transition-all">
+          <div>
+            <h2 class="text-xs font-bold text-primary font-tight">{{ field.label }}</h2>
+            <p class="text-[11px] text-secondary/80 mt-0.5">{{ field.desc }}</p>
+          </div>
+          <div class="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
+            <!-- Sample preview value from CSV -->
+            <span *ngIf="sampleData" class="text-[10px] font-mono text-secondary/50 max-w-[150px] truncate" [title]="'Mẫu: ' + getSampleValue(field.key)">
+              Mẫu: {{ getSampleValue(field.key) || '—' }}
+            </span>
+            <!-- Column selector select box -->
+            <select [(ngModel)]="finalMapping[field.key]"
+                    class="bg-surface border border-border-base rounded-xl px-3.5 py-2 text-xs text-primary font-mono outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all cursor-pointer min-w-[160px]">
+              <option value="">-- Bỏ qua cột --</option>
+              <option *ngFor="let h of headers" [value]="h">{{ h }}</option>
+            </select>
+          </div>
+        </article>
+      </div>
+
+      <!-- Confirm button -->
+      <footer class="pt-6 border-t border-border-base flex items-center justify-between">
+        <span class="text-[10px] font-mono text-accent bg-accent/5 border border-accent/15 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+          <svg class="w-3 h-3 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 11.08 12 19 9 16"></polyline>
+            <path d="M22 4L12 14.01l-3-3"></path>
+          </svg>
+          <span>AI Confidence: {{ aiSuggestions?.confidence || 'Medium' }}</span>
+        </span>
+        <button (click)="confirm()" class="bg-accent text-white font-tight font-bold text-xs px-8 py-3.5 rounded-xl hover:bg-blue-600 transition-all active:scale-[0.98] flex items-center gap-2">
+          <span>Xác nhận &amp; Nạp dữ liệu</span>
+          <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+        </button>
+      </footer>
+    </div>
+  </section>
+</main>

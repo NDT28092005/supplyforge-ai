@@ -1,0 +1,92 @@
+.shap-waterfall-wrapper {
+  width: 100%;
+}
+
+/* Base Bar Styling */
+.bar-base {
+  fill: #64748b; /* Slate Gray */
+  opacity: 0.85;
+}
+
+/* Positive Contribution (Increases Risk) */
+.bar-positive {
+  fill: #ef4444; /* Neon Red/Rose */
+  opacity: 0.9;
+}
+
+/* Negative Contribution (Decreases Risk) */
+.bar-negative {
+  fill: #10b981; /* Emerald Green */
+  opacity: 0.9;
+}
+
+/* Final Probability Bar */
+.bar-final {
+  fill: #3b82f6; /* Accent Blue */
+  opacity: 0.95;
+}
+
+/* Tooltip text colors mapping */
+.text-primary {
+  color: var(--color-text-primary, #0f172a);
+}
+
+.text-secondary {
+  color: var(--color-text-secondary, #64748b);
+}
+
+.text-danger {
+  color: #ef4444;
+}
+
+.text-accent {
+  color: #10b981;
+}
+
+/* SVG Line and Text helpers */
+.stroke-border-base {
+  stroke: var(--color-border-base, #e2e8f0);
+}
+
+.stroke-border-base\/30 {
+  stroke: rgba(226, 232, 240, 0.4);
+}
+
+.stroke-secondary\/40 {
+  stroke: rgba(100, 116, 139, 0.4);
+}
+
+.fill-primary {
+  fill: var(--color-text-primary, #0f172a);
+}
+
+/* Hover and Animation Effects */
+.bar-group rect {
+  transform-origin: left center;
+  animation: barGrow 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.bar-group text {
+  opacity: 0;
+  animation: fadeIn 0.4s ease-out 0.4s forwards;
+}
+
+.connectors path {
+  opacity: 0;
+  animation: fadeIn 0.5s ease-out 0.5s forwards;
+}
+
+@keyframes barGrow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+  }
+}

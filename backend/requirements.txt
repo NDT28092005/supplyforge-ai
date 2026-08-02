@@ -10,3 +10,7 @@ gunicorn>=21.2.0
 celery>=5.3.0
 redis>=4.6.0
 sentry-sdk>=1.30.0
+
+# Auth
+PyJWT==2.13.0
+google-auth==2.55.1

@@ -1,5 +1,0 @@
-SKU,Name,Quantity,Cost,Price,Date
-STALE01,Sản phẩm tồn kho cũ 1,100,100000,200000,01/01/2024
-STALE02,Sản phẩm tồn kho cũ 2,50,500000,800000,15/02/2024
-FRESH01,Sản phẩm mới nhập,10,100000,200000,12/05/2026
-STALE03,Sản phẩm hết hạn,20,30000,60000,20/12/2023

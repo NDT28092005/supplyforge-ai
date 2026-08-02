@@ -27,4 +27,4 @@ COPY . /app/
 EXPOSE 8080
 
 # Command to run migrations and start server
-CMD python manage.py makemigrations core && python manage.py migrate && python manage.py seed_db && python manage.py runserver 0.0.0.0:8080
+CMD python manage.py makemigrations supplyforge && python manage.py migrate && python manage.py seed_db && python manage.py runserver 0.0.0.0:8080

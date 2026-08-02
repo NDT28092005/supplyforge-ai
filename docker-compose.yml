@@ -48,10 +48,8 @@ services:
       - "${FRONTEND_PORT:-3000}:3000"
     volumes:
       - ./frontend/index.html:/usr/share/nginx/html/index.html
-      - ./frontend/app.js:/usr/share/nginx/html/app.js
-      - ./frontend/app.js.map:/usr/share/nginx/html/app.js.map
-      - ./frontend/services:/usr/share/nginx/html/services
-      - ./frontend/features:/usr/share/nginx/html/features
+      - ./frontend/dist:/usr/share/nginx/html/dist
+      - ./frontend/src:/usr/share/nginx/html/src
     environment:
       BACKEND_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
       WORKSPACE_ID: ${NEXT_PUBLIC_WORKSPACE_ID:-1}

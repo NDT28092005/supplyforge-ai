@@ -31,3 +31,12 @@ template.tmp
 *.log
 .DS_Store
 Thumbs.db
+# Frontend compiled output
+frontend/dist/
+
+# Project specific ignored folders
+skills/
+tasks/
+test-data/
+.gemini/
+notebooks/env/

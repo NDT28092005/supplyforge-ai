@@ -1,0 +1,99 @@
+<div class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 transition-all duration-300">
+  <div class="bg-surface/90 border border-border-base rounded-3xl p-8 max-w-md w-full shadow-material-lg relative transform transition-all duration-300 scale-100 flex flex-col gap-6">
+    
+    <!-- Close Button -->
+    <button (click)="closeModal()" class="absolute top-5 right-5 text-secondary hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-surface-hover cursor-pointer" aria-label="Đóng cửa sổ">
+      <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+
+    <!-- Modal Header -->
+    <header class="space-y-2">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-lg bg-accent flex items-center justify-center text-white shadow-material">
+          <svg class="w-4 h-4 text-white fill-current" viewBox="0 0 24 24">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+        </div>
+        <span class="text-[10px] font-mono text-accent tracking-widest uppercase font-bold">SupplyForge OS</span>
+      </div>
+      <h1 class="font-tight font-black text-primary text-xl sm:text-2xl mt-2 tracking-tight">
+        Đăng nhập hệ thống
+      </h1>
+      <p class="text-secondary text-[11px] sm:text-xs">
+        Quản trị chuỗi cung ứng & dòng tiền doanh nghiệp thương mại điện tử
+      </p>
+    </header>
+
+    <!-- Form -->
+    <form (ngSubmit)="onSubmit()" class="space-y-4">
+      <div class="space-y-1.5">
+        <label for="email" class="block text-[11px] font-bold text-primary uppercase tracking-wider">Email doanh nghiệp</label>
+        <div class="relative flex items-center">
+          <span class="absolute left-4 text-secondary">
+            <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+              <polyline points="22,6 12,13 2,6"></polyline>
+            </svg>
+          </span>
+          <input type="email" 
+                 id="email"
+                 [(ngModel)]="loginForm.email" 
+                 name="email" 
+                 placeholder="admin@supplyforge.ai" 
+                 required
+                 class="w-full bg-background border border-border-base rounded-xl pl-11 pr-4 py-3 text-xs text-primary outline-none focus:ring-1 focus:ring-accent transition-all font-mono" />
+        </div>
+      </div>
+
+      <div class="space-y-1.5">
+        <div class="flex justify-between items-center">
+          <label for="password" class="block text-[11px] font-bold text-primary uppercase tracking-wider">Mật khẩu bảo mật</label>
+          <a href="#" class="text-[10px] text-accent hover:underline font-semibold">Quên mật khẩu?</a>
+        </div>
+        <div class="relative flex items-center">
+          <span class="absolute left-4 text-secondary">
+            <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </span>
+          <input type="password" 
+                 id="password"
+                 [(ngModel)]="loginForm.password" 
+                 name="password" 
+                 placeholder="••••••••" 
+                 required
+                 class="w-full bg-background border border-border-base rounded-xl pl-11 pr-4 py-3 text-xs text-primary outline-none focus:ring-1 focus:ring-accent transition-all font-mono" />
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="pt-2 space-y-3">
+        <button type="submit" [disabled]="loading" class="w-full bg-accent text-white font-tight font-bold text-xs py-3.5 rounded-xl hover:bg-blue-600 transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer shadow-material">
+          <span *ngIf="!loading">Xác minh &amp; Đăng nhập</span>
+          <span *ngIf="loading" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+        </button>
+
+        <div class="relative flex py-2 items-center">
+          <div class="flex-grow border-t border-border-base"></div>
+          <span class="flex-shrink mx-4 text-[9px] text-secondary uppercase font-mono tracking-widest font-semibold">Hoặc tiếp tục với</span>
+          <div class="flex-grow border-t border-border-base"></div>
+        </div>
+
+        <button type="button" (click)="onGoogleLogin()" class="w-full bg-surface border border-border-base text-primary hover:bg-surface-hover font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.98]">
+          <!-- Google G Logo SVG -->
+          <svg class="w-4 h-4" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"></path>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.56-2.77c-.98.66-2.23 1.06-3.72 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"></path>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"></path>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"></path>
+          </svg>
+          <span>Google Workspace</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

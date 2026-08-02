@@ -1,0 +1,169 @@
+<!-- Header Navbar -->
+<app-header 
+  [user]="currentUser" 
+  [stage]="stage" 
+  (openLogin)="openLoginModal()" 
+  (logout)="performLogout()" 
+  (navigateStage)="handleStageSelect($event)">
+</app-header>
+
+<!-- Main Container -->
+<div class="min-h-[calc(100vh-61px)] flex bg-background text-primary">
+
+  <!-- Fixed Left Sidebar (Active in App Dashboards) -->
+  <app-sidebar 
+    *ngIf="stage !== 'hero' && stage !== 'processing' && stage !== 'mapping'" 
+    [activeStage]="stage" 
+    (selectStage)="handleStageSelect($event)" 
+    (importNew)="clearAllDataAndRestart()">
+  </app-sidebar>
+
+  <!-- Main Content Stage -->
+  <main class="flex-1 transition-all" [ngClass]="{'pl-64': stage !== 'hero' && stage !== 'processing' && stage !== 'mapping'}">
+    <div class="max-w-[1440px] mx-auto w-full">
+
+      <!-- 1. Landing Page Stage (Trust Theater Hero) -->
+      <div *ngIf="stage === 'hero'" class="fade-in">
+        <app-trust-theater-hero (upload)="startProcessing($event)" (openLogin)="openLoginModal()"></app-trust-theater-hero>
+      </div>
+
+      <!-- 2. Processing Screen Stage -->
+      <div *ngIf="stage === 'processing'" class="fade-in">
+        <app-processing-screen [file]="uploadFile" (mappingReady)="handleMappingReady($event)"></app-processing-screen>
+      </div>
+
+      <!-- 3. AI Data Mapping Confirmation Stage -->
+      <div *ngIf="stage === 'mapping'" class="fade-in">
+        <div *ngIf="isProcessingBatch" class="min-h-screen flex items-center justify-center">
+          <div class="text-accent font-mono text-xl animate-pulse">Đang nạp dữ liệu vào CSDL siêu tốc...</div>
+        </div>
+        
+        <div *ngIf="!isProcessingBatch">
+          <app-data-mapping-confirm 
+            [headers]="mappingData?.headers || []" 
+            [sampleData]="mappingData?.sampleData || []" 
+            [aiSuggestions]="mappingData?.aiSuggestions || null" 
+            (confirmMapping)="handleConfirmMapping($event.finalMapping)">
+          </app-data-mapping-confirm>
+        </div>
+      </div>
+
+      <!-- 4. Dashboard (Cashflow Vault) Stage -->
+      <div *ngIf="stage === 'dashboard'" class="fade-in px-6 md:px-10 py-8">
+        <app-cashflow-vault 
+          [data]="dashboardData" 
+          (proceed)="handleFetchAndOpenTinder()" 
+          (recovery)="handleOpenRecovery()" 
+          (commandCenter)="handleOpenCommandCenter()" 
+          (importNew)="clearAllDataAndRestart()">
+        </app-cashflow-vault>
+      </div>
+
+      <!-- 5. Inventory Aging Radar Stage -->
+      <div *ngIf="stage === 'aging'" class="fade-in px-6 md:px-10 py-8">
+        <app-inventory-aging-radar 
+          [data]="agingData" 
+          (triggerCopilot)="handleTriggerCopilot($event)">
+        </app-inventory-aging-radar>
+      </div>
+
+      <!-- 6. Recovery Copilot Detail Stage -->
+      <div *ngIf="stage === 'recovery-copilot'" class="fade-in px-6 md:px-10 py-8">
+        <app-recovery-copilot [cluster]="activeCluster"></app-recovery-copilot>
+      </div>
+
+      <!-- 7. SKU Deduplication Tinder Deck Stage -->
+      <div *ngIf="stage === 'dedup'" class="fade-in px-6 md:px-10 py-8">
+        <app-sku-deduplication-tinder 
+          [proposals]="dedupProposals" 
+          (merge)="handlePerformMerge($event)" 
+          (complete)="handleTinderComplete($event)">
+        </app-sku-deduplication-tinder>
+      </div>
+
+      <!-- 8. Command Center Dashboard Stage -->
+      <div *ngIf="stage === 'command-center'" class="fade-in px-6 md:px-10 py-8">
+        <app-command-center-dashboard 
+          [portfolioData]="portfolioData" 
+          [loading]="portfolioLoading" 
+          (back)="handleStageSelect('dashboard')" 
+          (selectCluster)="handleSelectCluster($event)">
+        </app-command-center-dashboard>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- Login Modal Overlay -->
+<app-login-modal 
+  *ngIf="isLoginOpen" 
+  (close)="closeLoginModal()" 
+  (loginSuccess)="handleLoginSuccess($event)">
+</app-login-modal>
+
+<!-- Requires Phone Number Modal Overlay -->
+<div *ngIf="requiresPhone" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 transition-all duration-300">
+  <div class="bg-surface/90 border border-border-base rounded-3xl p-8 max-w-md w-full shadow-material-lg relative transform scale-100 flex flex-col gap-6 animate-scale-up">
+    <!-- Close button -->
+    <button (click)="requiresPhone = false" class="absolute top-5 right-5 text-secondary hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-surface-hover cursor-pointer" aria-label="Đóng cửa sổ">
+      <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+
+    <header class="space-y-2">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-lg bg-accent flex items-center justify-center text-white shadow-material">
+          <svg class="w-4 h-4 text-white fill-current" viewBox="0 0 24 24">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+        </div>
+        <span class="text-[10px] font-mono text-accent tracking-widest uppercase font-bold">SupplyForge OS</span>
+      </div>
+      <h2 class="font-tight font-black text-primary text-xl sm:text-2xl mt-2 tracking-tight">Hoàn tất hồ sơ đăng ký</h2>
+      <p class="text-secondary text-[11px] sm:text-xs leading-relaxed">
+        Chào mừng <strong>{{ tempPhoneUser.name }}</strong>! Vui lòng bổ sung số điện thoại liên hệ để đồng bộ thông tin đối tác CRM Odoo.
+      </p>
+    </header>
+
+    <form (ngSubmit)="submitPhoneNumber()" class="space-y-4">
+      <div class="space-y-1.5">
+        <label for="phoneNumber" class="block text-[11px] font-bold text-primary uppercase tracking-wider">Số điện thoại liên hệ</label>
+        <div class="relative flex items-center">
+          <span class="absolute left-4 text-secondary">
+            <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+            </svg>
+          </span>
+          <input type="tel" 
+                 id="phoneNumber"
+                 [(ngModel)]="phoneNumberInput" 
+                 name="phoneNumber" 
+                 placeholder="Ví dụ: 0987654321" 
+                 required
+                 class="w-full bg-background border border-border-base rounded-xl pl-11 pr-4 py-3 text-xs text-primary outline-none focus:ring-1 focus:ring-accent transition-all font-mono" />
+        </div>
+        <p *ngIf="phoneError" class="text-danger text-[10px] font-bold mt-1.5 flex items-center gap-1">
+          <svg class="w-3.5 h-3.5 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <span>{{ phoneError }}</span>
+        </p>
+      </div>
+
+      <div class="pt-2 flex gap-3">
+        <button type="button" (click)="requiresPhone = false" class="w-1/3 bg-background border border-border-base text-secondary font-bold text-xs py-3.5 rounded-xl hover:bg-surface-hover cursor-pointer active:scale-95 transition-all">
+          Hủy bỏ
+        </button>
+        <button type="submit" [disabled]="phoneLoading" class="flex-1 bg-accent text-white font-tight font-bold text-xs py-3.5 rounded-xl hover:bg-blue-600 transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer shadow-material">
+          <span *ngIf="!phoneLoading">Xác nhận hoàn tất</span>
+          <span *ngIf="phoneLoading" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
