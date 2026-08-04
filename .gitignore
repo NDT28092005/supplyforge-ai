@@ -40,3 +40,5 @@ tasks/
 test-data/
 .gemini/
 notebooks/env/
+docs/
+data/
