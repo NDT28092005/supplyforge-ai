@@ -1,0 +1,23 @@
+optimal_threshold_tau: 0.50
+
+priority_tiers:
+  critical_attention:
+    min_prob: 0.90
+    max_prob: 1.00
+    display_name: "🔴 Critical Attention"
+    merchant_action: "Rà soát giảm giá xả hàng ngay lập tức (Immediate Clearance / Markdown Review)."
+  high_attention:
+    min_prob: 0.75
+    max_prob: 0.90
+    display_name: "🟠 High Attention"
+    merchant_action: "Tạo chương trình Combo / Kích cầu và rà soát mức tồn kho an toàn (Safety Stock Audit)."
+  monitor:
+    min_prob: 0.50
+    max_prob: 0.75
+    display_name: "🟡 Monitor"
+    merchant_action: "Theo dõi chu kỳ đặt hàng bổ sung & biến động nhu cầu gián đoạn (Scheduled Replenishment)."
+  normal:
+    min_prob: 0.00
+    max_prob: 0.50
+    display_name: "🟢 Normal"
+    merchant_action: "Duy trì hoạt động bán hàng & giám sát định kỳ (Routine Sales Monitoring)."

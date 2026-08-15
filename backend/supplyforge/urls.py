@@ -50,4 +50,9 @@ urlpatterns = [
     path('api/v1/shopee/webhook', views.shopee_webhook, name='shopee_webhook'),
     path('api/v1/shopee/sync/trigger', views.trigger_sync, name='shopee_trigger_sync'),
     path('api/v1/shopee/sync/status', views.get_sync_status, name='shopee_sync_status'),
+
+    # Merchant DSS Web Prototype REST API (EXP-12 Production Pipeline Integration)
+    path('api/v1/dss/upload', views.dss_upload, name='dss_upload'),
+    path('api/v1/dss/summary', views.dss_summary, name='dss_summary'),
+    path('api/v1/dss/sku/<str:sku_id>', views.dss_sku_detail, name='dss_sku_detail'),
 ]

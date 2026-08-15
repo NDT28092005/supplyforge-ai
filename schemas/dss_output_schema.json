@@ -1,0 +1,114 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CanonicalDSSOutputContract",
+  "description": "Formal JSON Schema definition for Explainable Slow-Moving Product Risk DSS Payload",
+  "type": "object",
+  "required": [
+    "itemId",
+    "decision_cutoff_t0",
+    "risk_level",
+    "predicted_risk_prob",
+    "demand_pattern",
+    "sales_velocity_90d",
+    "dsls_days",
+    "zero_rate_90d",
+    "tsb_demand_prob",
+    "shap_top_evidence",
+    "business_cause_tags",
+    "interpretations_vi",
+    "recommended_actions_vi",
+    "dss_caveats"
+  ],
+  "properties": {
+    "itemId": {
+      "type": "string",
+      "description": "Unique SKU identifier"
+    },
+    "decision_cutoff_t0": {
+      "type": "string",
+      "description": "Decision cutoff timestamp t0 (e.g. 2025-10-16)"
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": ["CRITICAL", "HIGH_RISK", "MEDIUM_RISK", "LOW_RISK"],
+      "description": "Predicted slow-moving risk class from XGBoost classifier"
+    },
+    "predicted_risk_prob": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Model predicted probability for slow-moving risk"
+    },
+    "demand_pattern": {
+      "type": "string",
+      "description": "Intermittent demand classification pattern (e.g. Lumpy, Intermittent, Smooth, Erratic)"
+    },
+    "sales_velocity_90d": {
+      "type": "number",
+      "minimum": 0.0,
+      "description": "Observed 90-day sales velocity in units/day at t0"
+    },
+    "dsls_days": {
+      "type": "number",
+      "minimum": 0.0,
+      "description": "Days since last sale at t0"
+    },
+    "zero_rate_90d": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Zero-sales day proportion in 90 days prior to t0"
+    },
+    "tsb_demand_prob": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "TSB intermittent demand probability parameter at t0"
+    },
+    "shap_top_evidence": {
+      "type": "array",
+      "description": "Top contributing SHAP feature evidence list",
+      "items": {
+        "type": "object",
+        "required": ["feature", "business_name_vi", "shap_value", "observed_value", "impact"],
+        "properties": {
+          "feature": { "type": "string" },
+          "business_name_vi": { "type": "string" },
+          "shap_value": { "type": "number" },
+          "observed_value": { "type": "string" },
+          "impact": { "type": "string" }
+        }
+      }
+    },
+    "business_cause_tags": {
+      "type": "array",
+      "description": "Diagnostic cause tags assigned by Business Rule Engine",
+      "items": {
+        "type": "string",
+        "enum": [
+          "LOW_SALES_VELOCITY",
+          "LUMPY_DEMAND",
+          "POSSIBLE_OBSOLESCENCE",
+          "PROMO_ASSOCIATED_LOW_VELOCITY",
+          "POSSIBLE_STOCKOUT_EFFECT",
+          "NORMAL_MONITORED"
+        ]
+      }
+    },
+    "interpretations_vi": {
+      "type": "array",
+      "description": "Vietnamese natural language interpretations for cause tags",
+      "items": { "type": "string" }
+    },
+    "recommended_actions_vi": {
+      "type": "array",
+      "description": "Action recommendations mapped from cause tags and risk class",
+      "items": { "type": "string" }
+    },
+    "dss_caveats": {
+      "type": "array",
+      "description": "Standard DSS analytical disclaimers",
+      "items": { "type": "string" }
+    }
+  }
+}

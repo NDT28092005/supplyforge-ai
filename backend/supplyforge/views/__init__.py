@@ -16,6 +16,8 @@ from .shopee import (
     shopee_webhook, trigger_sync, get_sync_status,
 )
 
+from .dss_web import dss_upload, dss_summary, dss_sku_detail
+
 __all__ = [
     'ping', 'check_data',
     'google_callback', 'verify_token', 'register_user', 'login_user', 'google_complete_phone',
@@ -27,4 +29,5 @@ __all__ = [
     'get_candidates', 'merge_products', 'undo_merge', 'ignore_pair',
     'shopee_oauth_authorize_url', 'shopee_oauth_callback',
     'shopee_webhook', 'trigger_sync', 'get_sync_status',
+    'dss_upload', 'dss_summary', 'dss_sku_detail',
 ]

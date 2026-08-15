@@ -1,0 +1,45 @@
+decision_cutoff_t0: "2025-10-16"
+
+feature_groups:
+  demand_pattern:
+    - adi
+    - cv2
+    - zero_rate_90d
+    - zero_rate_full
+  sales_behavior:
+    - sales_velocity_90d
+    - sales_velocity_full
+    - sales_last_30d
+    - past_total_sold
+    - dsls
+    - active_30d
+    - active_90d
+    - n_observation_days
+  forecast_evidence:
+    - forecast_7d
+    - forecast_14d
+    - forecast_30d
+    - forecast_trend
+    - demand_probability
+    - expected_demand_daily
+  business_features:
+    - price
+    - cost
+    - cost_imputed
+    - promo_rate
+    - brand_enc
+    - category_enc
+    - pattern_enc
+
+categorical_columns:
+  - brand
+  - categoryId
+  - demand_pattern
+
+forbidden_future_columns:
+  - future_qty_60d
+  - drr_60d
+  - future_qty_30d
+  - slow_moving_label
+  - target
+  - label

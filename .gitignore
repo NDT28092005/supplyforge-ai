@@ -42,3 +42,7 @@ test-data/
 notebooks/env/
 docs/
 data/
+scripts/
+models/
+predictions/
+reports/
