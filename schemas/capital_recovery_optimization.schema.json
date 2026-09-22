@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CapitalRecoveryOptimizationResultPayload",
+  "type": "object",
+  "required": [
+    "sku",
+    "capital_exposure",
+    "baseline_scenario",
+    "evaluated_scenarios",
+    "recommended_strategy",
+    "recommended_scenario",
+    "expected_recovery_value",
+    "recovery_rate",
+    "residual_exposure",
+    "optimization_score",
+    "ranking",
+    "reason_codes",
+    "optimization_policy_version",
+    "evaluated_at"
+  ],
+  "properties": {
+    "sku": { "type": "string" },
+    "evaluation_status": { "type": "string" },
+    "capital_exposure": { "type": "number" },
+    "baseline_scenario": { "type": "object" },
+    "evaluated_scenarios": { "type": "array" },
+    "recommended_strategy": { "type": ["string", "null"] },
+    "recommended_scenario": { "type": ["string", "null"] },
+    "expected_recovery_value": { "type": "number" },
+    "recovery_rate": { "type": "number" },
+    "residual_exposure": { "type": "number" },
+    "optimization_score": { "type": "number" },
+    "ranking": { "type": "array" },
+    "tradeoffs": { "type": "object" },
+    "reason_codes": { "type": "array" },
+    "assumptions": { "type": "object" },
+    "optimization_policy_version": { "type": "string" },
+    "evaluated_at": { "type": "string" }
+  }
+}

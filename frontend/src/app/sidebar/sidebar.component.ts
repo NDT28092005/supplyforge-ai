@@ -12,9 +12,14 @@ export class SidebarComponent {
   @Input() activeStage: string = 'dashboard';
   @Output() selectStage = new EventEmitter<string>();
   @Output() importNew = new EventEmitter<void>();
+  @Output() importIncremental = new EventEmitter<void>();
 
   navigateTo(stage: string): void {
     this.selectStage.emit(stage);
+  }
+
+  onImportIncrementalClick(): void {
+    this.importIncremental.emit();
   }
 
   onImportNewClick(): void {

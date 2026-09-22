@@ -31,6 +31,11 @@ class IndustryPlaybook:
 
 
 PLAYBOOKS = {
+    'MOTHER_BABY': IndustryPlaybook(
+        "Mẹ & Bé (Tã bỉm & Chăm sóc)", 1.1, 90,
+        ["Bundle Combo Mẹ & Bé", "Flash Sale Tã Bỉm", "Quà Tặng Kèm Baby"],
+        ["Đổi cỡ (up-size) theo độ tuổi bé", "Nhạy cảm thương hiệu"]
+    ),
     'FASHION_FAST': IndustryPlaybook(
         "Thời trang nhanh", 1.8, 60,
         ["Cross-season Bundle", "Flash Sale Size-break", "KOL Clearance"],
@@ -61,6 +66,8 @@ PLAYBOOKS = {
 
 class IndustryDetectionService:
     KEYWORD_MAP = [
+        # Mother & Baby / Diapers (Must be checked BEFORE Fashion so 'Tã bỉm quần XL/L' matches Mother & Baby)
+        (re.compile(r"\b(tã|ta|bỉm|bim|mẹ|me|bé|be|em bé|em be|trẻ em|tre em|sơ sinh|so sinh|pampers|merries|moony|huggies|goon|genki|bobby|mustela|chăm sóc bé|khăn ướt|khan uot)\b", re.IGNORECASE), 'MOTHER_BABY'),
         # FMCG & Food
         (re.compile(r"\b(sữa|sua|bột|bot|thực phẩm|thuc pham|ăn|uống|an uong|đồ ăn|do an|bánh|banh|kẹo|keo|nước|nuoc|đồ uống|do uong|vitamin|supplement|snack|mì|mi|gạo|gao|dầu ăn|dau an|gia vị|gia vi|sốt|sot|yogurt|fmcg|date|hsd|han su dung)\b", re.IGNORECASE), 'FMCG_FOOD'),
         # Fashion

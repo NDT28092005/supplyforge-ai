@@ -4,6 +4,7 @@
   [stage]="stage" 
   (openLogin)="openLoginModal()" 
   (logout)="performLogout()" 
+  (demoLogin)="performDemoLogin()"
   (navigateStage)="handleStageSelect($event)">
 </app-header>
 
@@ -12,22 +13,79 @@
 
   <!-- Fixed Left Sidebar (Active in App Dashboards) -->
   <app-sidebar 
-    *ngIf="stage !== 'hero' && stage !== 'processing' && stage !== 'mapping'" 
+    *ngIf="stage !== 'hero' && stage !== 'about_us' && stage !== 'services' && stage !== 'blog' && stage !== 'processing' && stage !== 'mapping'" 
     [activeStage]="stage" 
     (selectStage)="handleStageSelect($event)" 
+    (importIncremental)="startIncrementalImport()"
     (importNew)="clearAllDataAndRestart()">
   </app-sidebar>
 
   <!-- Main Content Stage -->
-  <main class="flex-1 transition-all" [ngClass]="{'pl-64': stage !== 'hero' && stage !== 'processing' && stage !== 'mapping'}">
+  <main class="flex-1 transition-all" [ngClass]="{'pl-64': stage !== 'hero' && stage !== 'about_us' && stage !== 'services' && stage !== 'blog' && stage !== 'processing' && stage !== 'mapping'}">
     <div class="max-w-[1440px] mx-auto w-full">
+
+      <!-- Ingestion Pipeline Stepper Bar (Active during Data Ingestion & Profiling) -->
+      <div *ngIf="stage === 'csv-upload' || stage === 'processing' || stage === 'mapping' || stage === 'dataset-profile'" 
+           class="my-6 mx-6 md:mx-10 p-4 bg-white border border-slate-200/80 rounded-2xl shadow-xs animate-fade-in">
+        <div class="max-w-3xl mx-auto flex items-center justify-between font-sans text-xs">
+          <!-- Step 1: Upload -->
+          <div class="flex items-center gap-2" [ngClass]="getStepClass('csv-upload')">
+            <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px]" [ngClass]="getStepNumClass('csv-upload')">1</span>
+            <span class="hidden sm:inline font-semibold">Tải dữ liệu lên</span>
+          </div>
+
+          <div class="h-0.5 flex-1 mx-3 bg-slate-200"></div>
+
+          <!-- Step 2: Processing -->
+          <div class="flex items-center gap-2" [ngClass]="getStepClass('processing')">
+            <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px]" [ngClass]="getStepNumClass('processing')">2</span>
+            <span class="hidden sm:inline font-semibold">Kiểm tra dữ liệu</span>
+          </div>
+
+          <div class="h-0.5 flex-1 mx-3 bg-slate-200"></div>
+
+          <!-- Step 3: Mapping -->
+          <div class="flex items-center gap-2" [ngClass]="getStepClass('mapping')">
+            <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px]" [ngClass]="getStepNumClass('mapping')">3</span>
+            <span class="hidden sm:inline font-semibold">Xác nhận cột</span>
+          </div>
+
+          <div class="h-0.5 flex-1 mx-3 bg-slate-200"></div>
+
+          <!-- Step 4: Dataset Profile -->
+          <div class="flex items-center gap-2" [ngClass]="getStepClass('dataset-profile')">
+            <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px]" [ngClass]="getStepNumClass('dataset-profile')">4</span>
+            <span class="hidden sm:inline font-semibold">Tổng quan file nạp</span>
+          </div>
+        </div>
+      </div>
 
       <!-- 1. Landing Page Stage (Trust Theater Hero) -->
       <div *ngIf="stage === 'hero'" class="fade-in">
-        <app-trust-theater-hero (upload)="startProcessing($event)" (openLogin)="openLoginModal()"></app-trust-theater-hero>
+        <app-trust-theater-hero (upload)="startProcessing($event)" (openLogin)="openLoginModal()" (navigateStage)="handleStageSelect($event)"></app-trust-theater-hero>
       </div>
 
-      <!-- 2. Processing Screen Stage -->
+      <!-- 1.1 About Us Stage (/api/v1/about_us) -->
+      <div *ngIf="stage === 'about_us'" class="fade-in">
+        <app-about-us-page (navigateAction)="handleStageSelect($event)"></app-about-us-page>
+      </div>
+
+      <!-- 1.2 Services Stage (/api/v1/services) -->
+      <div *ngIf="stage === 'services'" class="fade-in">
+        <app-services-page (navigateAction)="handleStageSelect($event)"></app-services-page>
+      </div>
+
+      <!-- 1.3 Blog Stage (/api/v1/blog) -->
+      <div *ngIf="stage === 'blog'" class="fade-in">
+        <app-blog-page></app-blog-page>
+      </div>
+
+      <!-- 2. CSV Upload & Profiling Stage -->
+      <div *ngIf="stage === 'csv-upload'" class="fade-in">
+        <app-csv-upload (continueToMapping)="handleCsvProfileComplete($event)"></app-csv-upload>
+      </div>
+
+      <!-- 2.1 Processing Screen Stage -->
       <div *ngIf="stage === 'processing'" class="fade-in">
         <app-processing-screen [file]="uploadFile" (mappingReady)="handleMappingReady($event)"></app-processing-screen>
       </div>
@@ -48,52 +106,52 @@
         </div>
       </div>
 
-      <!-- 4. Dashboard (Cashflow Vault) Stage -->
-      <div *ngIf="stage === 'dashboard'" class="fade-in px-6 md:px-10 py-8">
-        <app-cashflow-vault 
-          [data]="dashboardData" 
-          (proceed)="handleFetchAndOpenTinder()" 
-          (recovery)="handleOpenRecovery()" 
-          (commandCenter)="handleOpenCommandCenter()" 
-          (importNew)="clearAllDataAndRestart()">
-        </app-cashflow-vault>
+      <!-- 3.1 Dataset Profiling Stage -->
+      <div *ngIf="stage === 'dataset-profile'" class="fade-in font-mono">
+        <app-dataset-profile-dashboard 
+          [sessionId]="activeSessionId" 
+          [profileData]="datasetProfileData" 
+          (proceedToAnalysis)="handleProceedFromProfile()">
+        </app-dataset-profile-dashboard>
       </div>
 
-      <!-- 5. Inventory Aging Radar Stage -->
-      <div *ngIf="stage === 'aging'" class="fade-in px-6 md:px-10 py-8">
-        <app-inventory-aging-radar 
-          [data]="agingData" 
-          (triggerCopilot)="handleTriggerCopilot($event)">
-        </app-inventory-aging-radar>
+      <!-- 3.2 Executive Dashboard Stage (Module 1 - Trang chủ Tổng quan) -->
+      <div *ngIf="stage === 'executive-dashboard'" class="fade-in px-6 md:px-10 py-8">
+        <app-executive-dashboard
+          [data]="dashboardData"
+          [sessionId]="activeSessionId"
+          (analyzeSku)="handleStageSelect('slow-moving-risk')"
+          (navigateTo)="handleStageSelect($event)">
+        </app-executive-dashboard>
       </div>
 
-      <!-- 6. Recovery Copilot Detail Stage -->
-      <div *ngIf="stage === 'recovery-copilot'" class="fade-in px-6 md:px-10 py-8">
-        <app-recovery-copilot [cluster]="activeCluster"></app-recovery-copilot>
+      <!-- 9. Slow-Moving Risk Dashboard Stage (Tab 2: RỦI RO) -->
+      <div *ngIf="stage === 'slow-moving-risk'" class="fade-in px-6 md:px-10 py-8">
+        <app-slow-moving-risk-dashboard
+          [sessionId]="activeSessionId"
+          [skuId]="selectedSkuId"
+          (navigateTo)="handleStageSelect($event)">
+        </app-slow-moving-risk-dashboard>
       </div>
 
-      <!-- 7. SKU Deduplication Tinder Deck Stage -->
-      <div *ngIf="stage === 'dedup'" class="fade-in px-6 md:px-10 py-8">
-        <app-sku-deduplication-tinder 
-          [proposals]="dedupProposals" 
-          (merge)="handlePerformMerge($event)" 
-          (complete)="handleTinderComplete($event)">
-        </app-sku-deduplication-tinder>
+      <!-- 10. Capital Exposure Dashboard Stage (Module 05 Engine) -->
+      <div *ngIf="stage === 'capital-exposure'" class="fade-in px-6 md:px-10 py-8">
+        <app-capital-exposure-dashboard></app-capital-exposure-dashboard>
       </div>
 
-      <!-- 8. Command Center Dashboard Stage -->
-      <div *ngIf="stage === 'command-center'" class="fade-in px-6 md:px-10 py-8">
-        <app-command-center-dashboard 
-          [portfolioData]="portfolioData" 
-          [loading]="portfolioLoading" 
-          (back)="handleStageSelect('dashboard')" 
-          (selectCluster)="handleSelectCluster($event)">
-        </app-command-center-dashboard>
+      <!-- 11. Decision Support Dashboard Stage (Module 06 Engine) -->
+      <div *ngIf="stage === 'decision-support'" class="fade-in px-6 md:px-10 py-8">
+        <app-decision-support-dashboard></app-decision-support-dashboard>
       </div>
+
 
     </div>
   </main>
-</div>
+
+<!-- Persistent Copilot Assistant Widget -->
+<app-copilot-widget [contextSku]="selectedSkuId" [activeStage]="stage"></app-copilot-widget>
+
+
 
 <!-- Login Modal Overlay -->
 <app-login-modal 

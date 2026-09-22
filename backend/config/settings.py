@@ -82,10 +82,10 @@ DATABASES = {
     }
 }
 
-if 'test' in os.sys.argv:
+if 'test' in os.sys.argv or os.getenv('USE_SQLITE') == '1':
     DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'test_db.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 
 # Password validation
@@ -181,3 +181,10 @@ if SENTRY_DSN:
         send_default_pii=True
     )
 
+# ── Ingestion File Storage (Module 01) ─────────────────────────────
+INGESTION_UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads', 'ingestion')
+INGESTION_MAX_FILE_SIZE_MB = 500
+
+# Increase Django's default data upload limit for large CSVs (500 MB)
+DATA_UPLOAD_MAX_MEMORY_SIZE = INGESTION_MAX_FILE_SIZE_MB * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB — above this, Django uses temp file on disk

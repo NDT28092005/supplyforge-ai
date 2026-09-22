@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DecisionExplanationPayload",
+  "type": "object",
+  "required": [
+    "explanation_id",
+    "recommendation_id",
+    "sku",
+    "decision_summary",
+    "risk_explanation",
+    "capital_explanation",
+    "aging_explanation",
+    "recovery_explanation",
+    "priority_explanation",
+    "evidence",
+    "reason_codes",
+    "confidence",
+    "limitations",
+    "policy_version",
+    "engine_version",
+    "generated_at"
+  ],
+  "properties": {
+    "explanation_id": { "type": "string" },
+    "recommendation_id": { "type": "string" },
+    "sku": { "type": "string" },
+    "decision_summary": { "type": "object" },
+    "risk_explanation": { "type": "object" },
+    "capital_explanation": { "type": "object" },
+    "aging_explanation": { "type": "object" },
+    "recovery_explanation": { "type": "object" },
+    "priority_explanation": { "type": "object" },
+    "evidence": { "type": "array" },
+    "reason_codes": { "type": "array" },
+    "alternative_analysis": { "type": "object" },
+    "confidence": { "type": "string" },
+    "limitations": { "type": "array" },
+    "policy_version": { "type": "string" },
+    "engine_version": { "type": "string" },
+    "generated_at": { "type": "string" }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "explanation_policy_version": "1.0",
+  "policy_name": "SupplyForge Standard Decision Explanation Policy",
+  "reason_code_dictionary": {
+    "CRITICAL_RISK": "Sản phẩm nằm trong nhóm rủi ro bán chậm nghiêm trọng nhất (CRITICAL).",
+    "HIGH_RISK": "Sản phẩm có mức độ rủi ro bán chậm cao.",
+    "SEVERE_AGING": "Tuổi tồn kho đọng lâu vượt ngưỡng an toàn.",
+    "HIGH_CAPITAL_EXPOSURE": "Quy mô vốn bị đóng băng trong hàng tồn kho vượt quá 10M VNĐ.",
+    "VERY_LOW_DEMAND": "Tốc độ bán cực thấp hoặc không có giao dịch trong 30 ngày gần nhất.",
+    "HIGH_RECOVERY_VALUE": "Phương án tạo giá trị thu hồi vốn tối ưu.",
+    "HIGH_RECOVERY_OPPORTUNITY": "Tiềm năng giải phóng vốn tài chính cao.",
+    "WITHIN_DISCOUNT_LIMIT": "Mức chiết khấu tuân thủ giới hạn an toàn lợi nhuận.",
+    "IMMEDIATE_CAPITAL_RELEASE": "Cần ưu tiên xử lý tức thì để giải phóng dòng tiền."
+  },
+  "standard_limitations": [
+    "Expected recovery value is simulation-based projection under scenario assumptions.",
+    "Actual cash release depends on merchant execution and market conditions.",
+    "Demand elasticity multipliers represent scenario assumptions, not official sales forecasts."
+  ]
+}

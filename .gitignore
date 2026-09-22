@@ -46,3 +46,5 @@ scripts/
 models/
 predictions/
 reports/
+frontend/.angular/
+*.csv

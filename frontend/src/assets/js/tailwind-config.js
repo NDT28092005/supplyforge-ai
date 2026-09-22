@@ -14,8 +14,9 @@ tailwind.config = {
         success: '#2ECC71',
       },
       fontFamily: {
-        sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['Be Vietnam Pro', 'system-ui', 'sans-serif'],
+        heading: ['Be Vietnam Pro', 'sans-serif'],
+        mono: ['Be Vietnam Pro', 'JetBrains Mono', 'monospace'],
       },
       letterSpacing: {
         tightest: '-0.04em',

@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ActionPlanContract",
+  "type": "object",
+  "required": [
+    "plan_id",
+    "decision_id",
+    "decision_version",
+    "subject_id",
+    "status",
+    "action",
+    "priority",
+    "tasks",
+    "expected_outcome"
+  ],
+  "properties": {
+    "plan_id": { "type": "string" },
+    "decision_id": { "type": "string" },
+    "decision_version": { "type": "string" },
+    "subject_id": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["DRAFT", "PENDING_APPROVAL", "APPROVED", "IN_PROGRESS", "BLOCKED", "COMPLETED", "CANCELLED"]
+    },
+    "action": {
+      "type": "object",
+      "required": ["type", "discount_rate"],
+      "properties": {
+        "type": { "type": "string" },
+        "discount_rate": { "type": "number" }
+      }
+    },
+    "priority": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+    "tasks": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "expected_outcome": { "type": "object" }
+  }
+}

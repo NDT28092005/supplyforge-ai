@@ -7,12 +7,17 @@ import { SidebarComponent } from './sidebar/sidebar.component';
 import { TrustTheaterHeroComponent } from './trust-theater-hero/trust-theater-hero.component';
 import { ProcessingScreenComponent } from './processing-screen/processing-screen.component';
 import { DataMappingConfirmComponent } from './data-mapping-confirm/data-mapping-confirm.component';
-import { CashflowVaultComponent } from './cashflow-vault/cashflow-vault.component';
-import { InventoryAgingRadarComponent } from './inventory-aging-radar/inventory-aging-radar.component';
-import { RecoveryCopilotComponent } from './recovery-copilot/recovery-copilot.component';
-import { SkuDeduplicationTinderComponent } from './sku-deduplication-tinder/sku-deduplication-tinder.component';
-import { CommandCenterDashboardComponent } from './command-center-dashboard/command-center-dashboard.component';
 import { LoginModalComponent } from './login-modal/login-modal.component';
+import { CsvUploadComponent } from './csv-upload/csv-upload.component';
+import { DatasetProfileDashboardComponent } from './dataset-profile-dashboard/dataset-profile-dashboard.component';
+import { SlowMovingRiskDashboardComponent } from './slow-moving-risk-dashboard/slow-moving-risk-dashboard.component';
+import { CapitalExposureDashboardComponent } from './capital-exposure-dashboard/capital-exposure-dashboard.component';
+import { DecisionSupportDashboardComponent } from './decision-support-dashboard/decision-support-dashboard.component';
+import { ExecutiveDashboardComponent } from './executive-dashboard/executive-dashboard.component';
+import { CopilotWidgetComponent } from './copilot-widget/copilot-widget.component';
+import { AboutUsPageComponent } from './about-us-page/about-us-page.component';
+import { ServicesPageComponent } from './services-page/services-page.component';
+import { BlogPageComponent } from './blog-page/blog-page.component';
 
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
@@ -29,32 +34,39 @@ import { FieldConfig } from './field-config';
     TrustTheaterHeroComponent,
     ProcessingScreenComponent,
     DataMappingConfirmComponent,
-    CashflowVaultComponent,
-    InventoryAgingRadarComponent,
-    RecoveryCopilotComponent,
-    SkuDeduplicationTinderComponent,
-    CommandCenterDashboardComponent,
-    LoginModalComponent
+    LoginModalComponent,
+    CsvUploadComponent,
+    DatasetProfileDashboardComponent,
+    SlowMovingRiskDashboardComponent,
+    CapitalExposureDashboardComponent,
+    DecisionSupportDashboardComponent,
+    ExecutiveDashboardComponent,
+    CopilotWidgetComponent,
+    AboutUsPageComponent,
+    ServicesPageComponent,
+    BlogPageComponent
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit {
   title = 'SupplyForge AI';
+  selectedSkuId: string | null = null;
 
-  // App Stages: hero | processing | mapping | dashboard | aging | recovery-copilot | dedup | command-center
+  // App Stages: hero | about_us | services | blog | csv-upload | processing | mapping | dataset-profile | executive-dashboard | slow-moving-risk | capital-exposure | decision-support
   stage: string = 'hero';
 
   uploadFile: File | null = null;
   mappingData: any = null;
+  activeSessionId: string = '';
+  datasetProfileData: any = null;
   isProcessingBatch = false;
 
   dashboardData: any = null;
-  agingData: any = null;
-  portfolioData: any = null;
-  portfolioLoading = false;
-  dedupProposals: any[] = [];
-  activeCluster: any = null;
+
+  // Info Modal State (About Us, Services, Blog)
+  isInfoModalOpen = false;
+  activeInfoTab: 'about' | 'services' | 'blog' = 'about';
 
   // Auth & Modal State
   isLoginOpen = false;
@@ -79,13 +91,12 @@ export class AppComponent implements OnInit {
   constructor(
     private apiService: ApiService,
     private authService: AuthService
-  ) {}
+  ) { }
 
   parseJwt(token: string): any {
     try {
       if (!token) return null;
-      
-      // Làm sạch token nếu bị dính ký tự định dạng bytes của Python (ví dụ: b'ey...')
+
       let cleanToken = token.trim();
       if (cleanToken.startsWith("b'") && cleanToken.endsWith("'")) {
         cleanToken = cleanToken.slice(2, -1);
@@ -114,7 +125,6 @@ export class AppComponent implements OnInit {
   ngOnInit(): void {
     console.info('[Auth Debug] Khởi động ứng dụng. URL:', window.location.href);
 
-    // 1. Kiểm tra và tiếp nhận token từ URL query parameters bằng Regex
     const tokenMatch = window.location.href.match(/[?&]token=([^&]+)/);
     const urlToken = tokenMatch ? tokenMatch[1] : null;
     if (urlToken) {
@@ -122,7 +132,6 @@ export class AppComponent implements OnInit {
       this.authService.setToken(urlToken);
     }
 
-    // 1.2 Kiểm tra nếu tài khoản Google mới chưa điền số điện thoại (requires_phone)
     const requiresPhoneMatch = window.location.href.match(/[?&]requires_phone=true/);
     if (requiresPhoneMatch) {
       console.info('[Auth Debug] Tài khoản Google mới, yêu cầu điền số điện thoại...');
@@ -140,7 +149,6 @@ export class AppComponent implements OnInit {
       this.requiresPhone = true;
     }
 
-    // 2. Dọn dẹp URL query parameters để bảo mật và làm sạch thanh địa chỉ
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('auth_success') || urlParams.has('error') || urlParams.has('token') || urlParams.has('requires_phone')) {
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -170,7 +178,7 @@ export class AppComponent implements OnInit {
       next: (res) => {
         if (res && res.hasData) {
           this.loadDashboardData();
-          this.stage = 'dashboard';
+          this.stage = 'executive-dashboard';
         }
       },
       error: (err) => console.log('Check data error:', err)
@@ -182,30 +190,52 @@ export class AppComponent implements OnInit {
     this.uploadFile = event.file;
     this.stage = 'processing';
 
-    this.apiService.analyzeFile(event.file).subscribe({
-      next: (res) => {
-        this.mappingData = res;
-        this.autoMapFields(res);
-        this.stage = 'mapping';
+    this.apiService.uploadCsvV2(event.file, 1, 'INITIAL').subscribe({
+      next: (res: any) => {
+        if (res?.sessionId) {
+          this.activeSessionId = res.sessionId;
+        }
+        const profile = res?.profile;
+        if (profile) {
+          this.mappingData = {
+            headers: profile.headers,
+            sampleData: profile.previewRows ? profile.previewRows[0] : null,
+            aiSuggestions: {
+              sku_column_index: profile.headers.indexOf(profile.skuColumnDetected),
+              record_date_column_index: profile.headers.indexOf(profile.dateColumnDetected),
+              confidence: 'High (Streaming CSV Profiler)'
+            }
+          };
+          this.autoMapFields(this.mappingData);
+          this.stage = 'mapping';
+        } else {
+          this.stage = 'csv-upload';
+        }
       },
-      error: (err) => {
-        console.error('File analyze failed, fallback mapping:', err);
-        this.mappingData = {
-          headers: ['Sản phẩm', 'Mã SKU', 'Giá bán', 'Giá vốn', 'Tồn kho', 'Ngày nhập'],
-          aiSuggestions: {
-            product_name: 'Sản phẩm',
-            item_sku: 'Mã SKU',
-            price: 'Giá bán',
-            cost: 'Giá vốn',
-            stock: 'Tồn kho',
-            date: 'Ngày nhập',
-            confidence: 'High'
-          }
-        };
-        this.autoMapFields(this.mappingData);
-        this.stage = 'mapping';
+      error: (err: any) => {
+        console.error('Hero upload error:', err);
+        this.stage = 'csv-upload';
       }
     });
+  }
+
+  handleCsvProfileComplete(event: { file: File; profileData: any }): void {
+    this.uploadFile = event.file;
+    const profile = event.profileData?.profile;
+
+    if (profile) {
+      this.mappingData = {
+        headers: profile.headers,
+        sampleData: profile.previewRows ? profile.previewRows[0] : null,
+        aiSuggestions: {
+          sku_column_index: profile.headers.indexOf(profile.skuColumnDetected),
+          record_date_column_index: profile.headers.indexOf(profile.dateColumnDetected),
+          confidence: 'High (Streaming CSV Profiler)'
+        }
+      };
+      this.autoMapFields(this.mappingData);
+    }
+    this.stage = 'mapping';
   }
 
   autoMapFields(res: any): void {
@@ -247,7 +277,7 @@ export class AppComponent implements OnInit {
       this.finalMapping['cost'] = suggestions.cost || findHeader(/cost|giá vốn|vốn/i, 3);
     }
     if (!this.finalMapping['stock']) {
-      this.finalMapping['stock'] = suggestions.stock || findHeader(/stock|quantity|số lượng|sl|tồn/i, 1);
+      this.finalMapping['stock'] = suggestions.stock || findHeader(/stock_on_hand|tồn_kho|tồn|stock/i, 1);
     }
     if (!this.finalMapping['orderDate']) {
       this.finalMapping['orderDate'] = suggestions.date || findHeader(/date|ngày/i, 4);
@@ -264,34 +294,70 @@ export class AppComponent implements OnInit {
     this.isProcessingBatch = true;
     const targetFile = this.uploadFile;
 
-    if (targetFile) {
+    const onProfilingComplete = (profileRes: any) => {
+      this.isProcessingBatch = false;
+      this.datasetProfileData = profileRes?.profile || profileRes;
+      this.stage = 'dataset-profile';
+    };
+
+    if (this.activeSessionId) {
+      this.apiService.triggerDatasetProfiling(this.activeSessionId, finalMapping).subscribe({
+        next: (res) => {
+          if (targetFile) {
+            this.apiService.processFile(targetFile, finalMapping).subscribe();
+          }
+          onProfilingComplete(res);
+        },
+        error: () => {
+          if (targetFile) {
+            this.apiService.processFile(targetFile, finalMapping).subscribe({
+              next: () => {
+                this.isProcessingBatch = false;
+                this.loadDashboardData();
+                this.stage = 'executive-dashboard';
+              },
+              error: () => {
+                this.isProcessingBatch = false;
+                this.loadDashboardData();
+                this.stage = 'executive-dashboard';
+              }
+            });
+          } else {
+            this.isProcessingBatch = false;
+            this.loadDashboardData();
+            this.stage = 'executive-dashboard';
+          }
+        }
+      });
+    } else if (targetFile) {
       this.apiService.processFile(targetFile, finalMapping).subscribe({
         next: () => {
           this.isProcessingBatch = false;
           this.loadDashboardData();
-          this.stage = 'dashboard';
+          this.stage = 'executive-dashboard';
         },
         error: () => {
-          // Sync products directly as fallback
-          this.apiService.syncProducts(targetFile).subscribe({
-            next: () => {
-              this.isProcessingBatch = false;
-              this.loadDashboardData();
-              this.stage = 'dashboard';
-            },
-            error: () => {
-              this.isProcessingBatch = false;
-              this.loadDashboardData();
-              this.stage = 'dashboard';
-            }
-          });
+          this.isProcessingBatch = false;
+          this.loadDashboardData();
+          this.stage = 'executive-dashboard';
         }
       });
     } else {
       this.isProcessingBatch = false;
       this.loadDashboardData();
-      this.stage = 'dashboard';
+      this.stage = 'executive-dashboard';
     }
+  }
+
+  handleProceedFromProfile(): void {
+    if (this.activeSessionId) {
+      this.apiService.runM3RiskAssessmentAssembly(this.activeSessionId).subscribe({
+        next: () => this.apiService.runM3RiskMonitoring(this.activeSessionId).subscribe(),
+        error: (err) => console.warn('M3 assembly trigger error:', err)
+      });
+    }
+    this.loadDashboardData();
+    this.stage = 'executive-dashboard';
   }
 
   // --- Data Loaders ---
@@ -377,155 +443,69 @@ export class AppComponent implements OnInit {
     };
   }
 
-  loadAgingData(): void {
-    this.apiService.getAging(1).subscribe({
-      next: (res) => this.agingData = res,
-      error: (err) => console.error('Aging fetch error:', err)
-    });
-  }
-
-  loadPortfolioCommand(): void {
-    this.portfolioLoading = true;
-    this.apiService.getPortfolioCommand(1).subscribe({
-      next: (res) => {
-        if (res) {
-          // Transform raw aging data into Priority Clusters for Command Center
-          const deadList = res.deadStockSkus || [];
-          const slowList = res.slowMovingSkus || [];
-          const watchList = res.watchlistSkus || [];
-          const allRisky = [...deadList, ...slowList, ...watchList];
-
-          // Group by industryContext.industryCode to form clusters
-          const clusterMap: Record<string, any[]> = {};
-          for (const sku of allRisky) {
-            const code = sku.industryContext?.industryCode || 'GENERAL';
-            if (!clusterMap[code]) clusterMap[code] = [];
-            clusterMap[code].push(sku);
-          }
-
-          const urgencyLevels = ['CRITICAL', 'HIGH', 'MEDIUM'];
-          const priorityClusters = Object.entries(clusterMap)
-            .map(([code, skus], idx) => {
-              const totalFrozen = skus.reduce((s: number, sk: any) => s + (sk.totalValue || 0), 0);
-              const avgRisk = skus.length > 0
-                ? Math.round(skus.reduce((s: number, sk: any) => s + (sk.industryContext?.agingScore || 0), 0) / skus.length)
-                : 0;
-              const displayName = skus[0]?.industryContext?.displayName || 'Tổng hợp';
-              const strategies = skus[0]?.industryContext?.liquidationStrategies || ['Progressive Discount'];
-              return {
-                clusterName: `Cụm ${displayName} — ${skus.length} SKU`,
-                urgencyLevel: urgencyLevels[Math.min(idx, 2)],
-                averageRiskScore: avgRisk,
-                skuCount: skus.length,
-                totalFrozenValue: totalFrozen,
-                totalPotentialRecovery: Math.round(totalFrozen * 0.65),
-                recommendedBatchAction: strategies.join(' → '),
-                rationale: `Cụm hàng ${displayName} với ${skus.length} SKU chôn vốn tổng ${Math.round(totalFrozen).toLocaleString('vi-VN')} ₫. Điểm rủi ro trung bình: ${avgRisk}.`,
-                skus: skus
-              };
-            })
-            .sort((a, b) => b.totalFrozenValue - a.totalFrozenValue)
-            .slice(0, 3);
-
-          const totalExpectedRecovery = priorityClusters.reduce((s, c) => s + c.totalPotentialRecovery, 0);
-          const totalSkuCount = priorityClusters.reduce((s, c) => s + c.skuCount, 0);
-          const totalFrozenAll = (res.totalFrozenValue || 0) + (res.totalWatchlistValue || 0);
-          const totalInvAll = (res.totalHealthyValue || 0) + (res.totalWatchlistValue || 0)
-            + (res.totalSlowMovingValue || 0) + (res.totalDeadStockValue || 0);
-          const spacePct = totalInvAll > 0 ? Math.round((totalFrozenAll / totalInvAll) * 100) : 0;
-
-          this.portfolioData = {
-            ...res,
-            priorityClusters,
-            totalExpectedRecovery,
-            totalSkuCount,
-            estimatedWarehouseSpaceFreedPct: spacePct,
-            planHorizonDays: 30
-          };
-        }
-        this.portfolioLoading = false;
-      },
-      error: (err) => {
-        console.error('Portfolio fetch error:', err);
-        this.portfolioLoading = false;
-      }
-    });
-  }
-
-  loadDedupCandidates(): void {
-    this.apiService.getCandidates(1).subscribe({
-      next: (res) => {
-        // Backend returns a flat array of pair objects, not {candidates: [...]}
-        const pairs = Array.isArray(res) ? res : (res?.candidates || res?.pairs || []);
-        this.dedupProposals = pairs.map((item: any) => ({
-          confidenceScore: item.confidenceScore || item.similarityScore || (item.distance ? Math.max(0, 1 - item.distance * 0.1) : 0.85),
-          skuA: {
-            id: item.skuAId || item.parentSkuId || '',
-            skuCode: item.skuACode || item.parentSku || '',
-            name: item.skuAName || item.parentSkuName || '',
-            price: item.skuAPrice || 0,
-            stock: item.skuAStock || 0,
-            source: item.skuASource || 'Hệ thống'
-          },
-          skuB: {
-            id: item.skuBId || item.childSkuId || '',
-            skuCode: item.skuBCode || item.childSku || '',
-            name: item.skuBName || item.childSkuName || '',
-            price: item.skuBPrice || 0,
-            stock: item.skuBStock || 0,
-            source: item.skuBSource || 'Hệ thống'
-          }
-        }));
-      },
-      error: (err) => console.error('Candidates fetch error:', err)
-    });
-  }
-
   // --- Navigation & State Switcher ---
   handleStageSelect(targetStage: string): void {
     this.stage = targetStage;
-    if (targetStage === 'dashboard') {
+    if (targetStage === 'executive-dashboard') {
       this.loadDashboardData();
-    } else if (targetStage === 'aging') {
-      this.loadAgingData();
-    } else if (targetStage === 'command-center') {
-      this.loadPortfolioCommand();
-    } else if (targetStage === 'dedup') {
-      this.loadDedupCandidates();
+    } else if (targetStage === 'slow-moving-risk') {
+      this.ensureSessionId();
     }
   }
 
-  handleOpenRecovery(): void {
-    this.handleStageSelect('aging');
+  handleViewSkuDetail(skuId: string): void {
+    this.selectedSkuId = skuId;
+    this.handleStageSelect('slow-moving-risk');
   }
 
-  handleOpenCommandCenter(): void {
-    this.handleStageSelect('command-center');
-  }
-
-  handleFetchAndOpenTinder(): void {
-    this.handleStageSelect('dedup');
-  }
-
-  handleTriggerCopilot(event: { item: any }): void {
-    this.activeCluster = event.item;
-    this.stage = 'recovery-copilot';
-  }
-
-  handleSelectCluster(event: { cluster: any }): void {
-    this.activeCluster = event.cluster;
-    this.stage = 'recovery-copilot';
-  }
-
-  handlePerformMerge(event: { a: any, b: any }): void {
-    if (event.a?.id && event.b?.id) {
-      this.apiService.mergeProducts(1, event.a.id, event.b.id).subscribe();
+  ensureSessionId(): void {
+    if (!this.activeSessionId) {
+      this.apiService.listIngestionSessions(1).subscribe({
+        next: (res: any) => {
+          if (res?.sessions?.length > 0) {
+            this.activeSessionId = res.sessions[0].sessionId || res.sessions[0].session_id || '';
+          }
+        },
+        error: (err: any) => console.warn('Could not fetch sessions:', err)
+      });
     }
   }
 
-  handleTinderComplete(event: { merged: number, ignored: number }): void {
-    this.stage = 'dashboard';
-    this.loadDashboardData();
+  // --- Ingestion Pipeline Stepper Indicators ---
+  getStepStatus(stepKey: string): 'completed' | 'active' | 'pending' {
+    const stageOrder: { [key: string]: number } = {
+      'csv-upload': 1,
+      'processing': 2,
+      'mapping': 3,
+      'dataset-profile': 4
+    };
+
+    const currentOrder = stageOrder[this.stage] || 0;
+    const targetOrder = stageOrder[stepKey] || 0;
+
+    if (currentOrder > targetOrder) return 'completed';
+    if (currentOrder === targetOrder) return 'active';
+    return 'pending';
+  }
+
+  getStepClass(stepKey: string): string {
+    const status = this.getStepStatus(stepKey);
+    if (status === 'completed') return 'text-emerald-400 font-bold';
+    if (status === 'active') return 'text-accent font-black';
+    return 'text-secondary opacity-60';
+  }
+
+  getStepNumClass(stepKey: string): string {
+    const status = this.getStepStatus(stepKey);
+    if (status === 'completed') return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
+    if (status === 'active') return 'bg-accent text-white shadow-material';
+    return 'bg-surface-hover text-secondary border border-border-base';
+  }
+
+  startIncrementalImport(): void {
+    this.uploadFile = null;
+    this.mappingData = null;
+    this.stage = 'csv-upload';
   }
 
   clearAllDataAndRestart(): void {
@@ -543,10 +523,6 @@ export class AppComponent implements OnInit {
     this.uploadFile = null;
     this.mappingData = null;
     this.dashboardData = null;
-    this.agingData = null;
-    this.portfolioData = null;
-    this.dedupProposals = [];
-    this.activeCluster = null;
     this.stage = 'hero';
   }
 
@@ -600,6 +576,33 @@ export class AppComponent implements OnInit {
         this.phoneError = err.error?.error || 'Có lỗi xảy ra khi lưu số điện thoại. Vui lòng thử lại.';
       }
     });
+  }
+
+  performDemoLogin(): void {
+    const demoUser = {
+      name: 'Chủ cửa hàng (Demo)',
+      email: 'store.owner@supplyforge.ai',
+      role: 'Chủ cửa hàng'
+    };
+    this.currentUser = demoUser;
+    this.authService.setToken('demo_token');
+    this.loadDashboardData();
+    this.stage = 'executive-dashboard';
+  }
+
+  openInfoModal(tab: 'about' | 'services' | 'blog'): void {
+    this.activeInfoTab = tab;
+    this.isInfoModalOpen = true;
+  }
+
+  closeInfoModal(): void {
+    this.isInfoModalOpen = false;
+  }
+
+  handleInfoAction(action: string): void {
+    if (action === 'csv-upload') {
+      this.handleStageSelect('csv-upload');
+    }
   }
 
   performLogout(): void {

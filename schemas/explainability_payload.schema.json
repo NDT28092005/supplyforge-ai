@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://supplyforge.ai/schemas/explainability_payload.schema.json",
+  "title": "Explainability Payload Schema",
+  "description": "Canonical schema contract for Slow-Moving Product Risk Explainability (Module 04).",
+  "type": "object",
+  "required": [
+    "sku",
+    "risk_class",
+    "risk_probability",
+    "risk_score",
+    "explanation",
+    "diagnostics",
+    "explanation_version"
+  ],
+  "properties": {
+    "sku": {
+      "type": "string",
+      "description": "SKU identifier or Canonical SKU ID"
+    },
+    "canonical_sku_id": {
+      "type": "string",
+      "description": "Normalized Canonical SKU ID"
+    },
+    "product_name": {
+      "type": "string",
+      "description": "Product display name"
+    },
+    "risk_class": {
+      "type": "string",
+      "enum": ["CRITICAL", "HIGH_RISK", "MEDIUM_RISK", "LOW_RISK"],
+      "description": "Frozen Strategy A Risk Class from Module 03"
+    },
+    "risk_probability": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Calibrated risk probability"
+    },
+    "risk_score": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 100.0,
+      "description": "Normalized risk score 0-100"
+    },
+    "explanation": {
+      "type": "object",
+      "required": [
+        "method",
+        "model",
+        "base_value",
+        "features"
+      ],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["SHAP", "TreeExplainer", "SHAP_Waterfall"],
+          "description": "Explanation algorithm used"
+        },
+        "model": {
+          "type": "string",
+          "description": "Model architecture name (e.g. XGBoost)"
+        },
+        "model_version": {
+          "type": "string",
+          "description": "Frozen model artifact version"
+        },
+        "base_value": {
+          "type": "number",
+          "description": "Base expected value (E[f(x)]) of the SHAP explainer"
+        },
+        "features": {
+          "type": "array",
+          "description": "Ordered list of feature contributions ranked by absolute SHAP value",
+          "items": {
+            "type": "object",
+            "required": [
+              "feature_name",
+              "feature_value",
+              "shap_value",
+              "direction",
+              "rank"
+            ],
+            "properties": {
+              "feature_name": {
+                "type": "string",
+                "description": "Technical symbol name of feature at t0"
+              },
+              "display_name": {
+                "type": "string",
+                "description": "Merchant-readable feature display name"
+              },
+              "feature_value": {
+                "type": ["number", "string", "null"],
+                "description": "Observed value of feature at t0"
+              },
+              "shap_value": {
+                "type": "number",
+                "description": "SHAP contribution value to model logit/probability output"
+              },
+              "direction": {
+                "type": "string",
+                "enum": ["INCREASES_RISK", "DECREASES_RISK", "NEUTRAL"],
+                "description": "Contribution direction"
+              },
+              "rank": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Rank position of feature by absolute contribution"
+              },
+              "unit": {
+                "type": "string",
+                "description": "Measurement unit"
+              },
+              "business_interpretation": {
+                "type": "string",
+                "description": "Non-causal business interpretation of feature contribution"
+              }
+            }
+          }
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "M3-05 diagnostic signal codes observed at t0"
+    },
+    "explanation_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Version string of the explainability payload schema contract"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp when explanation was built"
+    }
+  },
+  "additionalProperties": true
+}

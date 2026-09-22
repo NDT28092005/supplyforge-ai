@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RiskCapitalCopilotResponsePayload",
+  "type": "object",
+  "required": ["status", "analysis_type", "results", "dataset_version", "evidence_summary"],
+  "properties": {
+    "status": { "type": "string", "enum": ["SUCCESS", "NO_DATA", "ERROR"] },
+    "analysis_type": {
+      "type": "string",
+      "enum": ["SINGLE_SKU", "RISK_PORTFOLIO", "CAPITAL_PORTFOLIO", "CROSS_ANALYSIS", "RANKING", "M6_HANDOFF"]
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sku_id", "risk_class", "risk_probability", "capital_exposure", "aging_days"],
+        "properties": {
+          "sku_id": { "type": "string" },
+          "risk_class": { "type": "string" },
+          "risk_probability": { "type": "number" },
+          "capital_exposure": { "type": "number" },
+          "aging_days": { "type": "integer" }
+        }
+      }
+    },
+    "dataset_version": { "type": "string" },
+    "evidence_summary": { "type": "object" }
+  }
+}

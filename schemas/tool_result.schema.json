@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ToolResultContract",
+  "type": "object",
+  "required": ["tool_name", "status", "source_module", "dataset_version", "data", "execution_time_ms"],
+  "properties": {
+    "tool_name": { "type": "string" },
+    "status": { "type": "string", "enum": ["SUCCESS", "FAILED", "TIMEOUT", "INVALID"] },
+    "source_module": { "type": "string" },
+    "dataset_version": { "type": "string" },
+    "data": { "type": "object" },
+    "error_message": { "type": ["string", "null"] },
+    "execution_time_ms": { "type": "number" }
+  }
+}

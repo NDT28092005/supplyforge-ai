@@ -1,0 +1,41 @@
+{
+  "module": "MODULE_05",
+  "version": "5.0",
+  "features": [
+    {
+      "name": "stock_on_hand",
+      "display_name": "Số lượng tồn kho vật lý quan sát",
+      "unit": "đơn vị",
+      "category": "INVENTORY_QUANTITY",
+      "required_for_exposure": true
+    },
+    {
+      "name": "unit_cost",
+      "display_name": "Giá vốn nhập kho trên từng đơn vị",
+      "unit": "VND/đơn vị",
+      "category": "FINANCIAL_VALUATION",
+      "required_for_exposure": true
+    },
+    {
+      "name": "capital_exposure",
+      "display_name": "Tổng giá trị vốn phơi nhiễm (Stock × Cost)",
+      "unit": "VND",
+      "category": "FINANCIAL_VALUATION",
+      "formula": "stock_on_hand * unit_cost"
+    },
+    {
+      "name": "aging_days",
+      "display_name": "Số ngày lưu kho tích lũy",
+      "unit": "ngày",
+      "category": "INVENTORY_AGING",
+      "formula": "t0 - t_receipt"
+    },
+    {
+      "name": "risk_capital_index",
+      "display_name": "Chỉ số vốn rủi ro phơi nhiễm",
+      "unit": "VND",
+      "category": "EXPOSURE_PRIORITIZATION",
+      "formula": "capital_exposure * risk_probability"
+    }
+  ]
+}

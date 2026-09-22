@@ -1,0 +1,227 @@
+/* Module 2: Risk Management Workspace — Premium Soft UI */
+:host {
+  display: block;
+  width: 100%;
+}
+
+/* === KPI Cards === */
+.kpi-card {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.kpi-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px -6px rgba(15, 23, 42, 0.08), 0 4px 10px -4px rgba(15, 23, 42, 0.04);
+}
+
+/* === Filter Chip Active Pulse === */
+.filter-chip {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.filter-chip::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.filter-chip:hover::after {
+  opacity: 1;
+}
+
+.filter-chip:active {
+  transform: scale(0.96);
+}
+
+/* === Table Row Interactions === */
+.risk-table-row {
+  transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+  border-left: 3px solid transparent;
+}
+
+.risk-table-row:hover {
+  background-color: rgba(241, 245, 249, 0.7);
+  border-left-color: #6366f1;
+}
+
+.risk-table-row.severity-severe:hover {
+  border-left-color: #ef4444;
+  background-color: rgba(254, 242, 242, 0.3);
+}
+
+.risk-table-row.severity-high:hover {
+  border-left-color: #f97316;
+  background-color: rgba(255, 247, 237, 0.3);
+}
+
+.risk-table-row.severity-moderate:hover {
+  border-left-color: #eab308;
+  background-color: rgba(254, 252, 232, 0.3);
+}
+
+.risk-table-row.severity-low:hover {
+  border-left-color: #22c55e;
+  background-color: rgba(240, 253, 244, 0.3);
+}
+
+/* === Sticky Table Header === */
+.sticky-header thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* === Risk Badge Pulse (SEVERE only) === */
+@keyframes severePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+
+.badge-severe-pulse {
+  animation: severePulse 2s ease-in-out infinite;
+}
+
+/* === Glass Panel === */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* === Slide-over Drawer === */
+@keyframes slideLeft {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-left {
+  animation: slideLeft 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* === Fade In === */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out;
+}
+
+/* === Staggered Fade for KPI Cards === */
+.kpi-card:nth-child(1) { animation: fadeIn 0.3s ease-out 0.05s both; }
+.kpi-card:nth-child(2) { animation: fadeIn 0.3s ease-out 0.12s both; }
+.kpi-card:nth-child(3) { animation: fadeIn 0.3s ease-out 0.19s both; }
+.kpi-card:nth-child(4) { animation: fadeIn 0.3s ease-out 0.26s both; }
+
+/* === Capital Bar Animation === */
+@keyframes growBar {
+  from { width: 0; }
+}
+
+.animate-grow-bar {
+  animation: growBar 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* === Scrollbar Styling === */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* === Progress Ring for Risk Score === */
+.risk-score-ring {
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+
+/* === Tooltip Styles === */
+.tooltip-trigger {
+  position: relative;
+}
+
+.tooltip-trigger .tooltip-content {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #1e293b;
+  color: white;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  z-index: 50;
+  transition: all 0.2s ease;
+  pointer-events: none;
+}
+
+.tooltip-trigger:hover .tooltip-content {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* === Skeleton shimmer for loading === */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* === Search Input Focus Ring === */
+.search-input:focus {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+/* === Action Button Hover === */
+.action-btn {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -2px rgba(99, 102, 241, 0.25);
+}
+
+.action-btn:active {
+  transform: scale(0.96);
+}

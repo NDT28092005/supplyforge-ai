@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RiskDiagnosticProfile",
+  "type": "object",
+  "properties": {
+    "sku": { "type": "string" },
+    "canonical_sku_id": { "type": "string" },
+    "product_name": { "type": "string" },
+    "risk": {
+      "type": "object",
+      "properties": {
+        "class": { "type": "string", "enum": ["CRITICAL", "HIGH_RISK", "MEDIUM_RISK", "LOW_RISK"] },
+        "probability": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "score": { "type": "number", "minimum": 0.0, "maximum": 100.0 }
+      },
+      "required": ["class", "probability"]
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string" },
+          "severity": { "type": "string", "enum": ["SEVERE", "HIGH", "MEDIUM", "LOW"] },
+          "evidence": { "type": "object" }
+        },
+        "required": ["code", "severity", "evidence"]
+      }
+    },
+    "diagnostic_signals_list": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "required": ["sku", "risk", "diagnostics", "diagnostic_signals_list"]
+}

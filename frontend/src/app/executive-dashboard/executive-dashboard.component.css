@@ -1,0 +1,54 @@
+/* Executive Dashboard Custom Styles */
+
+:host {
+  display: block;
+}
+
+/* Skeleton shimmer animation */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Highlighted Capital at Risk Card Pulse Glow */
+.shadow-glow-danger {
+  box-shadow: 0 0 25px -4px rgba(239, 68, 68, 0.25), 0 4px 12px -2px rgba(239, 68, 68, 0.1);
+}
+
+.shadow-glow-danger:hover {
+  box-shadow: 0 0 35px -2px rgba(239, 68, 68, 0.4), 0 8px 20px -2px rgba(239, 68, 68, 0.15);
+}
+
+/* Custom Table Truncate */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Slide in from right for toasts */
+@keyframes slideLeft {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-left {
+  animation: slideLeft 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

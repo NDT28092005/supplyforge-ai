@@ -1,0 +1,7 @@
+# Module 03 Diagnostic Signal Prioritization Configuration (M3-06)
+signal_priority:
+  POSSIBLE_OBSOLESCENCE: 1
+  LOW_SALES_VELOCITY: 2
+  PROMO_ASSOCIATED_LOW_VELOCITY: 3
+  LUMPY_DEMAND: 4
+  POSSIBLE_STOCKOUT_EFFECT: 5

@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ActionTaskContract",
+  "type": "object",
+  "required": ["task_id", "title", "owner_role", "status", "depends_on"],
+  "properties": {
+    "task_id": { "type": "string" },
+    "title": { "type": "string" },
+    "owner_role": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["PENDING", "IN_PROGRESS", "BLOCKED", "COMPLETED", "CANCELLED"]
+    },
+    "depends_on": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "sla_hours": { "type": "integer", "default": 24 }
+  }
+}

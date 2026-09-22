@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CopilotGroundedContext",
+  "type": "object",
+  "required": [
+    "merchant_context",
+    "sku_context",
+    "risk_context",
+    "explainability_context",
+    "capital_context",
+    "decision_context"
+  ],
+  "properties": {
+    "merchant_context": {
+      "type": "object",
+      "required": ["merchant_id", "dataset_version"],
+      "properties": {
+        "merchant_id": { "type": "string" },
+        "dataset_version": { "type": "string" }
+      }
+    },
+    "sku_context": {
+      "type": "object",
+      "required": ["sku_id"],
+      "properties": {
+        "sku_id": { "type": "string" },
+        "product_name": { "type": ["string", "null"] },
+        "category": { "type": ["string", "null"] }
+      }
+    },
+    "risk_context": {
+      "type": "object",
+      "properties": {
+        "risk_class": { "type": "string" },
+        "risk_score": { "type": "number" },
+        "risk_probability": { "type": "number" }
+      }
+    },
+    "explainability_context": {
+      "type": "object",
+      "properties": {
+        "top_contributors": { "type": "array" },
+        "positive_signals": { "type": "array" },
+        "negative_signals": { "type": "array" }
+      }
+    },
+    "capital_context": {
+      "type": "object",
+      "properties": {
+        "capital_exposure": { "type": "number" },
+        "aging_days": { "type": "number" },
+        "aging_bucket": { "type": "string" }
+      }
+    },
+    "decision_context": {
+      "type": "object",
+      "properties": {
+        "recommended_action": { "type": "string" },
+        "priority_score": { "type": "number" },
+        "discount_rate": { "type": ["number", "null"] },
+        "expected_recovery": { "type": "number" }
+      }
+    }
+  }
+}

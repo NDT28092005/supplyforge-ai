@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GroundedResponsePayload",
+  "type": "object",
+  "required": [
+    "response_id",
+    "status",
+    "query",
+    "intent",
+    "content",
+    "grounding",
+    "sources",
+    "audit"
+  ],
+  "properties": {
+    "response_id": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["GROUNDED", "GROUNDED_WITH_WARNING", "INSUFFICIENT_EVIDENCE", "FALLBACK", "GENERATION_FAILED"]
+    },
+    "query": { "type": "string" },
+    "intent": { "type": "string" },
+    "content": { "type": "string" },
+    "grounding": {
+      "type": "object",
+      "required": ["grounding_score", "evidence_count", "numeric_conflicts", "unsupported_claims"],
+      "properties": {
+        "grounding_score": { "type": "number" },
+        "evidence_count": { "type": "integer" },
+        "numeric_conflicts": { "type": "integer" },
+        "unsupported_claims": { "type": "integer" }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "audit": {
+      "type": "object",
+      "required": ["orchestration_id", "execution_time_ms", "used_fallback"],
+      "properties": {
+        "orchestration_id": { "type": "string" },
+        "execution_time_ms": { "type": "number" },
+        "used_fallback": { "type": "boolean" }
+      }
+    }
+  }
+}

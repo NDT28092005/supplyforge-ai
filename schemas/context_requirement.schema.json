@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContextRequirementSpec",
+  "type": "object",
+  "required": ["query_intent", "scope", "required_modules", "required_fields"],
+  "properties": {
+    "query_intent": { "type": "string" },
+    "scope": { "type": "string", "enum": ["SKU", "CATEGORY", "PORTFOLIO", "DATASET"] },
+    "target_id": { "type": ["string", "null"] },
+    "required_modules": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "required_fields": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "max_items": { "type": "integer", "default": 10 }
+  }
+}

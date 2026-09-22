@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RecoveryStrategyResultPayload",
+  "type": "object",
+  "required": [
+    "sku",
+    "evaluation_status",
+    "recommended_strategy",
+    "strategy_confidence",
+    "ranked_strategies",
+    "alternative_strategies",
+    "rationale",
+    "strategy_policy_version",
+    "evaluated_at"
+  ],
+  "properties": {
+    "sku": { "type": "string" },
+    "evaluation_status": { "type": "string" },
+    "recommended_strategy": { "type": ["string", "null"] },
+    "strategy_confidence": { "type": "number" },
+    "ranked_strategies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["strategy", "score"],
+        "properties": {
+          "strategy": { "type": "string" },
+          "score": { "type": "number" }
+        }
+      }
+    },
+    "alternative_strategies": { "type": "array" },
+    "rationale": { "type": "array" },
+    "requires_review": { "type": "boolean" },
+    "strategy_policy_version": { "type": "string" },
+    "evaluated_at": { "type": "string" }
+  }
+}

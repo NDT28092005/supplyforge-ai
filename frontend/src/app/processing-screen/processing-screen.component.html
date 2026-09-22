@@ -1,29 +1,33 @@
-<div class="min-h-screen bg-background flex flex-col items-center justify-center px-6">
-  <div class="w-full max-w-md">
-    <p class="text-xs font-mono text-secondary tracking-widest uppercase mb-12 text-center opacity-50">
-      SupplyForge AI · Đang xử lý
-    </p>
-
-    <div class="w-full bg-surface border border-border-base rounded-full h-px mb-8 overflow-hidden">
-      <div class="bg-accent h-px rounded-full transition-all duration-500" [style.width.%]="progress"></div>
+<div class="min-h-screen bg-slate-50/50 flex flex-col items-center justify-center px-6">
+  <div class="w-full max-w-md bg-white border border-slate-200/80 p-8 rounded-3xl shadow-xs space-y-6 animate-fade-in">
+    <div class="text-center space-y-1">
+      <p class="text-xs font-bold text-indigo-600 uppercase tracking-wider">
+        Đang xử lý dữ liệu
+      </p>
+      <h3 class="text-xl font-black text-slate-900 font-sans">Vui lòng chờ trong giây lát</h3>
     </div>
 
-    <div class="space-y-3">
+    <!-- Progress Bar -->
+    <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
+      <div class="bg-indigo-600 h-2 rounded-full transition-all duration-500" [style.width.%]="progress"></div>
+    </div>
+
+    <!-- Step Items -->
+    <div class="space-y-3 font-sans pt-2">
       <div *ngFor="let step of steps; let i = index"
-           class="flex items-center gap-3 transition-all duration-500"
-           [ngClass]="{ 'opacity-30': i < stepIndex, 'opacity-100': i === stepIndex, 'opacity-10': i > stepIndex }">
-        <div class="w-1.5 h-1.5 rounded-full flex-shrink-0"
-             [ngClass]="{ 'bg-primary': i < stepIndex, 'bg-accent': i === stepIndex, 'bg-border-base': i > stepIndex }">
+           class="flex items-center gap-3 transition-all duration-300"
+           [ngClass]="{ 'opacity-40': i < stepIndex, 'opacity-100': i === stepIndex, 'opacity-20': i > stepIndex }">
+        <div class="w-2 h-2 rounded-full flex-shrink-0"
+             [ngClass]="{ 'bg-emerald-500': i < stepIndex, 'bg-indigo-600 animate-pulse': i === stepIndex, 'bg-slate-300': i > stepIndex }">
         </div>
-        <span class="text-sm font-mono" [ngClass]="{ 'text-primary': i === stepIndex, 'text-secondary': i !== stepIndex }">
+        <span class="text-xs font-bold" [ngClass]="{ 'text-slate-900': i === stepIndex, 'text-slate-600': i !== stepIndex }">
           {{ step.label }}
-          <span *ngIf="i === stepIndex" class="animate-blink text-accent ml-1">▋</span>
         </span>
       </div>
     </div>
 
-    <div class="mt-10 text-right">
-      <span class="font-tight font-black text-2xl tracking-tightest text-accent">
+    <div class="pt-2 text-right border-t border-slate-100">
+      <span class="font-mono font-black text-2xl text-indigo-600">
         {{ progress }}%
       </span>
     </div>

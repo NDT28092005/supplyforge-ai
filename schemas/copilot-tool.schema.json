@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CopilotToolDefinition",
+  "type": "object",
+  "required": [
+    "tool_name",
+    "purpose",
+    "source_module",
+    "input_schema",
+    "output_schema"
+  ],
+  "properties": {
+    "tool_name": { "type": "string" },
+    "purpose": { "type": "string" },
+    "source_module": { "type": "string" },
+    "input_schema": { "type": "object" },
+    "output_schema": { "type": "object" },
+    "failure_behavior": { "type": "string", "default": "RETURN_NULL_WITH_ERROR" }
+  }
+}

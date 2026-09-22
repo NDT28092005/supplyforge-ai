@@ -1,0 +1,273 @@
+<div class="space-y-8 animate-fade-in pb-16 max-w-7xl mx-auto">
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- 1. HEADER (LARGER FONT SIZES)                                      -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div
+    class="bg-white border border-slate-200/80 p-7 sm:p-9 rounded-3xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+    <div class="space-y-2">
+      <h1 class="font-sans font-black text-3xl sm:text-4xl lg:text-5xl text-slate-900 tracking-tight">
+        TỔNG QUAN
+      </h1>
+      <p class="text-slate-600 text-sm sm:text-base font-sans font-medium">
+        Bức tranh chung về bán hàng và vốn kho
+      </p>
+    </div>
+
+    <!-- Header Right Controls -->
+    <div class="flex items-center gap-3 shrink-0 flex-wrap">
+      <button (click)="refreshData()" [disabled]="isRefreshing"
+        class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 font-bold text-sm px-5 py-3 rounded-2xl transition-all flex items-center gap-2.5 cursor-pointer active:scale-95 shadow-xs whitespace-nowrap">
+        <svg class="w-4 h-4 text-indigo-600 transition-transform" [ngClass]="{'animate-spin': isRefreshing}"
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M23 4v6h-6"></path>
+          <path d="M1 20v-6h6"></path>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span>Cập nhật dữ liệu</span>
+      </button>
+
+      <div class="relative">
+        <select [(ngModel)]="selectedPeriod"
+          class="bg-white border border-slate-200/90 text-slate-700 font-bold text-sm px-5 py-3 pr-10 rounded-2xl cursor-pointer outline-none focus:border-indigo-400 shadow-xs appearance-none">
+          <option value="30 ngày qua">30 ngày gần đây</option>
+          <option value="90 ngày qua">90 ngày gần đây</option>
+          <option value="Từ trước tới nay">Toàn bộ thời gian</option>
+        </select>
+        <svg class="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- 2. LƯỚI KPI (GRID 2 DÒNG x 3 CỘT — LARGER FONT SIZES & "VỐN TỒN ĐỌNG")-->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
+
+    <!-- Row 1, Col 1: 100 SKU -->
+    <div (click)="onNavigateToStage('slow-moving-risk')" title="Xem chi tiết danh sách kho hàng"
+      class="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-2 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group">
+      <div class="font-sans font-black text-3xl sm:text-4xl text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
+        {{ kpiGrid.monitoredSkus }}
+      </div>
+      <div class="text-sm text-slate-600 font-bold flex items-center justify-between">
+        <span>sản phẩm trong kho</span>
+        <span class="text-xs text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
+      </div>
+    </div>
+
+    <!-- Row 1, Col 2: 25 SKU -->
+    <div (click)="onNavigateToStage('slow-moving-risk')" title="Xem sản phẩm rủi ro cao"
+      class="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-2 hover:border-rose-300 hover:shadow-md transition-all cursor-pointer group">
+      <div class="font-sans font-black text-3xl sm:text-4xl text-rose-600 tracking-tight">
+        {{ kpiGrid.highRiskSkus }}
+      </div>
+      <div class="text-sm text-slate-600 font-bold flex items-center justify-between">
+        <span>cần xử lý sớm</span>
+        <span class="text-xs text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
+      </div>
+    </div>
+
+    <!-- Row 1, Col 3: 1.27B (Vốn tồn đọng) -->
+    <div (click)="onNavigateToStage('capital-exposure')" title="Xem đánh giá chi tiết vốn tồn đọng"
+      class="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-2 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group">
+      <div class="font-sans font-black text-3xl sm:text-4xl text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
+        {{ kpiGrid.totalCapitalExposure }}
+      </div>
+      <div class="text-sm text-slate-600 font-bold flex items-center justify-between">
+        <span>vốn đang kẹt trong kho</span>
+        <span class="text-xs text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
+      </div>
+    </div>
+
+    <!-- Row 2, Col 1: 69% -->
+    <div (click)="onNavigateToStage('slow-moving-risk')" title="Xem các sản phẩm bán ổn định"
+      class="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-2 hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer group">
+      <div class="font-sans font-black text-3xl sm:text-4xl text-emerald-600 tracking-tight">
+        {{ kpiGrid.safePct }}
+      </div>
+      <div class="text-sm text-slate-600 font-bold flex items-center justify-between">
+        <span>bán tốt, ổn định</span>
+        <span class="text-xs text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
+      </div>
+    </div>
+
+    <!-- Row 2, Col 2: 25% -->
+    <div (click)="onNavigateToStage('slow-moving-risk')" title="Xem chi tiết các mặt hàng cần xử lý"
+      class="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-2 hover:border-rose-300 hover:shadow-md transition-all cursor-pointer group">
+      <div class="font-sans font-black text-3xl sm:text-4xl text-rose-600 tracking-tight">
+        {{ kpiGrid.needActionPct }}
+      </div>
+      <div class="text-xs sm:text-sm text-slate-600 font-bold flex items-center justify-between">
+        <span>cần xử lý</span>
+        <span class="text-xs text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
+      </div>
+    </div>
+
+    <!-- Row 2, Col 3: 93.8M -->
+    <div (click)="onNavigateToStage('decision-support')" title="Xem phương án xả hàng thu hồi vốn"
+      class="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-2 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group">
+      <div class="font-sans font-black text-3xl sm:text-4xl text-rose-600 tracking-tight">
+        {{ kpiGrid.topPriorityValue }}
+      </div>
+      <div class="text-sm text-slate-600 font-bold flex items-center justify-between">
+        <span>chiếm vốn lớn nhất</span>
+        <span class="text-xs text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- 3. SPLIT SECTION (CHIA 2 CỘT TRÁI PHẢI — OVERFLOW VISIBLE FOR TOOLTIP)-->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-visible">
+
+    <!-- CỘT TRÁI: TÌNH HÌNH RỦI RO (Donut Chart + List) -->
+    <div class="bg-white border border-slate-200/80 p-7 rounded-3xl shadow-xs space-y-5 overflow-visible">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+        <h3 class="font-sans font-extrabold text-base sm:text-lg text-slate-900 uppercase tracking-wider">
+          TÌNH HÌNH KHO HÀNG
+        </h3>
+        <span class="text-xs font-mono text-slate-400 font-semibold">Tỷ lệ phân bổ</span>
+      </div>
+
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-6 overflow-visible">
+        <!-- List Text Metrics -->
+        <div class="space-y-3.5 font-sans text-sm w-full sm:w-1/2">
+          <div class="flex items-center justify-between p-3 bg-emerald-50/70 rounded-xl border border-emerald-100">
+            <span class="font-bold text-emerald-800 flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+              An toàn
+            </span>
+            <span class="font-black text-emerald-700 font-mono text-base">69%</span>
+          </div>
+
+          <div class="flex items-center justify-between p-3 bg-amber-50/70 rounded-xl border border-amber-100">
+            <span class="font-bold text-amber-800 flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+              Cần theo dõi
+            </span>
+            <span class="font-black text-amber-700 font-mono text-base">6%</span>
+          </div>
+
+          <div class="flex items-center justify-between p-3 bg-rose-50/70 rounded-xl border border-rose-100">
+            <span class="font-bold text-rose-800 flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></span>
+              Rủi ro cao
+            </span>
+            <span class="font-black text-rose-700 font-mono text-base">25%</span>
+          </div>
+        </div>
+
+        <!-- Donut Chart Canvas Container (Overflow visible + padding to prevent tooltip clipping) -->
+        <div class="w-full sm:w-1/2 flex justify-center overflow-visible relative p-2">
+          <div #donutChartRef class="w-full h-52 min-h-[210px] overflow-visible"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CỘT PHẢI: ĐIỂM ĐÁNG CHÚ Ý (SVG Icons, Larger Text, No Currency Symbol) -->
+    <div class="bg-white border border-slate-200/80 p-7 rounded-3xl shadow-xs flex flex-col justify-between space-y-5">
+      <div>
+        <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+          <h3 class="font-sans font-extrabold text-base sm:text-lg text-slate-900 uppercase tracking-wider">
+            CẦN CHÚ Ý
+          </h3>
+          <span class="text-xs font-mono text-slate-400 font-semibold">Điểm nổi bật</span>
+        </div>
+
+        <ul class="mt-4 space-y-3.5 font-sans text-sm">
+          <!-- Item 1 -->
+          <li
+            class="flex items-center gap-3.5 text-slate-700 font-bold p-3 bg-slate-50/70 rounded-xl border border-slate-100">
+            <span><strong class="text-slate-900 text-base">25 sản phẩm</strong> cần được xem xét</span>
+          </li>
+
+          <!-- Item 2 -->
+          <li
+            class="flex items-center gap-3.5 text-slate-700 font-bold p-3 bg-slate-50/70 rounded-xl border border-slate-100">
+            <span><strong class="text-slate-900 text-base">10 sản phẩm</strong> nằm kho 61–90 ngày</span>
+          </li>
+
+          <!-- Item 3 -->
+          <li
+            class="flex items-center gap-3.5 text-slate-700 font-bold p-3 bg-slate-50/70 rounded-xl border border-slate-100">
+            <span><strong class="text-slate-900 text-base">15 sản phẩm</strong> nằm kho trên 90 ngày</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Ghost Link CTA -->
+      <div class="pt-4 border-t border-slate-100">
+        <button (click)="onViewRiskAnalysisClick()"
+          class="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer group">
+          <span>Xem chi tiết</span>
+          <span class="transition-transform group-hover:translate-x-1.5">&rarr;</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- 4. DANH SÁCH RỦI RO TOP ĐẦU (3 ƯU TIÊN HÔM NAY — LARGER FONT SIZES) -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div class="bg-white border border-slate-200/80 p-6 sm:p-8 rounded-3xl shadow-xs space-y-5">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+      <div>
+        <h3 class="font-sans font-extrabold text-base sm:text-lg text-slate-900 uppercase tracking-wider">
+          CẦN XỬ LÝ SỚM
+        </h3>
+        <p class="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">3 sản phẩm chiếm vốn nhiều nhất</p>
+      </div>
+    </div>
+
+    <!-- Mini Priority Table -->
+    <div class="overflow-x-auto rounded-2xl border border-slate-100">
+      <table class="w-full text-left text-sm border-collapse">
+        <thead>
+          <tr class="bg-slate-50 text-slate-600 text-xs uppercase border-b border-slate-100">
+            <th class="py-3.5 px-5 font-bold">Mã sản phẩm</th>
+            <th class="py-3.5 px-5 font-bold text-right">Vốn kẹt</th>
+            <th class="py-3.5 px-5 font-bold text-center">Tình trạng</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 bg-white">
+          <tr *ngFor="let item of topPriorities" (click)="onSelectSku(item.sku)" title="Nhấp để xem phân tích rủi ro sản phẩm"
+            class="hover:bg-indigo-50/50 transition-colors cursor-pointer group">
+            <td class="py-4 px-5 font-sans font-bold text-slate-900 text-sm">
+              {{ item.sku }}
+            </td>
+            <td class="py-4 px-5 font-sans font-black text-rose-600 text-right text-base">
+              {{ item.capitalExposure }}
+            </td>
+            <td class="py-4 px-5 text-center">
+              <span class="px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5"
+                [ngClass]="item.badgeClass">
+                <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                Cần xả sớm
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Bottom Right Text Link -->
+    <div class="flex justify-end pt-2">
+      <button (click)="onViewAllClick()"
+        class="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer group">
+        <span>Xem tất cả</span>
+        <span class="transition-transform group-hover:translate-x-1.5">&rarr;</span>
+      </button>
+    </div>
+  </div>
+
+</div>

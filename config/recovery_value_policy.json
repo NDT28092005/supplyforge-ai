@@ -1,0 +1,23 @@
+{
+  "value_policy_version": "1.0",
+  "policy_name": "SupplyForge Standard Recovery Value Policy",
+  "cost_parameters": {
+    "platform_fee_rate": 0.05,
+    "promotion_cost_per_unit": 2000.0,
+    "liquidation_cost_rate": 0.08
+  },
+  "recovery_targets": {
+    "default_target_recovery_rate": 0.85,
+    "high_recovery_threshold": 0.80,
+    "medium_recovery_threshold": 0.60
+  },
+  "strategy_recovery_defaults": {
+    "HOLD": { "quantity_recovery_factor": 0.30, "price_factor": 1.00 },
+    "MONITOR": { "quantity_recovery_factor": 0.45, "price_factor": 1.00 },
+    "PROMOTION": { "quantity_recovery_factor": 0.70, "price_factor": 0.95 },
+    "BUNDLE": { "quantity_recovery_factor": 0.80, "price_factor": 0.85 },
+    "DISCOUNT": { "quantity_recovery_factor": 0.85, "price_factor": 0.80 },
+    "CLEARANCE": { "quantity_recovery_factor": 0.95, "price_factor": 0.60 },
+    "STOP_REPLENISHMENT": { "quantity_recovery_factor": 0.50, "price_factor": 1.00 }
+  }
+}

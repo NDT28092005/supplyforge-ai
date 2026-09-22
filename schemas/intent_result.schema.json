@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "IntentResultContract",
+  "type": "object",
+  "required": [
+    "classification_id",
+    "raw_query",
+    "primary_intent",
+    "confidence",
+    "entities",
+    "context_requirements",
+    "is_ambiguous",
+    "is_out_of_scope"
+  ],
+  "properties": {
+    "classification_id": { "type": "string" },
+    "raw_query": { "type": "string" },
+    "primary_intent": { "type": "string" },
+    "secondary_intents": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "confidence": { "type": "number" },
+    "entities": { "type": "object" },
+    "context_requirements": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "is_ambiguous": { "type": "boolean" },
+    "is_out_of_scope": { "type": "boolean" },
+    "clarification_prompt": { "type": ["string", "null"] }
+  }
+}

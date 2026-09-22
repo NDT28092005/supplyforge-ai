@@ -130,7 +130,7 @@ Trả về DUY NHẤT một JSON object tuân thủ định dạng sau (không c
                 }
             }
 
-            resp = requests.post(url, json=payload, timeout=8)
+            resp = requests.post(url, json=payload, timeout=2)
             if resp.status_code == 200:
                 res_data = resp.json()
                 text_content = res_data['candidates'][0]['content']['parts'][0]['text']

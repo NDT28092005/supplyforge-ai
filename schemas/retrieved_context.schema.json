@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RetrievedContextRaw",
+  "type": "object",
+  "required": ["provider_name", "source_module", "dataset_version", "data", "retrieved_at"],
+  "properties": {
+    "provider_name": { "type": "string" },
+    "source_module": { "type": "string" },
+    "dataset_version": { "type": "string" },
+    "data": { "type": "object" },
+    "retrieved_at": { "type": "string" },
+    "status": { "type": "string", "enum": ["SUCCESS", "NOT_FOUND", "ERROR", "NOT_READY"] }
+  }
+}

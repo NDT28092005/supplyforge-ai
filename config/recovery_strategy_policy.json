@@ -1,0 +1,69 @@
+{
+  "strategy_policy_version": "1.0",
+  "policy_name": "SupplyForge Standard Recovery Strategy Policy",
+  "scoring_weights": {
+    "risk_fit": 0.30,
+    "aging_fit": 0.25,
+    "capital_fit": 0.25,
+    "demand_fit": 0.20
+  },
+  "ambiguity_threshold": 0.03,
+  "strategy_fit_profiles": {
+    "HOLD": {
+      "target_risk_classes": ["LOW_RISK"],
+      "target_aging_buckets": ["RECENT"],
+      "risk_fit_score": 0.90,
+      "aging_fit_score": 0.90,
+      "capital_fit_score": 0.50,
+      "demand_fit_score": 0.80
+    },
+    "MONITOR": {
+      "target_risk_classes": ["LOW_RISK", "MEDIUM_RISK"],
+      "target_aging_buckets": ["RECENT", "AGING"],
+      "risk_fit_score": 0.85,
+      "aging_fit_score": 0.80,
+      "capital_fit_score": 0.60,
+      "demand_fit_score": 0.70
+    },
+    "PROMOTION": {
+      "target_risk_classes": ["MEDIUM_RISK", "HIGH_RISK"],
+      "target_aging_buckets": ["RECENT", "AGING"],
+      "risk_fit_score": 0.80,
+      "aging_fit_score": 0.75,
+      "capital_fit_score": 0.70,
+      "demand_fit_score": 0.85
+    },
+    "BUNDLE": {
+      "target_risk_classes": ["MEDIUM_RISK", "HIGH_RISK"],
+      "target_aging_buckets": ["AGING", "STALE"],
+      "risk_fit_score": 0.82,
+      "aging_fit_score": 0.80,
+      "capital_fit_score": 0.75,
+      "demand_fit_score": 0.75
+    },
+    "DISCOUNT": {
+      "target_risk_classes": ["HIGH_RISK", "CRITICAL"],
+      "target_aging_buckets": ["AGING", "STALE", "SEVERELY_STALE"],
+      "risk_fit_score": 0.88,
+      "aging_fit_score": 0.85,
+      "capital_fit_score": 0.85,
+      "demand_fit_score": 0.60
+    },
+    "CLEARANCE": {
+      "target_risk_classes": ["CRITICAL"],
+      "target_aging_buckets": ["STALE", "SEVERELY_STALE", "EXTREMELY_STALE"],
+      "risk_fit_score": 0.95,
+      "aging_fit_score": 0.95,
+      "capital_fit_score": 0.90,
+      "demand_fit_score": 0.40
+    },
+    "STOP_REPLENISHMENT": {
+      "target_risk_classes": ["HIGH_RISK", "CRITICAL"],
+      "target_aging_buckets": ["STALE", "SEVERELY_STALE", "EXTREMELY_STALE"],
+      "risk_fit_score": 0.90,
+      "aging_fit_score": 0.80,
+      "capital_fit_score": 0.80,
+      "demand_fit_score": 0.30
+    }
+  }
+}

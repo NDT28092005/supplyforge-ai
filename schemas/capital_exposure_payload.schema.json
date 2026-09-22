@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CapitalExposurePayload",
+  "type": "object",
+  "required": [
+    "sku",
+    "risk_assessment",
+    "inventory_data_status",
+    "inventory_metrics",
+    "metadata"
+  ],
+  "properties": {
+    "sku": { "type": "string" },
+    "canonical_sku_id": { "type": ["string", "null"] },
+    "product_name": { "type": ["string", "null"] },
+    "category": { "type": ["string", "null"] },
+    "risk_assessment": {
+      "type": "object",
+      "required": ["risk_class", "risk_probability", "risk_score"],
+      "properties": {
+        "risk_class": { "enum": ["CRITICAL", "HIGH_RISK", "MEDIUM_RISK", "LOW_RISK"] },
+        "risk_probability": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "risk_score": { "type": "number", "minimum": 0.0, "maximum": 100.0 }
+      }
+    },
+    "inventory_data_status": {
+      "enum": ["AVAILABLE", "PARTIAL", "MISSING", "INVALID", "STALE"]
+    },
+    "inventory_metrics": {
+      "type": "object",
+      "properties": {
+        "stock_on_hand": { "type": ["number", "null"] },
+        "unit_cost": { "type": ["number", "null"] },
+        "capital_exposure": { "type": ["number", "null"] },
+        "currency": { "type": "string", "default": "VND" }
+      }
+    },
+    "aging_metrics": {
+      "type": "object",
+      "properties": {
+        "inventory_receipt_date": { "type": ["string", "null"] },
+        "analysis_date": { "type": "string" },
+        "aging_days": { "type": ["integer", "null"] },
+        "aging_bucket": { "type": ["string", "null"] }
+      }
+    },
+    "exposure_assessment": {
+      "type": "object",
+      "properties": {
+        "exposure_class": { "type": ["string", "null"] },
+        "risk_capital_index": { "type": ["number", "null"] }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["module_version", "generated_at"],
+      "properties": {
+        "module_version": { "type": "string" },
+        "generated_at": { "type": "string" }
+      }
+    }
+  }
+}

@@ -154,16 +154,94 @@ class DynamicFileImportService:
             
         lines = [line_raw.decode('utf-8', errors='ignore') if isinstance(line_raw, bytes) else line_raw for line_raw in file_obj]
         if not lines:
-            return
+            return {"products_count": 0, "orders_count": 0}
 
         headers = DynamicFileImportService.parse_csv_line(lines[0])
-        
-        index_map = {}
-        for db_field, csv_header in mapping_rule.items():
-            if csv_header in headers:
-                index_map[db_field] = headers.index(csv_header)
+        h_lower = [str(h).lower().strip() for h in headers]
 
-        batch = []
+        def find_index(db_field, keywords):
+            if mapping_rule and db_field in mapping_rule:
+                mapped = mapping_rule[db_field]
+                if mapped in headers:
+                    return headers.index(mapped)
+            for kw in keywords:
+                for idx, h in enumerate(h_lower):
+                    if kw in h:
+                        return idx
+            return None
+
+        sku_idx = find_index('itemSku', ['sku', 'item_sku', 'code', 'mã'])
+        name_idx = find_index('productName', ['product_name', 'name', 'tên', 'title'])
+        price_idx = find_index('price', ['unit_price', 'selling_price', 'price', 'giá_bán', 'giá'])
+        cost_idx = find_index('cost', ['cost_price', 'cost', 'giá_vốn', 'vốn'])
+        
+        # Explicit stock column matching (prioritize stock_on_hand over order line quantity)
+        stock_idx = None
+        if mapping_rule and 'stock' in mapping_rule and mapping_rule['stock'] in headers and mapping_rule['stock'].lower() != 'quantity':
+            stock_idx = headers.index(mapping_rule['stock'])
+        if stock_idx is None:
+            for kw in ['stock_on_hand', 'tồn_kho', 'stock', 'tồn']:
+                for idx, h in enumerate(h_lower):
+                    if kw in h:
+                        stock_idx = idx
+                        break
+                if stock_idx is not None:
+                    break
+        if stock_idx is None:
+            stock_idx = find_index('stock', ['quantity', 'qty', 'sl'])
+
+        qty_idx = find_index('quantity', ['quantity', 'qty', 'số_lượng', 'sl'])
+        date_idx = find_index('orderDate', ['order_date', 'date', 'ngày', 'created_at'])
+        order_id_idx = find_index('orderId', ['order_id', 'mã_đơn'])
+        buyer_idx = find_index('buyerUsername', ['buyer_username', 'buyer', 'khách_hàng'])
+        expiry_idx = find_index('expirationDate', ['expiration_date', 'expiry', 'hsd', 'hạn'])
+
+        def parse_decimal(s):
+            if not s: return Decimal('0.00')
+            s = str(s).strip()
+            s = re.sub(r'[^\d.,]', '', s)
+            if not s: return Decimal('0.00')
+            if '.' in s and ',' in s:
+                if s.rfind('.') > s.rfind(','):
+                    s = s.replace(',', '')
+                else:
+                    s = s.replace('.', '').replace(',', '.')
+            elif ',' in s:
+                parts = s.split(',')
+                if len(parts) == 2 and len(parts[1]) == 3:
+                    s = s.replace(',', '')
+                else:
+                    s = s.replace(',', '.')
+            elif '.' in s:
+                parts = s.split('.')
+                if len(parts) == 2 and len(parts[1]) == 3:
+                    s = s.replace('.', '')
+                elif len(parts) > 2:
+                    s = s.replace('.', '')
+            try:
+                return Decimal(s)
+            except Exception:
+                return Decimal('0.00')
+
+        def parse_int(s):
+            if not s: return 0
+            try:
+                return int(re.sub(r'[^0-9]', '', s))
+            except Exception:
+                return 0
+
+        def parse_date(date_str):
+            if not date_str: return None
+            d_clean = date_str.strip()
+            for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y"]:
+                try:
+                    return datetime.strptime(d_clean, fmt)
+                except Exception:
+                    pass
+            return None
+
+        sku_catalog = {}
+        order_rows = []
         import_time = int(datetime.now().timestamp() * 1000)
 
         for line in lines[1:]:
@@ -173,115 +251,138 @@ class DynamicFileImportService:
             if not row:
                 continue
 
-            def get_val(field):
-                idx = index_map.get(field)
-                if idx is not None and idx < len(row):
-                    return row[idx]
-                return None
+            def get_col(idx):
+                return row[idx].strip() if (idx is not None and idx < len(row)) else None
 
-            product_name = get_val("productName") or "Unknown"
-            item_sku = get_val("itemSku") or ""
-            price_str = get_val("price")
-            cost_str = get_val("cost")
-            stock_str = get_val("stock") or get_val("quantity")
-            date_str = get_val("orderDate")
-            expiry_str = get_val("expirationDate") or get_val("expiration_date")
+            sku_val = get_col(sku_idx) or f"SKU_{len(sku_catalog)+1}"
+            name_val = get_col(name_idx) or sku_val
+            price_val = parse_decimal(get_col(price_idx))
+            cost_val = parse_decimal(get_col(cost_idx))
+            stock_val = parse_int(get_col(stock_idx)) if stock_idx is not None else None
+            qty_val = parse_int(get_col(qty_idx)) if qty_idx is not None else 1
+            date_val = parse_date(get_col(date_idx)) or datetime.now()
+            order_id_val = get_col(order_id_idx) or f"ORD_{len(order_rows)+1}"
+            buyer_val = get_col(buyer_idx) or "shopee_buyer"
+            exp_date_val = parse_date(get_col(expiry_idx))
 
-            def parse_decimal(s):
-                if not s: return Decimal('0.00')
-                s = str(s).strip()
-                # Loại bỏ ký tự tiền tệ như ₫, VND, $, v.v.
-                s = re.sub(r'[^\d.,]', '', s)
-                if not s: return Decimal('0.00')
-                
-                # Nếu có cả dấu chấm và dấu phẩy
-                if '.' in s and ',' in s:
-                    if s.rfind('.') > s.rfind(','):
-                        s = s.replace(',', '')
-                    else:
-                        s = s.replace('.', '').replace(',', '.')
-                # Chỉ có dấu phẩy
-                elif ',' in s:
-                    parts = s.split(',')
-                    if len(parts) == 2 and len(parts[1]) == 3:
-                        s = s.replace(',', '')
-                    else:
-                        s = s.replace(',', '.')
-                # Chỉ có dấu chấm
-                elif '.' in s:
-                    parts = s.split('.')
-                    if len(parts) == 2 and len(parts[1]) == 3:
-                        s = s.replace('.', '')
-                    elif len(parts) > 2:
-                        s = s.replace('.', '')
-                
-                try:
-                    return Decimal(s)
-                except Exception:
-                    return Decimal('0.00')
+            if price_val == 0 and cost_val > 0:
+                price_val = cost_val * Decimal('1.35')
+            elif cost_val == 0 and price_val > 0:
+                cost_val = price_val * Decimal('0.65')
 
-            def parse_int(s):
-                if not s: return 0
-                try:
-                    return int(re.sub(r'[^0-9]', '', s))
-                except Exception:
-                    return 0
+            if sku_val not in sku_catalog:
+                sku_catalog[sku_val] = {
+                    'product_name': name_val,
+                    'price': price_val,
+                    'cost': cost_val,
+                    'stock': stock_val,
+                    'total_qty': 0,
+                    'order_count': 0,
+                    'min_date': date_val,
+                    'max_date': date_val,
+                    'expiration_date': exp_date_val.date() if exp_date_val else None
+                }
+            cat = sku_catalog[sku_val]
+            cat['total_qty'] += qty_val
+            cat['order_count'] += 1
+            if stock_val is not None and stock_val > 0:
+                cat['stock'] = stock_val
+            if date_val < cat['min_date']: cat['min_date'] = date_val
+            if date_val > cat['max_date']: cat['max_date'] = date_val
+            if price_val > 0: cat['price'] = price_val
+            if cost_val > 0: cat['cost'] = cost_val
 
-            price = parse_decimal(price_str)
-            cost = parse_decimal(cost_str)
-            stock = parse_int(stock_str)
+            order_rows.append({
+                'order_id': order_id_val,
+                'sku': sku_val,
+                'product_name': name_val,
+                'quantity': qty_val,
+                'price': price_val,
+                'cost': cost_val,
+                'date': date_val,
+                'buyer': buyer_val
+            })
 
-            # Parse created date
-            created_at = None
-            if date_str:
-                date_clean = date_str.strip()
-                try:
-                    if "/" in date_clean:
-                        created_at = datetime.strptime(date_clean, "%d/%m/%Y")
-                    else:
-                        created_at = datetime.strptime(date_clean, "%Y-%m-%d")
-                except Exception:
-                    pass
-
-            if not created_at:
-                import random
-                created_at = datetime.now() - timedelta(days=random.randint(0, 90))
-
-            # Parse expiration date (F&B)
-            expiration_date = None
-            if expiry_str:
-                expiry_clean = expiry_str.strip()
-                try:
-                    if "/" in expiry_clean:
-                        expiration_date = datetime.strptime(expiry_clean, "%d/%m/%Y").date()
-                    else:
-                        expiration_date = datetime.strptime(expiry_clean, "%Y-%m-%d").date()
-                except Exception:
-                    pass
-
+        # 1. Save Products
+        products_to_create = []
+        for sku_val, cat in sku_catalog.items():
             prod_id = uuid.uuid4().hex[:24]
-            product = Product(
+            calculated_stock = cat['stock'] if (cat.get('stock') is not None and cat['stock'] > 0) else max(1, int(cat['total_qty'] * 0.08))
+            p = Product(
                 id=prod_id,
                 user_id=user_id,
-                product_name=product_name,
-                item_sku=item_sku,
-                price=price,
-                cost=cost,
-                stock=stock,
+                product_name=cat['product_name'],
+                item_sku=sku_val,
+                price=cat['price'],
+                cost=cat['cost'],
+                stock=calculated_stock,
                 third_party_id=f"csv_import_{import_time}",
-                created_at=created_at,
+                created_at=cat['min_date'],
                 updated_at=datetime.now(),
-                expiration_date=expiration_date,
+                expiration_date=cat['expiration_date'],
                 active_on_web=True
             )
-            batch.append(product)
+            products_to_create.append(p)
 
-            if len(batch) >= 1000:
-                Product.objects.bulk_create(batch)
-                batch = []
+        Product.objects.bulk_create(products_to_create)
 
-        if batch:
-            Product.objects.bulk_create(batch)
+        # 2. Save Orders and OrderItems
+        orders_to_create = []
+        items_to_create = []
+
+        order_groups = {}
+        for r in order_rows:
+            oid = r['order_id']
+            if oid not in order_groups:
+                order_groups[oid] = []
+            order_groups[oid].append(r)
+
+        for oid, items in order_groups.items():
+            o_pk = uuid.uuid4().hex[:24]
+            first_item = items[0]
+            total_amount = sum(i['price'] * Decimal(i['quantity']) for i in items)
+
+            order_obj = Order(
+                id=o_pk,
+                user_id=user_id,
+                order_id=oid,
+                platform='shopee',
+                amount=total_amount,
+                buyer_user_name=first_item['buyer'],
+                cancelled_after_packaged=False,
+                created_at=first_item['date'],
+                updated_at=datetime.now()
+            )
+            orders_to_create.append(order_obj)
+
+            for item in items:
+                items_to_create.append(OrderItem(
+                    order=order_obj,
+                    sku=item['sku'],
+                    product_name=item['product_name'],
+                    quantity=item['quantity'],
+                    price=item['price'],
+                    cost=item['cost']
+                ))
+
+        Order.objects.bulk_create(orders_to_create, batch_size=2000)
+        OrderItem.objects.bulk_create(items_to_create, batch_size=2000)
+
+        # 3. Trigger Analytics Pre-computations (Module 03-06)
+        try:
+            from supplyforge.services.financial import InventoryFinancialEngineService
+            from supplyforge.views.risk_assessment_api import _auto_populate_assessments_from_products
+
+            InventoryFinancialEngineService.calculate_aging_and_hidden_costs(user_id)
+            _auto_populate_assessments_from_products()
+        except Exception as exc:
+            print(f"[Import Pipeline] Auto-run analytics warning: {exc}")
+
+        return {
+            "products_count": len(products_to_create),
+            "orders_count": len(orders_to_create),
+            "order_items_count": len(items_to_create)
+        }
 
     @staticmethod
     @transaction.atomic

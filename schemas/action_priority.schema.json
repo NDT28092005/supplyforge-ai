@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ActionPriorityResultPayload",
+  "type": "object",
+  "required": [
+    "sku",
+    "action",
+    "priority_score",
+    "priority_tier",
+    "rank",
+    "risk_class",
+    "capital_exposure",
+    "expected_recovery_value",
+    "recovery_efficiency",
+    "reason_codes",
+    "priority_policy_version",
+    "calculated_at"
+  ],
+  "properties": {
+    "sku": { "type": "string" },
+    "action": { "type": "string" },
+    "priority_score": { "type": "number" },
+    "priority_tier": { "type": "string", "enum": ["P1", "P2", "P3", "P4"] },
+    "rank": { "type": "integer" },
+    "risk_class": { "type": "string" },
+    "capital_exposure": { "type": "number" },
+    "aging_days": { "type": ["integer", "null"] },
+    "expected_recovery_value": { "type": "number" },
+    "recovery_efficiency": { "type": "number" },
+    "optimization_score": { "type": "number" },
+    "reason_codes": { "type": "array" },
+    "dimension_scores": { "type": "object" },
+    "priority_policy_version": { "type": "string" },
+    "calculated_at": { "type": "string" }
+  }
+}

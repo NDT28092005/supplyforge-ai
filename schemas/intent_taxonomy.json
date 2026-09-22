@@ -1,0 +1,65 @@
+{
+  "taxonomy_version": "v1.0",
+  "intents": [
+    {
+      "code": "RISK_QUERY",
+      "description": "Truy vấn mức độ rủi ro bán chậm và xếp loại rủi ro (Module 03).",
+      "required_context": ["RISK_PROFILE"]
+    },
+    {
+      "code": "EXPLANATION_QUERY",
+      "description": "Truy vấn nguyên nhân gốc rễ và phân tích SHAP (Module 04).",
+      "required_context": ["RISK_PROFILE", "RISK_EXPLANATION"]
+    },
+    {
+      "code": "CAPITAL_QUERY",
+      "description": "Truy vấn giá trị vốn phơi nhiễm và rủi ro vốn (Module 05).",
+      "required_context": ["CAPITAL_EXPOSURE"]
+    },
+    {
+      "code": "AGING_QUERY",
+      "description": "Truy vấn số ngày tuổi hàng tồn kho và phân nhóm tuổi (Module 05).",
+      "required_context": ["INVENTORY_AGING"]
+    },
+    {
+      "code": "DECISION_QUERY",
+      "description": "Truy vấn khuyến nghị hành động giải phóng vốn (Module 06).",
+      "required_context": ["DECISION_RECOMMENDATION"]
+    },
+    {
+      "code": "RECOVERY_QUERY",
+      "description": "Truy vấn kịch bản mô phỏng chiết khấu và giá trị thu hồi (Module 06).",
+      "required_context": ["RECOVERY_OPTIONS", "CAPITAL_EXPOSURE"]
+    },
+    {
+      "code": "ACTION_QUERY",
+      "description": "Truy vấn danh sách ưu tiên xử lý trong ngày / danh mục (Module 06).",
+      "required_context": ["ACTION_PRIORITY", "RISK_PROFILE", "CAPITAL_EXPOSURE"]
+    },
+    {
+      "code": "COMPARISON_QUERY",
+      "description": "Truy vấn so sánh chỉ số rủi ro hoặc vốn giữa các SKU / danh mục.",
+      "required_context": ["RISK_PROFILE", "CAPITAL_EXPOSURE"]
+    },
+    {
+      "code": "SUMMARY_QUERY",
+      "description": "Truy vấn tóm tắt tổng quan rủi ro và vốn danh mục tồn kho.",
+      "required_context": ["RISK_PROFILE", "CAPITAL_EXPOSURE", "DECISION_RECOMMENDATION"]
+    },
+    {
+      "code": "SKU_QUERY",
+      "description": "Truy vấn thông tin cơ bản về một SKU cụ thể.",
+      "required_context": ["SKU_PROFILE"]
+    },
+    {
+      "code": "DATA_QUALITY_QUERY",
+      "description": "Truy vấn trạng thái tươi dữ liệu và cổng DAT-11 Readiness.",
+      "required_context": ["DATASET_STATUS"]
+    },
+    {
+      "code": "GENERAL_HELP",
+      "description": "Truy vấn hướng dẫn sử dụng và khái niệm hệ thống SupplyForge AI.",
+      "required_context": ["SYSTEM_KNOWLEDGE"]
+    }
+  ]
+}

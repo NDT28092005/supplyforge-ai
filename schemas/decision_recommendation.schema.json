@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DecisionRecommendationPayload",
+  "type": "object",
+  "required": [
+    "recommendation_id",
+    "sku",
+    "action",
+    "priority",
+    "urgency",
+    "confidence",
+    "expected_impact",
+    "reason_codes",
+    "decision_status",
+    "policy_version",
+    "engine_version",
+    "generated_at"
+  ],
+  "properties": {
+    "recommendation_id": { "type": "string" },
+    "sku": { "type": "string" },
+    "action": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string" },
+        "discount_rate": { "type": ["number", "null"] },
+        "parameters": { "type": "object" }
+      }
+    },
+    "priority": {
+      "type": "object",
+      "required": ["tier", "rank", "score"],
+      "properties": {
+        "tier": { "type": "string" },
+        "rank": { "type": "integer" },
+        "score": { "type": "number" }
+      }
+    },
+    "urgency": { "type": "string", "enum": ["IMMEDIATE", "HIGH", "MEDIUM", "LOW", "MONITOR"] },
+    "confidence": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+    "expected_impact": {
+      "type": "object",
+      "required": ["capital_exposure", "expected_recovery_value", "recovery_rate", "residual_exposure"],
+      "properties": {
+        "capital_exposure": { "type": "number" },
+        "expected_recovery_value": { "type": "number" },
+        "recovery_rate": { "type": "number" },
+        "residual_exposure": { "type": "number" }
+      }
+    },
+    "reason_codes": { "type": "array" },
+    "decision_status": { "type": "string", "enum": ["RECOMMENDED", "NEEDS_REVIEW", "MONITOR", "NOT_APPLICABLE"] },
+    "policy_version": { "type": "string" },
+    "engine_version": { "type": "string" },
+    "generated_at": { "type": "string" }
+  }
+}

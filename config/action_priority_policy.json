@@ -1,0 +1,20 @@
+{
+  "priority_policy_version": "1.0",
+  "policy_name": "SupplyForge Standard Action Priority Policy",
+  "scoring_weights": {
+    "risk_weight": 0.30,
+    "capital_weight": 0.30,
+    "aging_weight": 0.15,
+    "recovery_weight": 0.25
+  },
+  "priority_tiers": {
+    "P1": { "tier_name": "IMMEDIATE", "min_score": 0.80, "description": "Ưu tiên xử lý ngay lập tức trong 24h." },
+    "P2": { "tier_name": "HIGH", "min_score": 0.60, "description": "Ưu tiên xử lý cao trong tuần." },
+    "P3": { "tier_name": "MEDIUM", "min_score": 0.40, "description": "Ưu tiên trung bình, theo dõi biến động." },
+    "P4": { "tier_name": "LOW", "min_score": 0.00, "description": "Mức ưu tiên thấp, can thiệp khi có nguồn lực." }
+  },
+  "normalization_bounds": {
+    "max_capital_exposure": 20000000.0,
+    "max_aging_days": 180
+  }
+}

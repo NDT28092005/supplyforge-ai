@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DecisionAPIContract",
+  "type": "object",
+  "required": [
+    "decision_id",
+    "sku",
+    "risk",
+    "decision",
+    "financial_impact",
+    "explanation",
+    "metadata"
+  ],
+  "properties": {
+    "decision_id": { "type": "string" },
+    "sku": { "type": "string" },
+    "risk": {
+      "type": "object",
+      "required": ["class", "score"],
+      "properties": {
+        "class": { "type": "string" },
+        "score": { "type": "number" }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["action", "priority", "status"],
+      "properties": {
+        "action": { "type": "string" },
+        "discount_rate": { "type": ["number", "null"] },
+        "action_parameters": { "type": "object" },
+        "priority": { "type": "string" },
+        "priority_score": { "type": "number" },
+        "priority_rank": { "type": "integer" },
+        "urgency": { "type": "string" },
+        "confidence": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "financial_impact": {
+      "type": "object",
+      "required": ["capital_exposure", "expected_recovery_value", "recovery_rate", "residual_exposure"],
+      "properties": {
+        "capital_exposure": { "type": "number" },
+        "expected_recovery_value": { "type": "number" },
+        "recovery_rate": { "type": "number" },
+        "residual_exposure": { "type": "number" }
+      }
+    },
+    "explanation": {
+      "type": "object",
+      "properties": {
+        "explanation_id": { "type": ["string", "null"] },
+        "reason_codes": { "type": "array" }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["dataset_version", "policy_version", "engine_version"],
+      "properties": {
+        "dataset_version": { "type": "string" },
+        "policy_version": { "type": "string" },
+        "engine_version": { "type": "string" }
+      }
+    }
+  }
+}

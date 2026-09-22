@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DecisionContextPayload",
+  "type": "object",
+  "required": [
+    "sku",
+    "risk_context",
+    "explainability_context",
+    "capital_context",
+    "aging_context",
+    "decision_status",
+    "audit_metadata"
+  ],
+  "properties": {
+    "sku": { "type": "string" },
+    "canonical_sku_id": { "type": ["string", "null"] },
+    "product_name": { "type": ["string", "null"] },
+    "category": { "type": ["string", "null"] },
+    "risk_context": {
+      "type": "object",
+      "required": ["risk_class", "risk_probability"],
+      "properties": {
+        "risk_class": { "type": "string" },
+        "risk_probability": { "type": "number" },
+        "risk_score": { "type": "number" },
+        "risk_signals": { "type": "array" }
+      }
+    },
+    "explainability_context": {
+      "type": "object",
+      "required": ["diagnostic_signals"],
+      "properties": {
+        "top_shap_features": { "type": "array" },
+        "diagnostic_signals": { "type": "array" },
+        "summary_text": { "type": ["string", "null"] }
+      }
+    },
+    "capital_context": {
+      "type": "object",
+      "required": ["capital_exposure", "risk_weighted_exposure"],
+      "properties": {
+        "capital_exposure": { "type": "number" },
+        "risk_weighted_exposure": { "type": "number" },
+        "probability_adjusted_exposure": { "type": "number" },
+        "estimated_opportunity_cost": { "type": ["number", "null"] }
+      }
+    },
+    "aging_context": {
+      "type": "object",
+      "required": ["aging_bucket", "aging_risk_level"],
+      "properties": {
+        "aging_days": { "type": ["integer", "null"] },
+        "aging_bucket": { "type": "string" },
+        "aging_risk_level": { "type": "string" },
+        "aging_priority": { "type": "string" }
+      }
+    },
+    "decision_status": { "type": "string", "enum": ["READY", "NOT_READY", "READY_WITH_WARNING"] },
+    "decision_warnings": { "type": "array" },
+    "constraints": { "type": "object" },
+    "eligible_strategies": { "type": "array" },
+    "audit_metadata": {
+      "type": "object",
+      "required": ["dataset_version", "decision_engine_version"]
+    }
+  }
+}

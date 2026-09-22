@@ -1,0 +1,37 @@
+{
+  "contract_id": "risk_model_feature_contract_v1",
+  "feature_version": "M2-FEATURE-v1.0",
+  "dataset_version": "v1.0",
+  "decision_cutoff": "2026-08-18",
+  "sku_count": 1,
+  "allowed_features_count": 8,
+  "allowed_features": [
+    "sku",
+    "canonical_sku_id",
+    "product_name",
+    "sales_velocity_30d",
+    "dsls",
+    "zero_rate_90d",
+    "adi",
+    "cv2"
+  ],
+  "forbidden_future_variables": [
+    "fut_qty_60d",
+    "fut_velocity",
+    "fut_velocity_60d",
+    "future_velocity",
+    "drr",
+    "drr_ratio",
+    "slow_moving_label",
+    "risk_label",
+    "future_sales",
+    "future_quantity",
+    "ground_truth_label",
+    "future_demand",
+    "label"
+  ],
+  "sha256_checksum": "sha256:50dbbd76bc571af9f3786ce2f875387009da5c6a4052904c3422f3d2ffcedea1",
+  "contract_status": "ACTIVE_HANDOVER",
+  "handover_timestamp": "2026-08-18T05:38:30.803483",
+  "academic_notice": "Academic & Research Scope Notice (M2-09): M2-FEATURE-v1.0 snapshot represents normalized observed transaction demand signals strictly <= t0. It provides standardized inputs for Slow-Moving Product Risk Detection, without mutating EXP-02 Ground Truth or overclaiming actual warehouse stock-on-hand inventory valuation."
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RecoveryValueResultPayload",
+  "type": "object",
+  "required": [
+    "sku",
+    "strategy",
+    "capital_exposure",
+    "gross_recovery_value",
+    "recovery_cost",
+    "net_recovery_value",
+    "recovery_rate",
+    "residual_exposure",
+    "recovery_gap",
+    "recovery_confidence",
+    "assumptions",
+    "calculation_trace",
+    "value_policy_version",
+    "evaluated_at"
+  ],
+  "properties": {
+    "sku": { "type": "string" },
+    "strategy": { "type": "string" },
+    "scenario_id": { "type": ["string", "null"] },
+    "capital_exposure": { "type": "number" },
+    "gross_recovery_value": { "type": "number" },
+    "recovery_cost": { "type": "number" },
+    "net_recovery_value": { "type": "number" },
+    "recovery_rate": { "type": "number" },
+    "residual_exposure": { "type": "number" },
+    "recovery_gap": { "type": "number" },
+    "recovery_confidence": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+    "assumptions": { "type": "object" },
+    "calculation_trace": { "type": "array" },
+    "value_policy_version": { "type": "string" },
+    "evaluated_at": { "type": "string" }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "module": "MODULE_05",
+  "task": "M5-06",
+  "version": "5.0",
+  "aging_risk_thresholds": {
+    "FRESH": { "min_days": 0, "max_days": 29 },
+    "AGING": { "min_days": 30, "max_days": 90 },
+    "AT_RISK": { "min_days": 91, "max_days": 180 },
+    "CRITICAL_AGING": { "min_days": 181, "max_days": 999999 }
+  },
+  "capital_thresholds": {
+    "material_threshold": 5000000.0,
+    "high_threshold": 10000000.0
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgingRiskAssessmentRecord",
+  "type": "object",
+  "required": [
+    "sku",
+    "aging_risk_level",
+    "aging_priority",
+    "capital_exposure",
+    "aging_flags"
+  ],
+  "properties": {
+    "sku": { "type": "string" },
+    "canonical_sku_id": { "type": ["string", "null"] },
+    "product_name": { "type": ["string", "null"] },
+    "inventory_age_days": { "type": ["integer", "null"] },
+    "aging_bucket": { "type": "string" },
+    "aging_risk_level": { "enum": ["FRESH", "AGING", "AT_RISK", "CRITICAL_AGING"] },
+    "inventory_value": { "type": ["number", "null"] },
+    "capital_exposure": { "type": "number" },
+    "risk_weighted_exposure": { "type": ["number", "null"] },
+    "slow_moving_risk_class": { "type": "string" },
+    "risk_probability": { "type": "number" },
+    "aging_priority": { "enum": ["P1", "P2", "P3", "P4"] },
+    "aging_flags": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

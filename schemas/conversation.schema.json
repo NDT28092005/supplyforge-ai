@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ConversationSessionContract",
+  "type": "object",
+  "required": ["conversation_id", "tenant_id", "merchant_id", "status", "created_at"],
+  "properties": {
+    "conversation_id": { "type": "string" },
+    "tenant_id": { "type": "string" },
+    "merchant_id": { "type": "string" },
+    "user_id": { "type": "string" },
+    "status": { "type": "string", "enum": ["ACTIVE", "WAITING_FOR_CLARIFICATION", "COMPLETED", "ARCHIVED"] },
+    "current_topic": { "type": ["string", "null"] },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" }
+  }
+}

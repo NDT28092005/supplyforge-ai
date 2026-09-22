@@ -1,8 +1,8 @@
 from datetime import datetime, date, timedelta
 from django.conf import settings
 from django.db import connection, models
-from django.db.models import Sum
-from supplyforge.models import Product, InsightAnomaly, Workspace
+from django.db.models import Sum, Max
+from supplyforge.models import Product, Order, InsightAnomaly, Workspace
 from supplyforge.services.industry import IndustryDetectionService
 
 
@@ -47,8 +47,30 @@ class InventoryFinancialEngineService:
             cursor.execute(sql, [user_id])
             rows = cursor.fetchall()
 
-        now = datetime.now()
-        ninety_days_ago = now - timedelta(days=90)
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT MAX(created_at) FROM orders WHERE user_id = %s", [user_id])
+            max_order_res = cursor.fetchone()
+            max_order_date = max_order_res[0] if max_order_res else None
+
+        if max_order_date:
+            if isinstance(max_order_date, str):
+                try:
+                    ref_date = datetime.strptime(max_order_date.split('.')[0], '%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    try:
+                        ref_date = datetime.strptime(max_order_date.split('T')[0], '%Y-%m-%d')
+                    except Exception:
+                        ref_date = datetime.now()
+            else:
+                ref_date = max_order_date
+            if hasattr(ref_date, 'tzinfo') and ref_date.tzinfo is not None:
+                ref_date = ref_date.replace(tzinfo=None)
+        else:
+            ref_date = datetime.now()
+            if hasattr(ref_date, 'tzinfo') and ref_date.tzinfo is not None:
+                ref_date = ref_date.replace(tzinfo=None)
+
+        ninety_days_ago = ref_date - timedelta(days=90)
 
         # Calculate unit velocities (Simple, Weighted, Seasonally Adjusted)
         velocity_sql = """
@@ -64,9 +86,9 @@ class InventoryFinancialEngineService:
         """
         with connection.cursor() as cursor:
             cursor.execute(velocity_sql, [
-                now - timedelta(days=7),
-                now - timedelta(days=30),
-                now - timedelta(days=60),
+                ref_date - timedelta(days=7),
+                ref_date - timedelta(days=30),
+                ref_date - timedelta(days=60),
                 user_id
             ])
             velocity_rows = cursor.fetchall()
@@ -126,16 +148,15 @@ class InventoryFinancialEngineService:
                     try:
                         last_date = datetime.strptime(last_date.split('.')[0], '%Y-%m-%d %H:%M:%S')
                     except Exception:
-                        last_date = now
+                        last_date = ref_date
+                if hasattr(last_date, 'tzinfo') and last_date.tzinfo is not None:
+                    last_date = last_date.replace(tzinfo=None)
                 last_date_str = last_date.strftime('%Y-%m-%d')
             else:
-                last_date = now
+                last_date = ref_date
                 last_date_str = "N/A"
 
-            days_in_inventory = max(0, (now - last_date).days)
-            # If all rows were created at once during import (0 days), assign realistic aging gradient based on item position
-            if days_in_inventory == 0 and len(rows) > 0:
-                days_in_inventory = (idx * 17) % 110
+            days_in_inventory = max(0, (ref_date - last_date).days)
 
             sku_sunk_cost = total_value * daily_storage_rate * days_in_inventory
             total_accumulated_sunk_cost += sku_sunk_cost

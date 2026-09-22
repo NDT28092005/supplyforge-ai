@@ -1,0 +1,626 @@
+<div class="space-y-8 animate-fade-in pb-16 max-w-7xl mx-auto">
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- 1. HEADER PAGE CARD                                                -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div
+    class="bg-white border border-slate-200/80 p-7 sm:p-9 rounded-3xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+    <div class="space-y-2">
+      <h1 class="font-sans font-black text-3xl sm:text-4xl lg:text-5xl text-slate-900 tracking-tight">
+        KHUYẾN NGHỊ XẢ HÀNG
+      </h1>
+      <p class="text-slate-600 text-sm sm:text-base font-sans font-medium">
+        Đề xuất kịch bản xả kho thu hồi tiền mặt nhanh cho nhà bán, tối ưu hóa nguồn vốn quay vòng tái đầu tư
+      </p>
+    </div>
+
+    <!-- Header Controls -->
+    <div class="flex items-center gap-3 shrink-0 flex-wrap">
+      <button (click)="loadDecisions()" [disabled]="isLoading"
+        class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 font-bold text-sm px-5 py-3 rounded-2xl transition-all flex items-center gap-2.5 cursor-pointer active:scale-95 shadow-xs whitespace-nowrap">
+        <svg class="w-4 h-4 text-indigo-600 transition-transform" [ngClass]="{'animate-spin': isLoading}"
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M23 4v6h-6"></path>
+          <path d="M1 20v-6h6"></path>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span>Cập nhật dữ liệu</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- 2. KPI SUMMARY GRID (4 CARDS)                                      -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+
+    <!-- KPI 1: Sản Phẩm Cần Giải Phóng -->
+    <div class="bg-white border border-slate-200/80 p-6 rounded-3xl shadow-xs space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Sản Phẩm Cần Giải Phóng</span>
+        <div class="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+          </svg>
+        </div>
+      </div>
+      <div>
+        <div class="font-sans font-black text-3xl sm:text-4xl text-slate-900 tracking-tight font-mono">
+          {{ totalAtRiskSkus }} Sản phẩm
+        </div>
+        <div class="text-xs text-slate-500 font-medium mt-1">
+          Sản phẩm có nguy cơ bán chậm & đọng vốn
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI 2: Vốn Đọng Trong Kho -->
+    <div class="bg-rose-50/50 border border-rose-200/80 p-6 rounded-3xl shadow-xs space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-rose-800 uppercase tracking-wider">Vốn Đọng Trong Kho</span>
+        <div class="w-8 h-8 rounded-xl bg-rose-100 flex items-center justify-center text-rose-700">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+            <line x1="2" y1="10" x2="22" y2="10"></line>
+          </svg>
+        </div>
+      </div>
+      <div>
+        <div class="font-sans font-black text-3xl sm:text-4xl text-rose-700 tracking-tight font-mono">
+          {{ formatCurrency(totalCapitalExposure) }}
+        </div>
+        <div class="text-xs text-rose-800/80 font-medium mt-1">
+          Tổng giá trị vốn chôn ở hàng bán chậm
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI 3: Tiền Mặt Thu Hồi Dự Kiến -->
+    <div class="bg-emerald-50/50 border border-emerald-200/80 p-6 rounded-3xl shadow-xs space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Tiền Mặt Thu Hồi Dự Kiến</span>
+        <div class="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+            <polyline points="17 6 23 6 23 12"></polyline>
+          </svg>
+        </div>
+      </div>
+      <div>
+        <div class="font-sans font-black text-3xl sm:text-4xl text-emerald-700 tracking-tight font-mono">
+          {{ formatCurrency(totalExpectedRecovery) }}
+        </div>
+        <div class="text-xs text-emerald-800/80 font-medium mt-1">
+          Số tiền mặt thu lại ví khi áp dụng xả hàng
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI 4: Ưu Tiên Gấp -->
+    <div class="bg-amber-50/50 border border-amber-200/80 p-6 rounded-3xl shadow-xs space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-amber-800 uppercase tracking-wider">Ưu Tiên Gấp (Mức 1 & 2)</span>
+        <div class="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+        </div>
+      </div>
+      <div>
+        <div class="font-sans font-black text-3xl sm:text-4xl text-amber-700 tracking-tight font-mono">
+          {{ highPriorityCount }} Sản phẩm
+        </div>
+        <div class="text-xs text-amber-800/80 font-medium mt-1">
+          Nên thực thi ngay trong tuần này
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- 3. VISUAL RECOVERY PROGRESS CARD                                   -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div class="bg-white border border-slate-200/80 p-6 sm:p-8 rounded-3xl shadow-xs space-y-5"
+    *ngIf="totalCapitalExposure > 0">
+
+    <!-- Title & Status Badge -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+      <div class="space-y-1">
+        <h3 class="font-sans font-bold text-lg text-slate-900 flex items-center gap-2">
+          <span>Bức Tranh Thu Hồi Tiền Mặt Từ Kho</span>
+        </h3>
+        <p class="text-xs text-slate-500 font-medium leading-relaxed">
+          Cho nhà bán thấy tổng số tiền mặt sẽ thu về ví sau khi áp dụng các mức giảm giá xả hàng
+        </p>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <span
+          class="text-xs font-mono font-bold text-emerald-800 bg-emerald-50 px-3.5 py-1.5 rounded-full border border-emerald-200/80 shadow-2xs">
+          Hoàn ví: {{ formatPercent(totalExpectedRecovery / totalCapitalExposure) }} giá vốn
+        </span>
+      </div>
+    </div>
+
+    <!-- Multi-colored Progress Bar with % badges -->
+    <div class="space-y-2">
+      <div
+        class="w-full h-5 bg-slate-100 rounded-full overflow-hidden flex p-0.5 border border-slate-200/60 shadow-inner">
+        <div
+          class="h-full bg-emerald-500 rounded-l-full transition-all duration-500 flex items-center justify-center text-[10px] font-mono font-bold text-white tracking-wider"
+          [style.width.%]="(totalExpectedRecovery / totalCapitalExposure) * 100">
+          {{ formatPercent(totalExpectedRecovery / totalCapitalExposure) }}
+        </div>
+        <div
+          class="h-full bg-amber-400 rounded-r-full transition-all duration-500 flex items-center justify-center text-[10px] font-mono font-bold text-amber-950 tracking-wider"
+          [style.width.%]="100 - ((totalExpectedRecovery / totalCapitalExposure) * 100)">
+          {{ formatPercent(1 - (totalExpectedRecovery / totalCapitalExposure)) }}
+        </div>
+      </div>
+    </div>
+
+    <!-- 2 Metric Explanations Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+      <div
+        class="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/70 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3.5 h-3.5 rounded-full bg-emerald-500 shrink-0"></span>
+          <div>
+            <div class="text-xs font-bold text-slate-800">Tiền mặt về ví shop</div>
+            <div class="text-[11px] text-slate-500 font-medium">Tiền thực thu về tài khoản</div>
+          </div>
+        </div>
+        <span class="font-mono font-black text-base text-emerald-700">
+          {{ formatCurrency(totalExpectedRecovery) }}
+        </span>
+      </div>
+
+      <div class="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/70 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3.5 h-3.5 rounded-full bg-amber-400 shrink-0"></span>
+          <div>
+            <div class="text-xs font-bold text-slate-800">Chi phí giảm giá xả hàng</div>
+            <div class="text-[11px] text-slate-500 font-medium">Ngân sách chiết khấu chấp nhận</div>
+          </div>
+        </div>
+        <span class="font-mono font-black text-base text-amber-800">
+          {{ formatCurrency(totalCapitalExposure - totalExpectedRecovery) }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Merchant Explanatory Banner (Ý nghĩa kinh doanh) -->
+    <div
+      class="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-200/70 text-xs text-indigo-950 font-medium leading-relaxed flex items-start gap-2.5">
+      <span class="text-indigo-600 font-bold shrink-0 text-sm">💡</span>
+      <div>
+        <strong class="font-bold text-indigo-900 block mb-0.5">Ý nghĩa chỉ số cho nhà bán hàng:</strong>
+        Nếu duyệt thực thi toàn bộ kịch bản xả hàng này, bạn sẽ giải phóng được <strong
+          class="font-mono font-bold text-slate-900">{{ formatCurrency(totalCapitalExposure) }}</strong> vốn đang bị
+        chôn
+        kẹt, thu lại ngay <strong class="font-mono font-bold text-emerald-700">{{ formatCurrency(totalExpectedRecovery)
+          }}</strong> tiền mặt tươi về tài khoản để nhập dòng sản phẩm mới bán chạy hơn.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- 4. FILTERS TOOLBAR & TABLE                                         -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div class="bg-white border border-slate-200/80 p-6 sm:p-8 rounded-3xl shadow-xs space-y-6">
+
+    <!-- Filters Row -->
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+
+      <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+        <!-- Risk Filter -->
+        <select [(ngModel)]="selectedRiskClass" (change)="onFilterChange()"
+          class="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-2xl px-4 py-2.5 outline-none focus:border-indigo-500 transition-all cursor-pointer">
+          <option value="ALL">Tất cả Mức Rủi Ro</option>
+          <option value="CRITICAL">Rủi ro cao / Ngừng bán</option>
+          <option value="HIGH_RISK">Rủi ro cao</option>
+          <option value="MEDIUM_RISK">Cần theo dõi</option>
+          <option value="LOW_RISK">An toàn</option>
+        </select>
+
+        <!-- Priority Filter -->
+        <select [(ngModel)]="selectedPriority" (change)="onFilterChange()"
+          class="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-2xl px-4 py-2.5 outline-none focus:border-indigo-500 transition-all cursor-pointer">
+          <option value="ALL">Tất cả Mức Ưu Tiên</option>
+          <option value="P1">Mức 1 - Ưu tiên xả gấp</option>
+          <option value="P2">Mức 2 - Ưu tiên xử lý tuần này</option>
+          <option value="P3">Mức 3 - Khuyến mãi nhẹ</option>
+          <option value="P4">Mức 4 - Bình thường</option>
+        </select>
+
+        <!-- Action Filter -->
+        <select [(ngModel)]="selectedActionType" (change)="onFilterChange()"
+          class="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-2xl px-4 py-2.5 outline-none focus:border-indigo-500 transition-all cursor-pointer">
+          <option value="ALL">Tất cả Đề Xuất</option>
+          <option value="CLEARANCE">Xả kho gấp</option>
+          <option value="DISCOUNT">Giảm giá</option>
+          <option value="BUNDLE">Bán Combo</option>
+          <option value="PROMOTION">Chạy Ads</option>
+          <option value="MONITOR">Theo dõi</option>
+        </select>
+      </div>
+
+      <!-- Search Box -->
+      <div class="relative w-full lg:w-80">
+        <input type="text" [(ngModel)]="searchQuery" (input)="applySearchFilter()"
+          placeholder="Tìm kiếm mã hàng, tên sản phẩm..."
+          class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium rounded-2xl pl-10 pr-4 py-2.5 outline-none focus:border-indigo-500 focus:bg-white transition-all shadow-xs" />
+        <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+      </div>
+
+    </div>
+
+    <!-- Data Table -->
+    <div class="overflow-x-auto rounded-2xl border border-slate-200/80">
+      <table class="w-full text-left text-sm border-collapse">
+        <thead>
+          <tr
+            class="bg-slate-50 text-slate-700 font-sans font-bold text-xs uppercase border-b border-slate-200/80 tracking-wider whitespace-nowrap">
+            <th class="py-4 px-4 whitespace-nowrap">Mã Sản Phẩm</th>
+            <th class="py-4 px-4 text-center whitespace-nowrap">Mức Rủi Ro</th>
+            <th class="py-4 px-4 text-right whitespace-nowrap">Vốn Đang Đọng</th>
+            <th class="py-4 px-4 whitespace-nowrap">Phương Án Đề Xuất</th>
+            <th class="py-4 px-4 text-right whitespace-nowrap">Thu Hồi Dự Kiến</th>
+            <th class="py-4 px-4 text-center whitespace-nowrap">Trạng Thái</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 bg-white">
+          <tr *ngFor="let item of filteredDecisions" (click)="openDecisionDetail(item)"
+            class="hover:bg-indigo-50/40 transition-colors cursor-pointer group">
+
+            <!-- SKU Code -->
+            <td
+              class="py-4 px-4 font-mono font-bold text-indigo-700 text-base group-hover:text-indigo-900 transition-colors whitespace-nowrap">
+              {{ item.sku }}
+            </td>
+
+            <!-- Risk Class Badge -->
+            <td class="py-4 px-4 text-center whitespace-nowrap">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border"
+                [ngClass]="getRiskBadgeClass(item.risk.class)">
+                <span class="w-2 h-2 rounded-full" [ngClass]="{
+                  'bg-rose-500': item.risk.class === 'HIGH_RISK' || item.risk.class === 'CRITICAL',
+                  'bg-amber-500': item.risk.class === 'MEDIUM_RISK',
+                  'bg-emerald-500': item.risk.class === 'LOW_RISK'
+                }"></span>
+                {{ item.risk.class === 'HIGH_RISK' || item.risk.class === 'CRITICAL' ? 'Rủi ro cao' : (item.risk.class
+                === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'An toàn') }}
+              </span>
+            </td>
+
+            <!-- Capital Exposure -->
+            <td class="py-4 px-4 text-right font-mono font-black text-slate-900 text-base whitespace-nowrap">
+              {{ formatCurrency(item.financial_impact.capital_exposure) }}
+            </td>
+
+            <!-- Recommended Action -->
+            <td class="py-4 px-4 font-medium text-slate-800 text-xs sm:text-sm whitespace-nowrap">
+              <span
+                class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-100 font-semibold border border-slate-200/70 whitespace-nowrap">
+                {{ translateAction(item.decision.action) }}
+                <ng-container *ngIf="item.decision.discount_rate">
+                  <span class="text-rose-600 font-mono font-bold">(-{{ (item.decision.discount_rate * 100).toFixed(0)
+                    }}%)</span>
+                </ng-container>
+              </span>
+            </td>
+
+            <!-- Expected Recovery -->
+            <td class="py-4 px-4 text-right font-mono font-bold text-emerald-600 text-base whitespace-nowrap">
+              {{ formatCurrency(item.financial_impact.expected_recovery_value) }}
+            </td>
+
+
+            <!-- Status Badge -->
+            <td class="py-4 px-4 text-center whitespace-nowrap">
+              <span class="px-2.5 py-1 rounded-full text-xs font-bold border"
+                [ngClass]="getStatusBadgeClass(item.decision.status)">
+                {{ translateStatus(item.decision.status) }}
+              </span>
+            </td>
+
+          </tr>
+
+          <!-- Empty State -->
+          <tr *ngIf="filteredDecisions.length === 0">
+            <td colspan="9" class="py-12 text-center text-slate-500 font-medium">
+              Không tìm thấy sản phẩm nào phù hợp với bộ lọc đã chọn.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- 5. CENTERED DECISION DETAIL MODAL POPUP                            -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isDrawerOpen && selectedDecision" (click)="closeDrawer()"
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+
+    <div (click)="$event.stopPropagation()"
+      class="bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden max-w-2xl w-full max-h-[90vh] flex flex-col animate-scale-up">
+
+      <!-- Modal Header -->
+      <div class="p-6 border-b border-slate-100 flex items-start justify-between gap-4 bg-slate-50/50 shrink-0">
+        <div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold border"
+              [ngClass]="getPriorityBadgeClass(selectedDecision.decision.priority)">
+              Ưu tiên {{ selectedDecision.decision.priority }}
+            </span>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold border"
+              [ngClass]="getRiskBadgeClass(selectedDecision.risk.class)">
+              {{ selectedDecision.risk.class === 'HIGH_RISK' || selectedDecision.risk.class === 'CRITICAL' ? 'Rủi ro
+              cao' : 'Cần theo dõi' }}
+            </span>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold border"
+              [ngClass]="getStatusBadgeClass(selectedDecision.decision.status)">
+              {{ translateStatus(selectedDecision.decision.status) }}
+            </span>
+          </div>
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-2 font-mono">
+            Phương Án Xả Hàng Cho Mã: {{ selectedDecision.sku }}
+          </h2>
+        </div>
+
+        <button (click)="closeDrawer()"
+          class="w-9 h-9 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer shrink-0">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Modal Sub-Tabs Navigation -->
+      <div
+        class="flex items-center gap-2 p-3 bg-slate-100/70 border-b border-slate-200/80 px-6 shrink-0 overflow-x-auto">
+        <button (click)="activeTab = 'OVERVIEW'"
+          class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
+          [ngClass]="activeTab === 'OVERVIEW' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'">
+          Tóm Tắt Quyết Định
+        </button>
+        <button (click)="activeTab = 'EXPLANATION'"
+          class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
+          [ngClass]="activeTab === 'EXPLANATION' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'">
+          Lý Do Đề Xuất
+        </button>
+        <button (click)="activeTab = 'HISTORY'"
+          class="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
+          [ngClass]="activeTab === 'HISTORY' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'">
+          Nhật Ký Thao Tác
+        </button>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="p-6 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
+
+        <!-- Tab 1: Overview -->
+        <div *ngIf="activeTab === 'OVERVIEW'" class="space-y-6">
+
+          <!-- 4 Financial Metrics Grid (Human-crafted style) -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div
+              class="bg-rose-50/60 border border-rose-200/80 p-4 rounded-2xl flex flex-col justify-between space-y-2">
+              <div class="text-xs font-semibold text-rose-800">Tiền vốn đọng</div>
+              <div class="font-sans font-black text-2xl sm:text-3xl text-rose-700 tracking-tight font-mono">
+                {{ formatCurrency(selectedDecision.financial_impact.capital_exposure) }}
+              </div>
+              <div class="text-[11px] font-medium text-rose-600/80">Tổng vốn chôn ở kho</div>
+            </div>
+
+            <div
+              class="bg-emerald-50/60 border border-emerald-200/80 p-4 rounded-2xl flex flex-col justify-between space-y-2">
+              <div class="text-xs font-semibold text-emerald-800">Thu hồi dự kiến</div>
+              <div class="font-sans font-black text-2xl sm:text-3xl text-emerald-700 tracking-tight font-mono">
+                {{ formatCurrency(selectedDecision.financial_impact.expected_recovery_value) }}
+              </div>
+              <div class="text-[11px] font-medium text-emerald-600/80">Tiền mặt về ví</div>
+            </div>
+
+            <div
+              class="bg-indigo-50/60 border border-indigo-200/80 p-4 rounded-2xl flex flex-col justify-between space-y-2">
+              <div class="text-xs font-semibold text-indigo-800">Tỷ lệ thu hồi</div>
+              <div class="font-sans font-black text-2xl sm:text-3xl text-indigo-900 tracking-tight font-mono">
+                {{ formatPercent(selectedDecision.financial_impact.recovery_rate) }}
+              </div>
+              <div class="text-[11px] font-medium text-indigo-600/80">Mức hoàn vốn tối ưu</div>
+            </div>
+
+            <div
+              class="bg-amber-50/60 border border-amber-200/80 p-4 rounded-2xl flex flex-col justify-between space-y-2">
+              <div class="text-xs font-semibold text-amber-800">Mức giảm đề xuất</div>
+              <div class="font-sans font-black text-2xl sm:text-3xl text-amber-700 tracking-tight font-mono">
+                {{ getDiscountPercent(selectedDecision) }}%
+              </div>
+              <div class="text-[11px] font-medium text-amber-700/80">Mức chiết khấu phù hợp</div>
+            </div>
+          </div>
+
+          <!-- Interactive Discount Slider & Custom Adjustment Control -->
+          <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="font-sans font-bold text-sm text-slate-900">
+                  Tùy Chọn Mức Giảm Giá Cho Shop
+                </h4>
+                <p class="text-xs text-slate-500 font-medium">Thay đổi mức giảm giá để mô phỏng ngay lượng tiền mặt thu
+                  về ví</p>
+              </div>
+              <span
+                class="text-base font-black font-mono text-rose-700 bg-rose-100 px-3 py-1 rounded-full border border-rose-200">
+                -{{ getDiscountPercent(selectedDecision) }}%
+              </span>
+            </div>
+
+            <!-- Range Slider -->
+            <div class="space-y-1">
+              <input type="range" min="5" max="60" step="1" [ngModel]="getDiscountPercent(selectedDecision)"
+                (ngModelChange)="updateItemDiscount(selectedDecision, $event)"
+                class="w-full h-2.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+              <div class="flex justify-between text-[11px] font-mono text-slate-400 font-bold px-0.5">
+                <span>5%</span>
+                <span>15%</span>
+                <span>25%</span>
+                <span>35%</span>
+                <span>50%</span>
+                <span>60%</span>
+              </div>
+            </div>
+
+            <!-- Quick Preset Buttons -->
+            <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-200/70">
+              <span class="text-xs text-slate-600 font-bold">Chọn nhanh mức giảm:</span>
+              <div class="flex items-center gap-2">
+                <button *ngFor="let pct of [15, 20, 32, 40, 50]" (click)="updateItemDiscount(selectedDecision, pct)"
+                  class="px-3 py-1 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer"
+                  [ngClass]="getDiscountPercent(selectedDecision) === pct ? 'bg-indigo-600 text-white shadow-xs' : 'bg-white hover:bg-slate-200 text-slate-700 border border-slate-200'">
+                  {{ pct }}%
+                </button>
+              </div>
+            </div>
+
+            <!-- Live Formula Summary Bar -->
+            <div
+              class="p-3.5 rounded-xl bg-indigo-50/80 border border-indigo-200/80 text-xs font-medium text-indigo-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span class="text-slate-600 font-bold">Công thức tính tiền về ví:</span>
+              <span class="font-mono font-bold text-indigo-900 text-xs sm:text-sm">
+                Giảm -{{ getDiscountPercent(selectedDecision) }}% &rarr; Thu hồi ví: {{
+                formatPercent(selectedDecision.financial_impact.recovery_rate) }} giá vốn ({{
+                formatCurrency(selectedDecision.financial_impact.expected_recovery_value) }})
+              </span>
+            </div>
+          </div>
+
+          <!-- Recommended Action Card -->
+          <div class="p-5 rounded-2xl bg-indigo-50/60 border border-indigo-200/80 space-y-2">
+            <div class="text-xs font-bold text-indigo-900 uppercase tracking-wider">
+              Khuyến Nghị Xả Hàng Tối Ưu Tốt Nhất
+            </div>
+            <div class="text-base font-black text-indigo-950 font-sans">
+              {{ translateAction(selectedDecision.decision.action) }}
+              <ng-container *ngIf="selectedDecision.decision.discount_rate">
+                (Mức giảm giá {{ (selectedDecision.decision.discount_rate * 100).toFixed(0) }}%)
+              </ng-container>
+            </div>
+            <p class="text-xs text-indigo-800/90 font-medium leading-relaxed">
+              Áp dụng phương án này sẽ giúp cửa hàng nhanh chóng giải phóng mã sản phẩm bán chậm, thu hồi ngay khoảng
+              <strong class="text-emerald-700 font-mono font-bold">{{
+                formatCurrency(selectedDecision.financial_impact.expected_recovery_value) }}</strong>
+              tiền mặt để tái nhập các sản phẩm đang có sức bán tốt.
+            </p>
+          </div>
+
+        </div>
+
+        <!-- Tab 2: System Explanation -->
+        <div *ngIf="activeTab === 'EXPLANATION'" class="space-y-4">
+          <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+            <h4 class="font-sans font-bold text-sm text-slate-900">Tại Sao Hệ Thống Đưa Ra Đề Xuất Này?</h4>
+            <p class="text-xs text-slate-600 font-medium">
+              Phương án giúp cửa hàng giải phóng lượng vốn tồn đọng trong kho trong thời gian sớm nhất, giảm thiểu chi
+              phí gánh vốn kéo dài.
+            </p>
+          </div>
+          <div class="p-4 rounded-2xl bg-rose-50/50 border border-rose-200/70 space-y-1.5">
+            <h4 class="font-sans font-bold text-sm text-rose-900">Đánh Giá Nguy Cơ Chôn Vốn</h4>
+            <p class="text-xs text-rose-800/90 font-medium">
+              Sản phẩm có lượng tồn kho kéo dài nhiều ngày chưa phát sinh đơn mới, tốc độ xuất kho thấp hơn mức trung
+              bình toàn shop.
+            </p>
+          </div>
+        </div>
+
+        <!-- Tab 3: History Timeline -->
+        <div *ngIf="activeTab === 'HISTORY'" class="space-y-3">
+          <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between text-xs">
+            <div>
+              <span class="font-bold text-slate-900 block">Khuyến nghị tự động từ hệ thống</span>
+              <span class="text-slate-500 font-mono">{{ selectedDecision.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
+            </div>
+            <span class="px-2.5 py-0.5 rounded-full font-bold bg-blue-50 text-blue-700 border border-blue-200">Tự
+              động</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer Actions -->
+      <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-end gap-3 shrink-0">
+        <button *ngIf="['RECOMMENDED', 'REVIEWED'].includes(selectedDecision.decision.status)"
+          (click)="acceptDecision(selectedDecision)"
+          class="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-xs cursor-pointer">
+          Đồng Ý Duyệt Phương Án
+        </button>
+        <button *ngIf="['RECOMMENDED', 'REVIEWED', 'ACCEPTED'].includes(selectedDecision.decision.status)"
+          (click)="openRejectModal()"
+          class="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/70 transition-all cursor-pointer">
+          Từ Chối Gợi Ý
+        </button>
+        <button *ngIf="selectedDecision.decision.status === 'ACCEPTED'" (click)="markExecuted(selectedDecision)"
+          class="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-xs cursor-pointer">
+          Đánh Dấu Đã Thực Thi
+        </button>
+        <button (click)="closeDrawer()"
+          class="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 transition-all cursor-pointer">
+          Đóng
+        </button>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Rejection Modal -->
+  <div *ngIf="isRejectModalOpen" (click)="closeRejectModal()"
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+    <div (click)="$event.stopPropagation()"
+      class="bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 max-w-md w-full space-y-4 animate-scale-up">
+      <h3 class="font-sans font-bold text-lg text-slate-900">Từ Chối Gợi Ý Cho Mã: {{ selectedDecision?.sku }}</h3>
+      <p class="text-xs text-slate-500 font-medium">Vui lòng chọn lý do từ chối để cập nhật hệ thống:</p>
+
+      <div class="space-y-1.5">
+        <label class="text-xs font-bold text-slate-700">Lý do từ chối:</label>
+        <select [(ngModel)]="rejectionReason"
+          class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs font-semibold rounded-2xl p-3 outline-none focus:border-indigo-500">
+          <option value="ALREADY_PLANNING_PROMOTION">Đã có chương trình khuyến mãi riêng</option>
+          <option value="SUPPLIER_RETURN_AVAILABLE">Có thể hoàn trả nhà cung cấp</option>
+          <option value="STRATEGICALLY_IMPORTANT">Sản phẩm chiến lược, cần giữ nguyên giá</option>
+          <option value="RECOMMENDATION_NOT_SUITABLE">Mức giảm giá chưa phù hợp</option>
+          <option value="OTHER">Lý do khác</option>
+        </select>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="text-xs font-bold text-slate-700">Ghi chú bổ sung:</label>
+        <textarea [(ngModel)]="customRejectionNote" placeholder="Nhập thêm ghi chú từ chối..."
+          class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs font-medium rounded-2xl p-3 outline-none focus:border-indigo-500 min-h-[80px]"></textarea>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-2">
+        <button (click)="confirmRejectDecision()"
+          class="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white transition-all shadow-xs cursor-pointer">
+          Xác nhận từ chối
+        </button>
+        <button (click)="closeRejectModal()"
+          class="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 transition-all cursor-pointer">
+          Hủy bỏ
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>

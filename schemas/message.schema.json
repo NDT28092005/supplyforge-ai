@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ConversationMessageContract",
+  "type": "object",
+  "required": ["message_id", "conversation_id", "role", "content", "created_at"],
+  "properties": {
+    "message_id": { "type": "string" },
+    "conversation_id": { "type": "string" },
+    "role": { "type": "string", "enum": ["user", "assistant", "system"] },
+    "content": { "type": "string" },
+    "metadata": { "type": "object" },
+    "created_at": { "type": "string" }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DiscountSimulationResultPayload",
+  "type": "object",
+  "required": [
+    "sku",
+    "baseline",
+    "scenarios",
+    "simulation_policy_version",
+    "evaluated_at"
+  ],
+  "properties": {
+    "sku": { "type": "string" },
+    "evaluation_status": { "type": "string" },
+    "baseline": {
+      "type": "object",
+      "required": ["unit_price", "unit_cost", "capital_exposure"],
+      "properties": {
+        "unit_price": { "type": "number" },
+        "unit_cost": { "type": "number" },
+        "capital_exposure": { "type": "number" },
+        "stock_quantity": { "type": "number" }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["discount_rate", "simulated_price", "simulated_revenue", "capital_recovery", "recovery_rate", "status"],
+        "properties": {
+          "scenario_id": { "type": "string" },
+          "discount_rate": { "type": "number" },
+          "simulated_price": { "type": "number" },
+          "simulated_quantity": { "type": "number" },
+          "simulated_revenue": { "type": "number" },
+          "simulated_margin_rate": { "type": "number" },
+          "capital_recovery": { "type": "number" },
+          "recovery_rate": { "type": "number" },
+          "status": { "type": "string", "enum": ["FEASIBLE", "BLOCKED", "REQUIRES_REVIEW", "NOT_AVAILABLE"] }
+        }
+      }
+    },
+    "simulation_policy_version": { "type": "string" },
+    "evaluated_at": { "type": "string" }
+  }
+}

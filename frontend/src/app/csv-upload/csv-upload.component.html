@@ -1,0 +1,251 @@
+<main class="min-h-screen bg-slate-50/50 flex flex-col justify-center px-4 sm:px-8 lg:px-16 py-8">
+  <section class="max-w-5xl mx-auto w-full space-y-8 animate-fade-in" aria-labelledby="upload-heading">
+    <!-- Header -->
+    <header class="bg-white border border-slate-200/80 p-7 sm:p-9 rounded-3xl shadow-xs space-y-3">
+      <div class="flex items-center gap-3">
+        <span class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3.5 py-1 rounded-full inline-block">
+          Bước 1: Tải tệp dữ liệu bán hàng
+        </span>
+      </div>
+      <h1 id="upload-heading" class="font-sans font-black text-3xl sm:text-4xl text-slate-900 tracking-tight">
+        Nạp dữ liệu bán hàng & kho hàng
+      </h1>
+      <p class="text-slate-600 text-sm sm:text-base font-sans font-medium max-w-2xl leading-relaxed">
+        Tải lên tệp CSV lịch sử bán hàng từ các sàn thương mại điện tử (Shopee, Lazada, TikTok Shop, Haravan, KiotViet...). Hệ thống sẽ tự động đọc và xử lý an toàn.
+      </p>
+    </header>
+
+    <!-- Session Type Toggle -->
+    <div class="flex items-center gap-3 bg-white border border-slate-200/80 p-2 rounded-2xl w-fit shadow-xs">
+      <button 
+        type="button"
+        (click)="sessionType = 'INITIAL'; resetUpload()"
+        [class.bg-indigo-600]="sessionType === 'INITIAL'"
+        [class.text-white]="sessionType === 'INITIAL'"
+        [class.text-slate-700]="sessionType !== 'INITIAL'"
+        [class.hover:bg-slate-100]="sessionType !== 'INITIAL'"
+        class="px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+        </svg>
+        <span>Khởi tạo dữ liệu ban đầu</span>
+      </button>
+      <button 
+        type="button"
+        (click)="sessionType = 'INCREMENTAL'; resetUpload()"
+        [class.bg-indigo-600]="sessionType === 'INCREMENTAL'"
+        [class.text-white]="sessionType === 'INCREMENTAL'"
+        [class.text-slate-700]="sessionType !== 'INCREMENTAL'"
+        [class.hover:bg-slate-100]="sessionType !== 'INCREMENTAL'"
+        class="px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        <span>Tải thêm đơn hàng mới</span>
+      </button>
+    </div>
+
+    <!-- Dropzone Area (when idle or dragging) -->
+    <div *ngIf="uploadStatus === 'idle'" 
+         (dragover)="onDragOver($event)" 
+         (dragleave)="onDragLeave($event)" 
+         (drop)="onDrop($event)"
+         [ngClass]="{'border-indigo-500 bg-indigo-50/30': isDragging}"
+         class="border-2 border-dashed border-slate-300 bg-white hover:border-indigo-400 rounded-3xl p-10 sm:p-14 text-center transition-all cursor-pointer shadow-xs group relative overflow-hidden">
+      
+      <input type="file" accept=".csv" (change)="onFileChange($event)" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10">
+
+      <div class="space-y-4 relative z-0 pointer-events-none">
+        <div class="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center mx-auto text-indigo-600 group-hover:scale-105 transition-transform">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+          </svg>
+        </div>
+        <div>
+          <h2 class="text-base font-bold text-slate-900">Kéo thả tệp CSV vào đây hoặc click để chọn tệp</h2>
+          <p class="text-xs text-slate-500 mt-1 font-medium">Hỗ trợ tệp CSV chuẩn xuất từ Shopee, Lazada, TikTok Shop, Haravan, KiotViet,... (Tối đa 500 MB)</p>
+        </div>
+        <div class="pt-2 flex items-center justify-center gap-6 text-xs text-slate-500 font-medium">
+          <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Tự động lọc trùng</span>
+          <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-indigo-500"></span> Nhận diện mã SKU</span>
+          <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-purple-500"></span> Bảo mật dữ liệu</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Uploading & Profiling State -->
+    <div *ngIf="uploadStatus === 'uploading'" class="bg-white border border-slate-200/80 rounded-3xl p-10 text-center space-y-6 shadow-xs">
+      <div class="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center mx-auto text-indigo-600">
+        <svg class="w-7 h-7 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+      </div>
+      <div class="space-y-2">
+        <h3 class="text-lg font-bold text-slate-900">Đang nạp &amp; phân tích dữ liệu...</h3>
+        <p class="text-xs text-slate-500 font-mono">Tệp: {{ selectedFile?.name }} ({{ selectedFile?.size | number }} bytes)</p>
+      </div>
+      <!-- Progress Bar -->
+      <div class="max-w-md mx-auto space-y-2">
+        <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200">
+          <div class="bg-indigo-600 h-full rounded-full transition-all duration-300" [style.width.%]="uploadProgress"></div>
+        </div>
+        <span class="text-xs font-mono text-indigo-600 font-bold">{{ uploadProgress }}%</span>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div *ngIf="uploadStatus === 'error'" class="bg-rose-50 border border-rose-200 rounded-3xl p-8 space-y-4 text-center">
+      <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto font-bold">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+      </div>
+      <div>
+        <h3 class="text-sm font-bold text-rose-800">Không thể phân tích tệp CSV</h3>
+        <p class="text-xs text-rose-700/80 mt-1 font-medium">{{ errorMessage }}</p>
+      </div>
+      <button (click)="resetUpload()" class="px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 font-bold hover:bg-slate-50 transition-all cursor-pointer">
+        Chọn tệp khác
+      </button>
+    </div>
+
+    <!-- Profiled Results Section -->
+    <div *ngIf="uploadStatus === 'profiled' && profileResult" class="space-y-6 animate-fade-in">
+      
+      <!-- Session Bar & Reset -->
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-emerald-50 border border-emerald-200">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg">
+            ✓
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-slate-900">{{ profileResult.file.originalFilename }}</h3>
+            <span class="text-xs text-slate-600 font-medium">
+              Dung lượng: {{ profileResult.file.fileSizeHuman }} · Trạng thái: <span class="text-emerald-700 font-bold">Đã phân tích thành công</span>
+            </span>
+          </div>
+        </div>
+        <button (click)="resetUpload()" class="text-xs text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-1.5 font-bold cursor-pointer">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+          Chọn tệp khác
+        </button>
+      </div>
+
+      <!-- KPI Summary Cards Grid -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Card 1: Total Rows -->
+        <article class="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-1 shadow-xs">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng số dòng</span>
+          <p class="text-2xl font-black text-slate-900 font-mono">{{ profileResult.profile.totalRows | number }}</p>
+          <p class="text-xs text-emerald-700 font-medium">Đã quét hoàn tất</p>
+        </article>
+
+        <!-- Card 2: Total Columns -->
+        <article class="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-1 shadow-xs">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Số cột dữ liệu</span>
+          <p class="text-2xl font-black text-slate-900 font-mono">{{ profileResult.profile.totalColumns }}</p>
+          <p class="text-xs text-slate-500 font-medium">Dòng đầu là tiêu đề cột</p>
+        </article>
+
+        <!-- Card 3: Date Range -->
+        <article class="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-1 shadow-xs">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Khoảng thời gian</span>
+          <p class="text-xs font-bold text-slate-900 font-mono truncate">
+            {{ profileResult.profile.dateRange.start || 'N/A' }} → {{ profileResult.profile.dateRange.end || 'N/A' }}
+          </p>
+          <p class="text-xs text-indigo-600 font-medium">
+            {{ profileResult.profile.dateRange.spanDays ? profileResult.profile.dateRange.spanDays + ' ngày bán hàng' : 'Cột ngày khả dụng' }}
+          </p>
+        </article>
+
+        <!-- Card 4: SKU Count -->
+        <article class="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-1 shadow-xs">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Mã sản phẩm (SKU)</span>
+          <p class="text-2xl font-black text-slate-900 font-mono">{{ profileResult.profile.uniqueSkuCount | number }}</p>
+          <p class="text-xs text-purple-700 font-medium truncate" [title]="'Cột SKU: ' + (profileResult.profile.skuColumnDetected || 'Auto-detected')">
+            Mã cột: {{ profileResult.profile.skuColumnDetected || 'Tự động nhận diện' }}
+          </p>
+        </article>
+      </div>
+
+      <!-- Detected Columns & Types -->
+      <div class="bg-white border border-slate-200/80 rounded-3xl p-6 space-y-4 shadow-xs">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            Các cột dữ liệu được tìm thấy trong tệp
+          </h3>
+          <span class="text-xs font-mono text-slate-500 font-bold">{{ profileResult.profile.headers.length }} cột</span>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <div *ngFor="let header of profileResult.profile.headers" 
+               class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-2 text-xs font-sans">
+            <span class="font-bold text-slate-900">{{ header }}</span>
+            <span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 font-bold font-mono">
+              {{ profileResult.profile.columnTypes[header] || 'string' }}
+            </span>
+            <span *ngIf="profileResult.profile.missingValues[header]" class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold font-mono" [title]="'Thiếu ' + profileResult.profile.missingValues[header].count + ' dòng'">
+              Trống {{ profileResult.profile.missingValues[header].pct }}%
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data Preview Table (First 10 Rows) -->
+      <div class="bg-white border border-slate-200/80 rounded-3xl p-6 space-y-4 shadow-xs overflow-hidden">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+            </svg>
+            Xem trước dữ liệu mẫu (10 dòng đầu tiên)
+          </h3>
+          <span class="text-xs text-slate-500 font-medium">Kiểm tra thông tin trước khi xác nhận</span>
+        </div>
+
+        <div class="overflow-x-auto border border-slate-200 rounded-2xl max-h-[320px]">
+          <table class="w-full text-left border-collapse text-xs font-sans">
+            <thead class="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+              <tr>
+                <th class="p-3 text-slate-500 text-[10px] uppercase font-bold w-12 text-center">#</th>
+                <th *ngFor="let col of profileResult.profile.headers" class="p-3 text-slate-900 font-bold whitespace-nowrap border-r border-slate-200">
+                  {{ col }}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 bg-white">
+              <tr *ngFor="let row of profileResult.profile.previewRows; let idx = index" class="hover:bg-slate-50/60 transition-colors">
+                <td class="p-3 text-slate-400 text-center font-bold text-[10px]">{{ idx + 1 }}</td>
+                <td *ngFor="let cell of row" class="p-3 text-slate-700 whitespace-nowrap max-w-[200px] truncate border-r border-slate-100 font-mono text-[11px]">
+                  {{ cell || '—' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Action Footer CTA -->
+      <footer class="pt-4 flex items-center justify-between border-t border-slate-200">
+        <span class="text-xs text-slate-600 font-medium flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          Dữ liệu hợp lệ, sẵn sàng chuyển sang bước tiếp theo
+        </span>
+        <button (click)="proceedMapping()" 
+                class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-7 py-3 rounded-xl transition-all active:scale-95 flex items-center gap-2 cursor-pointer shadow-xs">
+          <span>Tiến hành xác nhận cột dữ liệu</span>
+          <svg class="w-4 h-4 stroke-current" fill="none" viewBox="0 0 24 24">
+            <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2"></line>
+            <polyline points="12 5 19 12 12 19" stroke="currentColor" stroke-width="2"></polyline>
+          </svg>
+        </button>
+      </footer>
+    </div>
+  </section>
+</main>

@@ -1,0 +1,18 @@
+# Module 03 Risk Monitoring Thresholds & Baseline Configuration (M3-08)
+exp02_baseline:
+  CRITICAL: 0.636
+  HIGH_RISK: 0.245
+  MEDIUM_RISK: 0.020
+  LOW_RISK: 0.099
+
+exp03_benchmark:
+  macro_f1: 0.7336
+  high_risk_recall: 0.9807
+  fnr: 0.0193
+
+monitoring_thresholds:
+  distribution_shift_warning: 0.15
+  distribution_shift_critical: 0.25
+  probability_mean_shift_threshold: 0.20
+  min_high_risk_recall: 0.95
+  max_fnr_threshold: 0.05

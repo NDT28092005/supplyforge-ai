@@ -1,0 +1,16 @@
+{
+  "recommendation_policy_version": "1.0",
+  "policy_name": "SupplyForge Standard Decision Recommendation Policy",
+  "urgency_mapping": {
+    "IMMEDIATE": { "min_priority_tier": "P1", "min_risk_class": "CRITICAL", "min_capital_exposure": 10000000.0 },
+    "HIGH": { "min_priority_tier": "P2", "allowed_risk_classes": ["CRITICAL", "HIGH_RISK"] },
+    "MEDIUM": { "min_priority_tier": "P3", "allowed_risk_classes": ["MEDIUM_RISK", "HIGH_RISK"] },
+    "LOW": { "min_priority_tier": "P4", "allowed_risk_classes": ["LOW_RISK", "MEDIUM_RISK"] }
+  },
+  "controlled_vocabulary": ["HOLD", "MONITOR", "PROMOTION", "BUNDLE", "DISCOUNT", "CLEARANCE", "STOP_REPLENISHMENT", "REVIEW", "NO_ACTION"],
+  "fallback_policy": {
+    "no_eligible_action": "REVIEW",
+    "insufficient_data": "NO_ACTION",
+    "low_risk_no_issue": "HOLD"
+  }
+}

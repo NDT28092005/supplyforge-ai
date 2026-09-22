@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ActionEligibilityResultPayload",
+  "type": "object",
+  "required": [
+    "sku",
+    "evaluation_status",
+    "eligible_actions",
+    "blocked_actions",
+    "action_evaluations",
+    "policy_version",
+    "evaluated_at"
+  ],
+  "properties": {
+    "sku": { "type": "string" },
+    "evaluation_status": { "type": "string" },
+    "eligible_actions": { "type": "array" },
+    "blocked_actions": { "type": "array" },
+    "requires_review_actions": { "type": "array" },
+    "action_evaluations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["action_id", "status", "reasons"],
+        "properties": {
+          "action_id": { "type": "string" },
+          "status": { "type": "string", "enum": ["ELIGIBLE", "INELIGIBLE", "BLOCKED", "REQUIRES_REVIEW"] },
+          "reasons": { "type": "array" }
+        }
+      }
+    },
+    "policy_version": { "type": "string" },
+    "evaluated_at": { "type": "string" }
+  }
+}

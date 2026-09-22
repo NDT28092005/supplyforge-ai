@@ -1,0 +1,217 @@
+<main class="min-h-screen bg-slate-50/50 flex flex-col justify-center px-4 sm:px-8 lg:px-16 py-8">
+  <section class="max-w-6xl mx-auto w-full space-y-8 animate-fade-in" aria-labelledby="profile-heading">
+    <!-- Header -->
+    <header class="bg-white border border-slate-200/80 p-7 sm:p-9 rounded-3xl shadow-xs space-y-3">
+      <div class="flex items-center gap-3">
+        <span class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3.5 py-1 rounded-full inline-block">
+          Bước 4: Tổng quan tệp dữ liệu đã nạp
+        </span>
+      </div>
+      <h1 id="profile-heading" class="font-sans font-black text-3xl sm:text-4xl text-slate-900 tracking-tight">
+        Kết quả kiểm tra &amp; Thống kê dữ liệu
+      </h1>
+      <p class="text-slate-600 text-sm sm:text-base font-sans font-medium max-w-3xl leading-relaxed">
+        Hệ thống đã tự động đo lường số lượng giao dịch, số mã sản phẩm (SKU), khoảng thời gian bán hàng và tính ổn định của từng mặt hàng.
+      </p>
+    </header>
+
+    <div *ngIf="profileData" class="space-y-6 animate-fade-in">
+
+      <!-- 1. Readiness Banner -->
+      <article class="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xs relative overflow-hidden">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 pb-6 border-b border-slate-100">
+          <div class="space-y-2">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Đánh giá chất lượng dữ liệu</span>
+            <div class="flex items-center gap-3">
+              <span [class]="getStatusBadgeClass(profileData.readiness.status)" class="text-xs font-mono font-bold uppercase tracking-wider border px-3.5 py-1.5 rounded-full inline-block">
+                {{ profileData.readiness.status === 'READY' ? 'ĐẠT YÊU CẦU' : profileData.readiness.status }}
+              </span>
+              <span class="text-xs text-slate-600 font-sans font-medium">Điểm đánh giá: <strong class="text-slate-900 font-bold text-base font-mono">{{ profileData.readiness.readinessScore }} / 100</strong></span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-xl flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <span>{{ profileData.readiness.checksPassed.length }} tiêu chí kiểm tra Đạt</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Warnings & Critical Errors -->
+        <div *ngIf="profileData.readiness.warnings && profileData.readiness.warnings.length > 0" class="space-y-2">
+          <h4 class="text-xs font-bold text-amber-800 flex items-center gap-2">
+            <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            Lưu ý về dữ liệu:
+          </h4>
+          <ul class="space-y-1.5 text-xs text-slate-600 font-medium pl-6 list-disc">
+            <li *ngFor="let warn of profileData.readiness.warnings">{{ warn }}</li>
+          </ul>
+        </div>
+      </article>
+
+      <!-- 2. Dataset Overview KPI Grid -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Records -->
+        <article class="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-1 shadow-xs">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng số bản ghi</span>
+          <p class="text-2xl font-black text-slate-900 font-mono">{{ profileData.overview.totalRecords | number }}</p>
+          <p class="text-xs text-indigo-600 font-medium">Lịch sử đơn bán hàng</p>
+        </article>
+
+        <!-- Unique SKUs -->
+        <article class="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-1 shadow-xs">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Số lượng SKU</span>
+          <p class="text-2xl font-black text-slate-900 font-mono">{{ profileData.overview.uniqueSkus | number }}</p>
+          <p class="text-xs text-purple-700 font-medium">Sản phẩm riêng biệt</p>
+        </article>
+
+        <!-- Time Coverage -->
+        <article class="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-1 shadow-xs">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Khoảng thời gian</span>
+          <p class="text-2xl font-black text-slate-900 font-mono">{{ profileData.overview.observationPeriodDays }} <span class="text-xs font-normal">ngày</span></p>
+          <p class="text-xs text-emerald-700 font-medium truncate">
+            {{ profileData.overview.minTransactionDate || 'N/A' }} → {{ profileData.overview.maxTransactionDate || 'N/A' }}
+          </p>
+        </article>
+
+        <!-- Zero-Sales Sparsity -->
+        <article class="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-1 shadow-xs">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tỷ lệ ngày không bán được</span>
+          <p class="text-2xl font-black text-amber-600 font-mono">{{ profileData.sparsity.avgZeroSalesRatePct }}%</p>
+          <p class="text-xs text-slate-500 font-medium">Trung bình trên toàn bộ SKU</p>
+        </article>
+      </div>
+
+      <!-- 3. Demand Sparsity & Intermittency Breakdown -->
+      <div class="bg-white border border-slate-200/80 rounded-3xl p-6 space-y-4 shadow-xs">
+        <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+          <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+          </svg>
+          Phân bố nhịp độ bán hàng của các sản phẩm
+        </h3>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-sans">
+          <!-- Intermittent -->
+          <div class="p-4 rounded-2xl bg-purple-50 border border-purple-100 space-y-1">
+            <span class="text-purple-800 font-bold uppercase text-[11px]">Bán thưa thớt (Bán rất chậm)</span>
+            <p class="text-xl font-black text-purple-900 font-mono">{{ profileData.sparsity.intermittentSkuCount }} SKU</p>
+            <p class="text-xs text-purple-700/80 font-medium">Trên 75% số ngày không có đơn phát sinh</p>
+          </div>
+
+          <!-- Lumpy -->
+          <div class="p-4 rounded-2xl bg-amber-50 border border-amber-100 space-y-1">
+            <span class="text-amber-800 font-bold uppercase text-[11px]">Bán không đều (Theo đợt)</span>
+            <p class="text-xl font-black text-amber-900 font-mono">{{ profileData.sparsity.lumpySkuCount }} SKU</p>
+            <p class="text-xs text-amber-700/80 font-medium">Từ 50% – 75% số ngày không có đơn</p>
+          </div>
+
+          <!-- Smooth -->
+          <div class="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 space-y-1">
+            <span class="text-emerald-800 font-bold uppercase text-[11px]">Bán đều đặn (Ổn định)</span>
+            <p class="text-xl font-black text-emerald-900 font-mono">{{ profileData.sparsity.smoothSkuCount }} SKU</p>
+            <p class="text-xs text-emerald-700/80 font-medium">Dưới 50% số ngày không có đơn phát sinh</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Interactive SKU-Level Profile Table -->
+      <div class="bg-white border border-slate-200/80 rounded-3xl p-6 space-y-4 shadow-xs overflow-hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-3">
+          <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+            </svg>
+            Thống kê chi tiết từng mã sản phẩm (Tổng {{ totalSkus }} SKU)
+          </h3>
+
+          <!-- Search Box -->
+          <div class="relative min-w-[240px]">
+            <input type="text" 
+                   [(ngModel)]="searchQuery" 
+                   (ngModelChange)="onSearchChange()" 
+                   placeholder="Tìm kiếm mã SKU, tên sản phẩm..."
+                   class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 font-medium outline-none focus:border-indigo-500">
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="overflow-x-auto border border-slate-200 rounded-2xl max-h-[400px]">
+          <table class="w-full text-left border-collapse text-xs font-sans">
+            <thead class="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+              <tr>
+                <th class="p-3 text-slate-900 font-bold whitespace-nowrap">Mã SKU</th>
+                <th class="p-3 text-slate-900 font-bold whitespace-nowrap">Tên sản phẩm</th>
+                <th class="p-3 text-slate-900 font-bold whitespace-nowrap text-right">Tổng đã bán</th>
+                <th class="p-3 text-slate-900 font-bold whitespace-nowrap text-right">Số ngày có đơn</th>
+                <th class="p-3 text-slate-900 font-bold whitespace-nowrap text-right">Tỷ lệ không bán %</th>
+                <th class="p-3 text-slate-900 font-bold whitespace-nowrap text-right">Tốc độ/ngày</th>
+                <th class="p-3 text-slate-900 font-bold whitespace-nowrap text-right">Số ngày ngưng đơn</th>
+                <th class="p-3 text-slate-900 font-bold whitespace-nowrap text-center">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 bg-white">
+              <tr *ngFor="let item of skuItems" class="hover:bg-slate-50/60 transition-colors">
+                <td class="p-3 font-bold text-indigo-700 font-mono whitespace-nowrap">{{ item.sku }}</td>
+                <td class="p-3 text-slate-700 font-medium max-w-[240px] truncate" [title]="item.product_name">{{ item.product_name }}</td>
+                <td class="p-3 text-slate-900 font-bold text-right font-mono">{{ item.total_sales | number }}</td>
+                <td class="p-3 text-slate-600 text-right font-mono">{{ item.active_sales_days }} / {{ item.observation_days }}</td>
+                <td class="p-3 text-amber-700 font-bold text-right font-mono">{{ (item.zero_sales_rate * 100) | number:'1.1-1' }}%</td>
+                <td class="p-3 text-emerald-700 font-bold text-right font-mono">{{ item.sales_velocity }}</td>
+                <td class="p-3 text-slate-600 text-right font-mono">{{ item.days_since_last_sale }} ngày</td>
+                <td class="p-3 text-center">
+                  <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold inline-block"
+                        [ngClass]="{
+                          'bg-emerald-50 text-emerald-700 border border-emerald-200': item.data_quality_status === 'VALID',
+                          'bg-amber-50 text-amber-700 border border-amber-200': item.data_quality_status === 'WARNING_SHORT_HISTORY',
+                          'bg-rose-50 text-rose-700 border border-rose-200': item.data_quality_status === 'ZERO_SALES'
+                        }">
+                    {{ item.data_quality_status === 'VALID' ? 'BÌNH THƯỜNG' : (item.data_quality_status === 'ZERO_SALES' ? 'KHÔNG CÓ ĐƠN' : 'LỊCH SỬ NGẮN') }}
+                  </span>
+                </td>
+              </tr>
+              <tr *ngIf="skuItems.length === 0">
+                <td colspan="8" class="p-6 text-center text-slate-500 font-medium">
+                  Không tìm thấy mã sản phẩm phù hợp.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Bar -->
+        <div class="flex items-center justify-between pt-2 text-xs text-slate-600 font-medium">
+          <span>Trang {{ currentPage }} / {{ totalPages }} (Tổng {{ totalSkus }} SKU)</span>
+          <div class="flex gap-2">
+            <button (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 1" class="px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 font-bold cursor-pointer">
+              Trang trước
+            </button>
+            <button (click)="goToPage(currentPage + 1)" [disabled]="currentPage === totalPages" class="px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 font-bold cursor-pointer">
+              Trang sau
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Footer CTA -->
+      <footer class="pt-4 flex items-center justify-between border-t border-slate-200">
+        <span class="text-xs text-slate-600 font-medium flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          Dữ liệu hoàn toàn sẵn sàng cho phân tích kho
+        </span>
+        <button (click)="onProceed()" 
+                class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-7 py-3 rounded-xl transition-all active:scale-95 flex items-center gap-2 cursor-pointer shadow-xs">
+          <span>Chuyển sang trang Tổng quan kho hàng</span>
+          <svg class="w-4 h-4 stroke-current" fill="none" viewBox="0 0 24 24">
+            <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2"></line>
+            <polyline points="12 5 19 12 12 19" stroke="currentColor" stroke-width="2"></polyline>
+          </svg>
+        </button>
+      </footer>
+    </div>
+  </section>
+</main>

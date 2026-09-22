@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ExecutionPlanContract",
+  "type": "object",
+  "required": ["plan_id", "subject", "steps", "execution_mode"],
+  "properties": {
+    "plan_id": { "type": "string" },
+    "subject": {
+      "type": "object",
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "type": "string" },
+        "id": { "type": "string" }
+      }
+    },
+    "execution_mode": { "type": "string", "enum": ["SEQUENTIAL", "PARALLEL", "HYBRID"] },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step_number", "tool_name"],
+        "properties": {
+          "step_number": { "type": "integer" },
+          "tool_name": { "type": "string" },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "is_parallelable": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FinancialImpactSummaryPayload",
+  "type": "object",
+  "required": [
+    "summary",
+    "financial_impact_by_risk",
+    "financial_impact_by_aging",
+    "financial_impact_matrix",
+    "top_financial_skus",
+    "financial_concentration"
+  ],
+  "properties": {
+    "summary": {
+      "type": "object",
+      "required": ["total_inventory_value", "total_risk_weighted_exposure", "total_opportunity_cost"],
+      "properties": {
+        "total_inventory_value": { "type": "number" },
+        "total_risk_weighted_exposure": { "type": "number" },
+        "total_opportunity_cost": { "type": "number" },
+        "annual_opportunity_rate": { "type": "number" }
+      }
+    },
+    "financial_impact_by_risk": { "type": "array" },
+    "financial_impact_by_aging": { "type": "array" },
+    "financial_impact_matrix": { "type": "array" },
+    "top_financial_skus": { "type": "array" },
+    "financial_concentration": {
+      "type": "object",
+      "properties": {
+        "top_10_capital_exposure": { "type": "number" },
+        "top_10_opportunity_cost": { "type": "number" },
+        "top_10_opportunity_cost_share": { "type": "number" }
+      }
+    }
+  }
+}

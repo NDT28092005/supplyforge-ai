@@ -1,0 +1,24 @@
+{
+  "optimization_policy_version": "1.0",
+  "policy_name": "SupplyForge Standard Capital Recovery Optimization Policy",
+  "scoring_weights": {
+    "recovery_rate_weight": 0.40,
+    "capital_release_weight": 0.30,
+    "discount_penalty_weight": 0.20,
+    "margin_loss_weight": 0.10
+  },
+  "constraints": {
+    "max_allowed_discount_rate": 0.35,
+    "minimum_margin_rate": 0.05,
+    "minimum_incremental_recovery": 0.0
+  },
+  "reason_code_mapping": {
+    "HIGH_CAPITAL_RELEASE": "Phương án giúp giải phóng tỷ lệ vốn phơi nhiễm cao.",
+    "WITHIN_DISCOUNT_LIMIT": "Mức chiết khấu nằm trong ngưỡng quy định của chính sách.",
+    "WITHIN_MARGIN_LIMIT": "Biên lợi nhuận đạt yêu cầu tối thiểu.",
+    "BETTER_THAN_BASELINE": "Doanh thu và lượng vốn thu hồi vượt trội so với kịch bản gốc.",
+    "HIGH_RECOVERY_EFFICIENCY": "Tỷ lệ hiệu quả thu hồi vốn đạt mức tối ưu.",
+    "EXCESSIVE_DISCOUNT": "Bị loại do vượt quá mức giảm giá tối đa cho phép.",
+    "MARGIN_CONSTRAINT": "Bị loại do biên lợi nhuận thấp hơn mức tối thiểu."
+  }
+}

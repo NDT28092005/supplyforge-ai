@@ -1,0 +1,135 @@
+{
+  "registry_version": "1.0",
+  "domain": "Slow-Moving Product Risk Detection",
+  "description": "Registry mapping technical feature vector symbols to business-readable terminology and contribution direction rules.",
+  "features": {
+    "sales_velocity_30d": {
+      "display_name": "Tốc độ bán 30 ngày",
+      "business_interpretation": "Tốc độ xuất bán trung bình hằng ngày trong 30 ngày gần nhất tính tới t0",
+      "unit": "đơn vị/ngày",
+      "category": "Sales Behavior",
+      "is_temporal_safe": true
+    },
+    "sales_velocity_90d": {
+      "display_name": "Tốc độ bán 90 ngày",
+      "business_interpretation": "Tốc độ xuất bán trung bình hằng ngày trong 90 ngày quan sát qua",
+      "unit": "đơn vị/ngày",
+      "category": "Sales Behavior",
+      "is_temporal_safe": true
+    },
+    "sales_velocity_full": {
+      "display_name": "Tốc độ bán toàn chu kỳ",
+      "business_interpretation": "Tốc độ xuất bán trung bình hằng ngày trong toàn bộ thời gian lịch sử quan sát",
+      "unit": "đơn vị/ngày",
+      "category": "Sales Behavior",
+      "is_temporal_safe": true
+    },
+    "sales_last_30d": {
+      "display_name": "Tổng sản lượng bán 30 ngày qua",
+      "business_interpretation": "Tổng số lượng sản phẩm tiêu thụ thành công trong 30 ngày tính tới t0",
+      "unit": "đơn vị",
+      "category": "Sales Behavior",
+      "is_temporal_safe": true
+    },
+    "past_total_sold": {
+      "display_name": "Tổng lịch sử bán tích lũy",
+      "business_interpretation": "Tổng số lượng bán hàng ghi nhận trong toàn bộ cửa sổ quan sát quá khứ",
+      "unit": "đơn vị",
+      "category": "Historical Scale",
+      "is_temporal_safe": true
+    },
+    "past_total_sales": {
+      "display_name": "Tổng lịch sử bán tích lũy",
+      "business_interpretation": "Tổng số lượng bán hàng ghi nhận trong toàn bộ cửa sổ quan sát quá khứ",
+      "unit": "đơn vị",
+      "category": "Historical Scale",
+      "is_temporal_safe": true
+    },
+    "zero_rate_90d": {
+      "display_name": "Tỷ lệ ngày không phát sinh bán",
+      "business_interpretation": "Tỷ lệ số ngày không ghi nhận bất kỳ đơn hàng nào trong 90 ngày qua",
+      "unit": "tỷ lệ (0-1)",
+      "category": "Sales Behavior",
+      "is_temporal_safe": true
+    },
+    "zero_rate_full": {
+      "display_name": "Tỷ lệ ngày đứng hàng toàn chu kỳ",
+      "business_interpretation": "Tỷ lệ số ngày không ghi nhận giao dịch trong toàn bộ thời gian lịch sử quan sát",
+      "unit": "tỷ lệ (0-1)",
+      "category": "Sales Behavior",
+      "is_temporal_safe": true
+    },
+    "dsls": {
+      "display_name": "Số ngày từ lần bán gần nhất",
+      "business_interpretation": "Số ngày trôi qua từ giao dịch bán hàng phát sinh gần nhất tính đến thời điểm t0",
+      "unit": "ngày",
+      "category": "Recency Signal",
+      "is_temporal_safe": true
+    },
+    "adi": {
+      "display_name": "Khoảng cách trung bình giữa các lần bán (ADI)",
+      "business_interpretation": "Average Demand Interval - Mức độ thưa thớt giữa các chu kỳ đơn hàng",
+      "unit": "ngày/chu kỳ",
+      "category": "Demand Pattern",
+      "is_temporal_safe": true
+    },
+    "cv2": {
+      "display_name": "Mức độ biến động nhu cầu (CV²)",
+      "business_interpretation": "Coefficient of Variation Squared - Mức độ bất ổn định của sản lượng mỗi đơn",
+      "unit": "hệ số biến động",
+      "category": "Demand Pattern",
+      "is_temporal_safe": true
+    },
+    "forecast_7d": {
+      "display_name": "Dự báo nhu cầu 7 ngày tới",
+      "business_interpretation": "Dự báo sản lượng tiêu thụ trong 7 ngày tới dựa trên mô hình quan sát tại t0",
+      "unit": "đơn vị",
+      "category": "Short-term Demand Forecast",
+      "is_temporal_safe": true
+    },
+    "forecast_14d": {
+      "display_name": "Dự báo nhu cầu 14 ngày tới",
+      "business_interpretation": "Dự báo sản lượng tiêu thụ trong 14 ngày tới dựa trên mô hình quan sát tại t0",
+      "unit": "đơn vị",
+      "category": "Short-term Demand Forecast",
+      "is_temporal_safe": true
+    },
+    "forecast_30d": {
+      "display_name": "Dự báo nhu cầu 30 ngày tới",
+      "business_interpretation": "Dự báo sản lượng tiêu thụ trong 30 ngày tới dựa trên mô hình quan sát tại t0",
+      "unit": "đơn vị",
+      "category": "Demand Forecast",
+      "is_temporal_safe": true
+    },
+    "forecast_trend": {
+      "display_name": "Xu hướng thay đổi nhu cầu dự báo",
+      "business_interpretation": "Tỷ lệ tăng trưởng hoặc suy giảm giữa các khoảng thời gian dự báo nhu cầu ngắn hạn",
+      "unit": "hệ số xu hướng",
+      "category": "Demand Forecast",
+      "is_temporal_safe": true
+    },
+    "demand_probability": {
+      "display_name": "Xác suất phát sinh nhu cầu",
+      "business_interpretation": "Xác suất sản phẩm phát sinh ít nhất 1 đơn hàng trong chu kỳ tiếp theo",
+      "unit": "xác suất (0-1)",
+      "category": "Demand Pattern",
+      "is_temporal_safe": true
+    },
+    "expected_demand_daily": {
+      "display_name": "Nhu cầu kỳ vọng hằng ngày",
+      "business_interpretation": "Sản lượng xuất bán kỳ vọng trung bình hằng ngày trong chu kỳ sắp tới",
+      "unit": "đơn vị/ngày",
+      "category": "Demand Forecast",
+      "is_temporal_safe": true
+    }
+  },
+  "forbidden_features": [
+    "fut_qty_60d",
+    "future_velocity",
+    "future_sales",
+    "DRR",
+    "ground_truth_label",
+    "is_slow_moving_gt",
+    "future_revenue"
+  ]
+}

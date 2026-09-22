@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemoryItemContract",
+  "type": "object",
+  "required": ["memory_id", "tenant_id", "merchant_id", "memory_type", "key", "value"],
+  "properties": {
+    "memory_id": { "type": "string" },
+    "tenant_id": { "type": "string" },
+    "merchant_id": { "type": "string" },
+    "memory_type": {
+      "type": "string",
+      "enum": ["WORKING_MEMORY", "EPISODIC", "USER_PREFERENCE", "DECISION_CONTEXT", "ACTION_CONTEXT"]
+    },
+    "key": { "type": "string" },
+    "value": { "type": ["string", "object", "array", "number", "boolean"] },
+    "source": { "type": "string", "enum": ["USER_EXPLICIT", "SYSTEM_INFERRED", "CONVERSATION"] },
+    "expires_at": { "type": ["string", "null"] }
+  }
+}

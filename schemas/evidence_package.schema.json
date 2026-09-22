@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CopilotEvidencePackage",
+  "type": "object",
+  "required": [
+    "context_id",
+    "merchant_id",
+    "dataset_version",
+    "readiness_status",
+    "subject",
+    "evidence_items",
+    "validation_summary"
+  ],
+  "properties": {
+    "context_id": { "type": "string" },
+    "merchant_id": { "type": "string" },
+    "dataset_version": { "type": "string" },
+    "readiness_status": { "type": "string" },
+    "subject": {
+      "type": "object",
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "type": "string" },
+        "id": { "type": "string" }
+      }
+    },
+    "risk": { "type": "object" },
+    "explanation": { "type": "object" },
+    "capital": { "type": "object" },
+    "decision": { "type": "object" },
+    "evidence_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metric", "value", "source_module", "interpretation"],
+        "properties": {
+          "metric": { "type": "string" },
+          "value": {},
+          "source_module": { "type": "string" },
+          "interpretation": { "type": "string" }
+        }
+      }
+    },
+    "validation_summary": {
+      "type": "object",
+      "required": ["is_valid", "version_mismatch", "missing_fields"],
+      "properties": {
+        "is_valid": { "type": "boolean" },
+        "version_mismatch": { "type": "boolean" },
+        "missing_fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
