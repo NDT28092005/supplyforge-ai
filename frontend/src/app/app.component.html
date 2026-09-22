@@ -1,5 +1,5 @@
-<!-- Header Navbar -->
-<app-header 
+<!-- Header Navbar (hidden on auth page) -->
+<app-header *ngIf="stage !== 'auth'"
   [user]="currentUser" 
   [stage]="stage" 
   (openLogin)="openLoginModal()" 
@@ -8,12 +8,23 @@
   (navigateStage)="handleStageSelect($event)">
 </app-header>
 
-<!-- Main Container -->
-<div class="min-h-[calc(100vh-61px)] flex bg-background text-primary">
+<!-- Auth Page (full screen, no header) -->
+<div *ngIf="stage === 'auth'" class="fade-in">
+  <app-auth-page 
+    [initialTab]="authInitialTab"
+    (loginSuccess)="handleAuthLogin($event)"
+    (demoLogin)="performDemoLogin()"
+    (googleLogin)="openLoginModal()"
+    (goBack)="handleAuthGoBack()">
+  </app-auth-page>
+</div>
+
+<!-- Main Container (hidden on auth page) -->
+<div *ngIf="stage !== 'auth'" class="min-h-[calc(100vh-61px)] flex bg-background text-primary">
 
   <!-- Fixed Left Sidebar (Active in App Dashboards) -->
   <app-sidebar 
-    *ngIf="stage !== 'hero' && stage !== 'about_us' && stage !== 'services' && stage !== 'blog' && stage !== 'processing' && stage !== 'mapping'" 
+    *ngIf="stage !== 'hero' && stage !== 'auth' && stage !== 'about_us' && stage !== 'services' && stage !== 'blog' && stage !== 'processing' && stage !== 'mapping'" 
     [activeStage]="stage" 
     (selectStage)="handleStageSelect($event)" 
     (importIncremental)="startIncrementalImport()"
@@ -21,7 +32,7 @@
   </app-sidebar>
 
   <!-- Main Content Stage -->
-  <main class="flex-1 transition-all" [ngClass]="{'pl-64': stage !== 'hero' && stage !== 'about_us' && stage !== 'services' && stage !== 'blog' && stage !== 'processing' && stage !== 'mapping'}">
+  <main class="flex-1 transition-all" [ngClass]="{'pl-64': stage !== 'hero' && stage !== 'auth' && stage !== 'about_us' && stage !== 'services' && stage !== 'blog' && stage !== 'processing' && stage !== 'mapping'}">
     <div class="max-w-[1440px] mx-auto w-full">
 
       <!-- Ingestion Pipeline Stepper Bar (Active during Data Ingestion & Profiling) -->
@@ -62,7 +73,7 @@
 
       <!-- 1. Landing Page Stage (Trust Theater Hero) -->
       <div *ngIf="stage === 'hero'" class="fade-in">
-        <app-trust-theater-hero (upload)="startProcessing($event)" (openLogin)="openLoginModal()" (navigateStage)="handleStageSelect($event)"></app-trust-theater-hero>
+        <app-trust-theater-hero [user]="currentUser" (upload)="startProcessing($event)" (openLogin)="openLoginModal()" (navigateStage)="handleStageSelect($event)"></app-trust-theater-hero>
       </div>
 
       <!-- 1.1 About Us Stage (/api/v1/about_us) -->

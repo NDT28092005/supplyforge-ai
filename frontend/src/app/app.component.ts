@@ -18,6 +18,7 @@ import { CopilotWidgetComponent } from './copilot-widget/copilot-widget.componen
 import { AboutUsPageComponent } from './about-us-page/about-us-page.component';
 import { ServicesPageComponent } from './services-page/services-page.component';
 import { BlogPageComponent } from './blog-page/blog-page.component';
+import { AuthPageComponent } from './auth-page/auth-page.component';
 
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
@@ -44,7 +45,8 @@ import { FieldConfig } from './field-config';
     CopilotWidgetComponent,
     AboutUsPageComponent,
     ServicesPageComponent,
-    BlogPageComponent
+    BlogPageComponent,
+    AuthPageComponent
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
@@ -53,8 +55,9 @@ export class AppComponent implements OnInit {
   title = 'SupplyForge AI';
   selectedSkuId: string | null = null;
 
-  // App Stages: hero | about_us | services | blog | csv-upload | processing | mapping | dataset-profile | executive-dashboard | slow-moving-risk | capital-exposure | decision-support
+  // App Stages: hero | auth | about_us | services | blog | csv-upload | processing | mapping | dataset-profile | executive-dashboard | slow-moving-risk | capital-exposure | decision-support
   stage: string = 'hero';
+  authInitialTab: 'login' | 'register' = 'login';
 
   uploadFile: File | null = null;
   mappingData: any = null;
@@ -526,9 +529,15 @@ export class AppComponent implements OnInit {
     this.stage = 'hero';
   }
 
-  // --- Auth Modal Handlers ---
+  // --- Auth Page Navigation ---
   openLoginModal(): void {
-    this.isLoginOpen = true;
+    this.authInitialTab = 'login';
+    this.stage = 'auth';
+  }
+
+  openRegisterPage(): void {
+    this.authInitialTab = 'register';
+    this.stage = 'auth';
   }
 
   closeLoginModal(): void {
@@ -538,6 +547,46 @@ export class AppComponent implements OnInit {
   handleLoginSuccess(user: { name: string; email: string }): void {
     this.currentUser = user;
     this.isLoginOpen = false;
+  }
+
+  handleAuthLogin(user: { name: string; email: string; storeName?: string }): void {
+    // Tạo mock JWT Token
+    const mockPayload = {
+      sub: user.email,
+      name: user.name,
+      email: user.email,
+      role: 'enterprise_admin',
+      iss: 'supplyforge.ai',
+      iat: Math.floor(Date.now() / 1000)
+    };
+    const mockJwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' + btoa(JSON.stringify(mockPayload)) + '.signature';
+    this.authService.setToken(mockJwt);
+
+    this.currentUser = {
+      name: user.name,
+      email: user.email,
+      role: user.storeName ? 'Chủ cửa hàng' : 'Quản trị viên',
+      storeName: user.storeName
+    };
+
+    // Kiểm tra đã có dữ liệu chưa → nếu có thì vào dashboard, chưa thì về hero
+    this.apiService.checkData().subscribe({
+      next: (res) => {
+        if (res && res.hasData) {
+          this.loadDashboardData();
+          this.stage = 'executive-dashboard';
+        } else {
+          this.stage = 'hero';
+        }
+      },
+      error: () => {
+        this.stage = 'hero';
+      }
+    });
+  }
+
+  handleAuthGoBack(): void {
+    this.stage = 'hero';
   }
 
   submitPhoneNumber(): void {
@@ -586,8 +635,21 @@ export class AppComponent implements OnInit {
     };
     this.currentUser = demoUser;
     this.authService.setToken('demo_token');
-    this.loadDashboardData();
-    this.stage = 'executive-dashboard';
+
+    // Kiểm tra đã có dữ liệu → nếu có vào dashboard, chưa thì về hero để upload CSV
+    this.apiService.checkData().subscribe({
+      next: (res) => {
+        if (res && res.hasData) {
+          this.loadDashboardData();
+          this.stage = 'executive-dashboard';
+        } else {
+          this.stage = 'hero';
+        }
+      },
+      error: () => {
+        this.stage = 'hero';
+      }
+    });
   }
 
   openInfoModal(tab: 'about' | 'services' | 'blog'): void {
@@ -608,5 +670,7 @@ export class AppComponent implements OnInit {
   performLogout(): void {
     this.authService.clearToken();
     this.currentUser = null;
+    this.dashboardData = null;
+    this.stage = 'hero';
   }
 }

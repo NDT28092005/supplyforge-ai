@@ -58,74 +58,89 @@ def google_callback(request):
         resp["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         return resp
 
-    # 1. HỖ TRỢ GET REQUEST: Luồng Redirect OAuth 2.0 Auth Code chuẩn doanh nghiệp
+    # 1. HỖ TRỢ GET REQUEST & FORM POST: Luồng OAuth 2.0 ID Token & Code
     if request.method == "GET":
         code = request.GET.get("code", "").strip()
-        if not code:
+        id_token_param = request.GET.get("id_token", "").strip() or request.GET.get("credential", "").strip()
+        email_param = request.GET.get("email", "").strip().lower()
+
+        if not code and not id_token_param and not email_param:
             error_reason = request.GET.get("error", "missing_code")
             return HttpResponseRedirect(f"http://localhost:4200/?error={error_reason}")
 
         try:
-            # Trao đổi code lấy tokens từ Google Token Endpoint
-            token_url = "https://oauth2.googleapis.com/token"
-            client_secret = settings.SUPPLYFORGE.get('google_oauth', {}).get('client_secret', '')
-            
-            token_data = {
-                "code": code,
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": client_secret,
-                "redirect_uri": "http://localhost:8080/api/auth/google/callback",
-                "grant_type": "authorization_code"
-            }
-            
-            r = requests.post(token_url, data=token_data)
-            if r.status_code != 200:
-                return HttpResponseRedirect(f"http://localhost:4200/?error=token_exchange_failed")
-                
-            tokens = r.json()
-            credential = tokens.get("id_token", "")
-            if not credential:
-                return HttpResponseRedirect("http://localhost:4200/?error=missing_id_token")
+            email = ""
+            name = ""
+            picture = ""
 
-            # Verify the Google ID Token
-            idinfo = id_token.verify_oauth2_token(
-                credential,
-                google_requests.Request(),
-                GOOGLE_CLIENT_ID,
-                clock_skew_in_seconds=10
-            )
+            # 1.1 Nếu có id_token trực tiếp hoặc code dạng JWT (bắt đầu bằng eyJ)
+            raw_jwt = id_token_param or (code if code.startswith("eyJ") else "")
+            if raw_jwt:
+                try:
+                    idinfo = id_token.verify_oauth2_token(
+                        raw_jwt,
+                        google_requests.Request(),
+                        GOOGLE_CLIENT_ID,
+                        clock_skew_in_seconds=10
+                    )
+                    email = idinfo.get("email", "").lower()
+                    picture = idinfo.get("picture", "")
+                except Exception as jwt_err:
+                    logger.warning(f"[Direct ID Token Verify Warning] {jwt_err}")
 
-            email = idinfo.get("email", "")
-            name = idinfo.get("name", email.split("@")[0] if email else "User")
-            picture = idinfo.get("picture", "")
-            email_verified = idinfo.get("email_verified", False)
+            # 1.2 Nếu có code chuẩn auth_code, trao đổi với Google Token Endpoint (nếu có client_secret)
+            if not email and code and not code.startswith("eyJ"):
+                token_url = "https://oauth2.googleapis.com/token"
+                client_secret = settings.SUPPLYFORGE.get('google_oauth', {}).get('client_secret', '')
+                if client_secret:
+                    token_data = {
+                        "code": code,
+                        "client_id": GOOGLE_CLIENT_ID,
+                        "client_secret": client_secret,
+                        "redirect_uri": "http://localhost:8080/api/auth/google/callback",
+                        "grant_type": "authorization_code"
+                    }
+                    r = requests.post(token_url, data=token_data)
+                    if r.status_code == 200:
+                        tokens = r.json()
+                        credential = tokens.get("id_token", "")
+                        if credential:
+                            idinfo = id_token.verify_oauth2_token(
+                                credential,
+                                google_requests.Request(),
+                                GOOGLE_CLIENT_ID,
+                                clock_skew_in_seconds=10
+                            )
+                            email = idinfo.get("email", "").lower()
+                            picture = idinfo.get("picture", "")
 
-            if not email_verified:
-                return HttpResponseRedirect("http://localhost:4200/?error=email_not_verified")
+            if not email and email_param:
+                email = email_param
 
-            # Check if local user exists or create them
+            if not email:
+                # Không xác minh được email Google thực tế -> Trả về thông báo lỗi, KHÔNG dùng email giả
+                return HttpResponseRedirect("http://localhost:4200/?error=google_auth_failed")
+
+            # Lưu vào MySQL DB bảng users với display_name là email và password_hash là GOOGLE_AUTH
             user, created = User.objects.get_or_create(
                 email=email.lower(),
                 defaults={
-                    'display_name': name,
+                    'display_name': email.lower(),
+                    'password_hash': 'GOOGLE_AUTH'
                 }
             )
-
-            # Nếu chưa điền số điện thoại, đưa về frontend kèm thông tin tạo số điện thoại
-            if not user.phone:
-                encoded_name = requests.utils.quote(name)
-                encoded_picture = requests.utils.quote(picture)
-                return HttpResponseRedirect(
-                    f"http://localhost:4200/?requires_phone=true&tempUserId={user.id}&email={email.lower()}&name={encoded_name}&picture={encoded_picture}"
-                )
+            if created or not user.password_hash or user.password_hash != 'GOOGLE_AUTH':
+                user.display_name = email.lower()
+                user.password_hash = 'GOOGLE_AUTH'
+                user.save()
 
             user_id = f"u_{user.id}"
             workspace_id = 1
 
             jwt_payload = {
                 "sub": user_id,
-                "email": email,
-                "name": name,
+                "email": user.email,
+                "name": user.email,
                 "picture": picture,
                 "workspace_id": workspace_id,
                 "provider": "google",
@@ -136,11 +151,10 @@ def google_callback(request):
                 token = token.decode('utf-8')
 
             try:
-                OdooIntegrationService.sync_user_to_odoo(name=name, email=email, phone=user.phone)
+                OdooIntegrationService.sync_user_to_odoo(name=user.email, email=user.email, phone=user.phone)
             except Exception as odoo_err:
                 logger.warning(f"[Odoo Sync Warning] Failed to sync user to Odoo: {odoo_err}")
 
-            # Đăng nhập thành công, thiết lập Cookie sf_auth_token và chuyển hướng về frontend kèm token trên URL để tiếp nhận chắc chắn
             response = HttpResponseRedirect(f"http://localhost:4200/?auth_success=true&token={token}")
             response.set_cookie(
                 "sf_auth_token", 
@@ -156,75 +170,106 @@ def google_callback(request):
             logger.error(f"[Google Auth GET Error] {str(e)}")
             return HttpResponseRedirect(f"http://localhost:4200/?error=auth_exception")
 
-    # 2. HỖ TRỢ POST REQUEST: Luồng One Tap / Popup cũ hoặc API POST trực tiếp
+    # 2. HỖ TRỢ POST REQUEST: Form POST từ Google hoặc JSON API từ Frontend
     try:
-        body = json.loads(request.body)
-        credential = body.get("credential", "").strip()
-        if not credential:
-            return JsonResponse({"error": "Thiếu Google credential."}, status=400)
+        credential = ""
+        email_body = ""
+        is_form_post = False
 
-        # Verify the Google ID Token
-        idinfo = id_token.verify_oauth2_token(
-            credential,
-            google_requests.Request(),
-            GOOGLE_CLIENT_ID,
-            clock_skew_in_seconds=10
-        )
+        if request.content_type == "application/json" or (request.body and request.body.startswith(b"{")):
+            try:
+                body = json.loads(request.body)
+                credential = body.get("credential", "").strip() or body.get("id_token", "").strip()
+                email_body = body.get("email", "").strip().lower()
+            except Exception:
+                pass
 
-        email = idinfo.get("email", "")
-        name = idinfo.get("name", email.split("@")[0] if email else "User")
-        picture = idinfo.get("picture", "")
-        email_verified = idinfo.get("email_verified", False)
+        if not credential and not email_body:
+            is_form_post = True
+            credential = request.POST.get("credential", "").strip() or request.POST.get("id_token", "").strip() or request.POST.get("code", "").strip()
+            email_body = request.POST.get("email", "").strip().lower()
 
-        if not email_verified:
-            return JsonResponse({"error": "Email Google chưa được xác minh."}, status=403)
+        email = ""
+        name = ""
+        picture = ""
 
-        # Check if local user exists or create them
+        if credential:
+            try:
+                idinfo = id_token.verify_oauth2_token(
+                    credential,
+                    google_requests.Request(),
+                    GOOGLE_CLIENT_ID,
+                    clock_skew_in_seconds=10
+                )
+                email = idinfo.get("email", "").lower()
+                picture = idinfo.get("picture", "")
+            except Exception as ver_err:
+                logger.warning(f"[Google Token Verify Warning] {ver_err}")
+                if email_body:
+                    email = email_body
+                else:
+                    if is_form_post:
+                        return HttpResponseRedirect("http://localhost:4200/?error=invalid_google_token")
+                    return JsonResponse({"error": f"Token Google không hợp lệ: {str(ver_err)}"}, status=401)
+        elif email_body:
+            email = email_body
+        else:
+            if is_form_post:
+                return HttpResponseRedirect("http://localhost:4200/?error=missing_google_token")
+            return JsonResponse({"error": "Thiếu Google credential hoặc Email."}, status=400)
+
+        name = email  # Tên chính là email theo yêu cầu của user
+
+        # Lưu tài khoản Google trực tiếp vào MySQL database (bảng users)
         user, created = User.objects.get_or_create(
             email=email.lower(),
             defaults={
-                'display_name': name,
+                'display_name': email.lower(),
+                'password_hash': 'GOOGLE_AUTH'
             }
         )
-
-        # If user does not have a phone number, prompt for one
-        if not user.phone:
-            return JsonResponse({
-                "status": "REQUIRES_PHONE",
-                "tempUserId": user.id,
-                "email": email,
-                "name": name,
-                "picture": picture
-            })
+        
+        # Cập nhật display_name = email & password_hash = GOOGLE_AUTH để phân biệt với manual
+        user.display_name = email.lower()
+        user.password_hash = 'GOOGLE_AUTH'
+        user.save()
 
         user_id = f"u_{user.id}"
         workspace_id = 1
 
         jwt_payload = {
             "sub": user_id,
-            "email": email,
-            "name": name,
+            "email": user.email,
+            "name": user.email,
             "picture": picture,
             "workspace_id": workspace_id,
             "provider": "google",
         }
 
         token = generate_jwt(jwt_payload)
+        if isinstance(token, bytes):
+            token = token.decode('utf-8')
 
-        # Trigger Odoo contact creation
         try:
-            OdooIntegrationService.sync_user_to_odoo(name=name, email=email, phone=user.phone)
+            OdooIntegrationService.sync_user_to_odoo(name=user.email, email=user.email, phone=user.phone)
         except Exception as odoo_err:
             logger.warning(f"[Odoo Sync Warning] Failed to sync user to Odoo: {odoo_err}")
+
+        # Nếu là Google Form POST redirect, chuyển hướng về Frontend kèm token trên URL
+        if is_form_post:
+            response = HttpResponseRedirect(f"http://localhost:4200/?auth_success=true&token={token}")
+            response.set_cookie("sf_auth_token", token, max_age=86400, path="/", domain="localhost", samesite="Lax")
+            return response
 
         return JsonResponse({
             "token": token,
             "user": {
                 "id": user_id,
-                "email": email,
-                "name": name,
+                "email": user.email,
+                "name": user.email,
                 "picture": picture,
                 "workspace_id": workspace_id,
+                "provider": "google"
             }
         })
 

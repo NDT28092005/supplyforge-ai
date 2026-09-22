@@ -185,6 +185,28 @@ export class ApiService {
     });
   }
 
+  loginUser(email: string, password: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/auth/login`, {
+      email,
+      password
+    });
+  }
+
+  registerUser(email: string, password: string, shopName: string, phone = ''): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/auth/register`, {
+      email,
+      password,
+      shopName,
+      phone
+    });
+  }
+
+  completeGoogleLogin(credential: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/auth/google/callback`, {
+      credential
+    });
+  }
+
   // ── Module 01 Task 03 Column Mapping API ─────────────────────────────
   triggerColumnMapping(sessionId: string, userOverrides?: Record<string, string>): Observable<any> {
     return this.http.post(`${this.apiUrl}/api/v1/ingestion/sessions/${sessionId}/map-columns`, {

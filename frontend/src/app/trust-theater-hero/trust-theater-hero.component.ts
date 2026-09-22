@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output } from '@angular/core';
+import { Component, EventEmitter, Output, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -12,6 +12,7 @@ export class TrustTheaterHeroComponent {
   @Output() upload = new EventEmitter<{ file: File }>();
   @Output() openLogin = new EventEmitter<void>();
   @Output() navigateStage = new EventEmitter<string>();
+  @Input() user: any = null;
 
   localFile: File | null = null;
   showUploadBox = false;

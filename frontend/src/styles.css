@@ -48,6 +48,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Global High Contrast Text Selection */
+::selection {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+::-moz-selection {
+  background: #2563eb;
+  color: #ffffff;
+}
+
 input, button, select, textarea {
   font-family: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
 }
