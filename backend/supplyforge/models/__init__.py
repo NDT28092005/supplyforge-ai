@@ -24,6 +24,7 @@ from .copilot_models import (
     CopilotConversation, CopilotMessage,
     CopilotToolCall, CopilotAuditLog,
 )
+from .archived_dataset import ArchivedDataSet
 
 __all__ = [
     'User', 'Workspace', 'WorkspaceMember',
@@ -31,6 +32,7 @@ __all__ = [
     'Order', 'OrderItem',
     'DataSource',
     'IngestionSession',
+    'ArchivedDataSet',
     'SlowMovingRiskAssessment',
     'RiskMonitoringRun',
     'RiskExplanationRecord',

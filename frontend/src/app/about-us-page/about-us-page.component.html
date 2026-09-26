@@ -12,8 +12,9 @@
 
       <!-- Header Page Card -->
       <header class="bg-white border border-slate-200/80 p-8 sm:p-12 rounded-3xl shadow-xs text-center space-y-4">
-        <span class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-4 py-1.5 rounded-full inline-block">
-          API: /api/v1/about_us · Giới thiệu
+        <span
+          class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-4 py-1.5 rounded-full inline-block">
+          Giới thiệu
         </span>
         <h1 class="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
           {{ data.title }}
@@ -25,7 +26,8 @@
 
       <!-- KPI Statistics Grid -->
       <section class="grid grid-cols-1 sm:grid-cols-3 gap-6" aria-label="Chỉ số hiệu quả">
-        <article *ngFor="let stat of data.stats" class="bg-white border border-slate-200/80 p-6 rounded-3xl shadow-xs space-y-2 text-center">
+        <article *ngFor="let stat of data.stats"
+          class="bg-white border border-slate-200/80 p-6 rounded-3xl shadow-xs space-y-2 text-center">
           <div class="text-4xl sm:text-5xl font-black text-indigo-600 font-mono">{{ stat.value }}</div>
           <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider">{{ stat.label }}</h3>
           <p class="text-xs text-slate-500 font-medium leading-relaxed">{{ stat.desc }}</p>
@@ -35,9 +37,10 @@
       <!-- 3 Core Values Section -->
       <section class="space-y-6" aria-labelledby="values-heading">
         <h2 id="values-heading" class="text-2xl font-black text-slate-900 text-center">Giá trị cốt lõi</h2>
-        
+
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <article *ngFor="let val of data.core_values" class="bg-white border border-slate-200/80 p-6 sm:p-7 rounded-3xl shadow-xs space-y-3">
+          <article *ngFor="let val of data.core_values"
+            class="bg-white border border-slate-200/80 p-6 sm:p-7 rounded-3xl shadow-xs space-y-3">
             <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
               <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
@@ -50,18 +53,19 @@
       </section>
 
       <!-- CTA Banner -->
-      <section class="bg-indigo-600 text-white p-8 sm:p-10 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xs">
+      <section
+        class="bg-indigo-600 text-white p-8 sm:p-10 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xs">
         <div class="space-y-1 text-center sm:text-left">
           <h3 class="text-xl font-bold">Trải nghiệm phân tích kho hàng ngay hôm nay</h3>
           <p class="text-xs text-indigo-100 font-medium">Bắt đầu nạp file CSV hoặc xem dữ liệu phân tích mẫu.</p>
         </div>
         <div class="flex items-center gap-3 shrink-0">
-          <button (click)="onAction('csv-upload')" 
-                  class="bg-white text-indigo-700 hover:bg-indigo-50 px-6 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-xs">
+          <button (click)="onAction('csv-upload')"
+            class="bg-white text-indigo-700 hover:bg-indigo-50 px-6 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-xs">
             Nạp file CSV ngay
           </button>
-          <button (click)="onAction('executive-dashboard')" 
-                  class="bg-indigo-700 hover:bg-indigo-800 text-white border border-indigo-500 px-6 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer">
+          <button (click)="onAction('executive-dashboard')"
+            class="bg-indigo-700 hover:bg-indigo-800 text-white border border-indigo-500 px-6 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer">
             Xem dữ liệu mẫu
           </button>
         </div>

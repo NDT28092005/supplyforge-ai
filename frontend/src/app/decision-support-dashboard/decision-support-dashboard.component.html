@@ -29,6 +29,27 @@
     </div>
   </div>
 
+  <!-- Empty State when decisions.length === 0 -->
+  <div *ngIf="decisions.length === 0 && !isLoading" class="bg-amber-50 border border-amber-200 rounded-3xl p-8 text-center space-y-4 shadow-xs">
+    <div class="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto font-bold">
+      <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+      </svg>
+    </div>
+    <div class="space-y-1">
+      <h3 class="text-lg font-bold text-slate-900">Chưa có khuyến nghị xả hàng</h3>
+      <p class="text-xs sm:text-sm text-slate-600 font-medium max-w-lg mx-auto">
+        Hiện chưa có phương án đề xuất nào. Vui lòng nạp tệp CSV lịch sử bán hàng mới để hệ thống đề xuất kịch bản xả kho thu hồi vốn.
+      </p>
+    </div>
+    <button (click)="navigateTo.emit('csv-upload')" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all cursor-pointer shadow-xs inline-flex items-center gap-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+      </svg>
+      <span>Tải tệp CSV mới ngay</span>
+    </button>
+  </div>
+
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 2. KPI SUMMARY GRID (4 CARDS)                                      -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->

@@ -50,6 +50,9 @@ TYPE_INFERENCE_SAMPLE_SIZE = 1000
 PREVIEW_ROW_COUNT = 10
 
 
+from supplyforge.services.csv_validator import CSVFormatValidator, ValidationStatus
+
+
 class ProfileResult:
     """Container for CSV profiling results."""
 
@@ -65,6 +68,7 @@ class ProfileResult:
         self.sku_column_detected: Optional[str] = None
         self.missing_values: Dict[str, Dict[str, Any]] = {}
         self.preview_rows: List[List[str]] = []
+        self.validation: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return {
@@ -82,6 +86,7 @@ class ProfileResult:
             'skuColumnDetected': self.sku_column_detected,
             'missingValues': self.missing_values,
             'previewRows': self.preview_rows,
+            'validation': self.validation,
         }
 
     def _span_days(self) -> Optional[int]:
@@ -102,7 +107,7 @@ class StreamingCSVProfiler:
 
     @staticmethod
     def get_upload_dir() -> str:
-        """Return (and ensure exists) the ingestion upload directory."""
+        """Return (and ensure exists) the base ingestion upload directory."""
         upload_dir = getattr(
             settings, 'INGESTION_UPLOAD_DIR',
             os.path.join(settings.BASE_DIR, 'uploads', 'ingestion')
@@ -111,16 +116,30 @@ class StreamingCSVProfiler:
         return upload_dir
 
     @staticmethod
+    def get_raw_upload_dir() -> str:
+        """Return (and ensure exists) the raw upload directory (IR-016)."""
+        raw_dir = os.path.join(StreamingCSVProfiler.get_upload_dir(), 'raw')
+        os.makedirs(raw_dir, exist_ok=True)
+        return raw_dir
+
+    @staticmethod
+    def get_processed_upload_dir() -> str:
+        """Return (and ensure exists) the processed output directory (IR-016)."""
+        processed_dir = os.path.join(StreamingCSVProfiler.get_upload_dir(), 'processed')
+        os.makedirs(processed_dir, exist_ok=True)
+        return processed_dir
+
+    @staticmethod
     def save_uploaded_file(file_obj) -> Tuple[str, int]:
-        """Save an uploaded file to disk in 8 KB chunks.
+        """Save an uploaded file to raw disk storage in 8 KB chunks (IR-016 Raw Preservation).
 
         Returns:
-            (storage_path, file_size_bytes)
+            (raw_storage_path, file_size_bytes)
         """
-        upload_dir = StreamingCSVProfiler.get_upload_dir()
+        raw_dir = StreamingCSVProfiler.get_raw_upload_dir()
         ext = os.path.splitext(file_obj.name)[1] or '.csv'
         unique_name = f"{uuid.uuid4().hex}{ext}"
-        storage_path = os.path.join(upload_dir, unique_name)
+        storage_path = os.path.join(raw_dir, unique_name)
 
         total_bytes = 0
         with open(storage_path, 'wb') as dest:
@@ -134,24 +153,24 @@ class StreamingCSVProfiler:
 
     @staticmethod
     def profile_csv(storage_path: str) -> ProfileResult:
-        """Full streaming profile of a CSV file on disk.
-
-        Single-pass scan to collect:
-        - row count
-        - headers & column count
-        - preview rows (first N)
-        - column type inference (via sampling)
-        - date range detection
-        - unique SKU count
-        - missing value statistics
-        """
+        """Full streaming profile of a CSV file on disk."""
         result = ProfileResult()
 
-        # Detect encoding — try UTF-8 first, fallback to latin-1
-        encoding = StreamingCSVProfiler._detect_encoding(storage_path)
+        # Run IR-001 format validation
+        validation_res = CSVFormatValidator.validate_file(storage_path)
+        result.validation = validation_res.to_dict()
+
+        if validation_res.status == ValidationStatus.REJECT:
+            result.headers = validation_res.headers
+            result.total_columns = len(validation_res.headers)
+            result.total_rows = validation_res.total_rows
+            return result
+
+        # Detect encoding
+        encoding = validation_res.encoding
 
         # Detect the best date / SKU columns from the header
-        headers = StreamingCSVProfiler._read_headers(storage_path, encoding)
+        headers = validation_res.headers if validation_res.headers else StreamingCSVProfiler._read_headers(storage_path, encoding)
         result.headers = headers
         result.total_columns = len(headers)
 
@@ -207,6 +226,13 @@ class StreamingCSVProfiler:
                         sku_values.add(val)
 
         result.total_rows = row_count
+
+        # Quantified SLA Check for IR-011: Maximum 5,000,000 rows
+        MAX_ROWS_LIMIT = 5_000_000
+        if row_count > MAX_ROWS_LIMIT:
+            validation_res.add_error(f"Số lượng bản ghi quá lớn ({row_count:,} dòng, vượt quá giới hạn 5.000.000 dòng). Vui lòng chia nhỏ tệp CSV.")
+            result.validation = validation_res.to_dict()
+            return result
 
         # ── Post-scan analysis ────────────────────────────────────────
 

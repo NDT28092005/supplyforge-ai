@@ -3,7 +3,8 @@
     <!-- Header -->
     <header class="bg-white border border-slate-200/80 p-7 sm:p-9 rounded-3xl shadow-xs space-y-3">
       <div class="flex items-center gap-3">
-        <span class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3.5 py-1 rounded-full inline-block">
+        <span
+          class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3.5 py-1 rounded-full inline-block">
           Bước 3: Xác nhận các cột dữ liệu
         </span>
       </div>
@@ -11,7 +12,8 @@
         Khớp các trường thông tin bán hàng
       </h1>
       <p class="text-slate-600 text-sm sm:text-base font-sans font-medium max-w-xl leading-relaxed">
-        Hệ thống đã tự động liên kết tên cột trong file của bạn với các thông tin chuẩn. Vui lòng kiểm tra lại và điều chỉnh nếu cần.
+        Hệ thống đã tự động liên kết tên cột trong file của bạn với các thông tin chuẩn. Vui lòng kiểm tra lại và điều
+        chỉnh nếu cần.
       </p>
     </header>
 
@@ -19,24 +21,23 @@
     <div *ngIf="isBlocked()" class="bg-rose-50 border border-rose-200 rounded-3xl p-6 space-y-2 text-rose-900">
       <div class="flex items-center gap-2 font-bold text-rose-700 text-sm">
         <svg class="w-5 h-5 stroke-current" fill="none" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+          </path>
         </svg>
         <span>CHƯA ĐỦ THÔNG TIN BẮT BUỘC</span>
       </div>
       <p class="text-xs text-rose-800 font-medium leading-relaxed">
-        Để hệ thống tính toán được tồn kho và rủi ro, vui lòng chọn cột tương ứng cho các trường: 
+        Để hệ thống tính toán được tồn kho và rủi ro, vui lòng chọn cột tương ứng cho các trường:
         <strong class="text-rose-900 font-bold">{{ getMissingRequiredFields().join(', ') }}</strong>.
       </p>
     </div>
 
     <!-- Form mapping card -->
     <div class="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xs">
-      <div class="flex items-center justify-between text-xs font-sans text-slate-500 font-bold uppercase tracking-wider pb-4 border-b border-slate-100">
+      <div
+        class="flex items-center justify-between text-xs font-sans text-slate-500 font-bold uppercase tracking-wider pb-4 border-b border-slate-100">
         <div class="flex items-center gap-2.5">
-          <svg class="w-4 h-4 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path>
-            <path d="m22 2-7.5 7.5L9 4 2 11"></path>
-          </svg>
           <span>Danh sách trường thông tin</span>
         </div>
         <span class="text-xs text-rose-600 font-bold">
@@ -46,12 +47,14 @@
 
       <div class="space-y-3.5 font-sans">
         <!-- Field rows loop -->
-        <article *ngFor="let field of fields" class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-all">
+        <article *ngFor="let field of fields"
+          class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-all">
           <div class="space-y-1">
             <div class="flex items-center gap-2">
               <h2 class="text-sm font-bold text-slate-900">{{ field.label }}</h2>
               <span *ngIf="field.required" class="text-rose-600 font-bold text-xs" title="Trường bắt buộc">*</span>
-              <span [class]="getMethodBadge(field.key).class" class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg border font-mono">
+              <span [class]="getMethodBadge(field.key).class"
+                class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg border font-mono">
                 {{ getMethodBadge(field.key).label }}
               </span>
             </div>
@@ -60,13 +63,13 @@
 
           <div class="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
             <!-- Sample preview value from CSV -->
-            <span *ngIf="sampleData" class="text-xs font-mono text-slate-400 max-w-[150px] truncate" [title]="'Mẫu: ' + getSampleValue(field.key)">
+            <span *ngIf="sampleData" class="text-xs font-mono text-slate-400 max-w-[150px] truncate"
+              [title]="'Mẫu: ' + getSampleValue(field.key)">
               Mẫu: {{ getSampleValue(field.key) || '—' }}
             </span>
             <!-- Column selector select box -->
-            <select [(ngModel)]="finalMapping[field.key]"
-                    (ngModelChange)="onFieldChange(field.key)"
-                    class="bg-white border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2 text-xs font-medium outline-none focus:border-indigo-500 shadow-xs cursor-pointer min-w-[200px]">
+            <select [(ngModel)]="finalMapping[field.key]" (ngModelChange)="onFieldChange(field.key)"
+              class="bg-white border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2 text-xs font-medium outline-none focus:border-indigo-500 shadow-xs cursor-pointer min-w-[200px]">
               <option value="">-- Bỏ qua trường này --</option>
               <option *ngFor="let h of headers" [value]="h">{{ h }}</option>
             </select>
@@ -75,7 +78,8 @@
       </div>
 
       <!-- Confirm button footer -->
-      <footer class="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <footer
+        class="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div class="flex items-center gap-2 text-xs font-medium">
           <span *ngIf="!isBlocked()" class="text-emerald-700 flex items-center gap-1.5 font-bold">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -88,9 +92,8 @@
           </span>
         </div>
 
-        <button (click)="confirm()" 
-                [disabled]="isBlocked()"
-                class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-7 py-3 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95 flex items-center gap-2 cursor-pointer shadow-xs">
+        <button (click)="confirm()" [disabled]="isBlocked()"
+          class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-7 py-3 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95 flex items-center gap-2 cursor-pointer shadow-xs">
           <span>Xác nhận &amp; Xem tổng quan tệp</span>
           <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="5" y1="12" x2="19" y2="12"></line>

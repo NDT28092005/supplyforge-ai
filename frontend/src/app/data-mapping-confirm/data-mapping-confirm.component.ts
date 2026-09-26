@@ -126,7 +126,7 @@ export class DataMappingConfirmComponent implements OnInit, OnChanges {
     }
     const val = this.finalMapping[fieldKey];
     if (!val) return { label: 'Chưa chọn', class: 'bg-rose-50 text-rose-700 border-rose-200' };
-    
+
     return { label: 'Khớp tự động', class: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
   }
 

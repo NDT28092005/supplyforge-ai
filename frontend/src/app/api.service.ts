@@ -85,6 +85,10 @@ export class ApiService {
     return this.http.get(`${this.apiUrl}/api/v1/ingestion/sessions/${sessionId}`);
   }
 
+  cancelIngestionSession(sessionId: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v2/ingestion/sessions/${sessionId}/cancel`, {});
+  }
+
   listIngestionSessions(workspaceId: number = 1): Observable<any> {
     return this.http.get(`${this.apiUrl}/api/v1/ingestion/sessions?workspaceId=${workspaceId}`);
   }
@@ -108,11 +112,15 @@ export class ApiService {
     return this.http.get(`${this.apiUrl}/api/v1/ingestion/sessions/${sessionId}/sku-profiles`, { params });
   }
 
-  processFile(file: File, mappingRule: any, userId = 'user_default_001'): Observable<any> {
+  processFile(file: File, mappingRule: any, userId = 'user_default_001', sessionType = 'INITIAL', forceReset = false): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('mappingRule', JSON.stringify(mappingRule));
     formData.append('userId', userId);
+    formData.append('sessionType', sessionType);
+    if (forceReset) {
+      formData.append('forceReset', 'true');
+    }
     return this.http.post(`${this.apiUrl}/api/v1/import/process`, formData);
   }
 

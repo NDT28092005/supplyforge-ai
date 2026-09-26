@@ -1,21 +1,12 @@
 <!-- Header Navbar (hidden on auth page) -->
-<app-header *ngIf="stage !== 'auth'"
-  [user]="currentUser" 
-  [stage]="stage" 
-  (openLogin)="openLoginModal()" 
-  (logout)="performLogout()" 
-  (demoLogin)="performDemoLogin()"
-  (navigateStage)="handleStageSelect($event)">
+<app-header *ngIf="stage !== 'auth'" [user]="currentUser" [stage]="stage" (openLogin)="openLoginModal()"
+  (logout)="performLogout()" (demoLogin)="performDemoLogin()" (navigateStage)="handleStageSelect($event)">
 </app-header>
 
 <!-- Auth Page (full screen, no header) -->
 <div *ngIf="stage === 'auth'" class="fade-in">
-  <app-auth-page 
-    [initialTab]="authInitialTab"
-    (loginSuccess)="handleAuthLogin($event)"
-    (demoLogin)="performDemoLogin()"
-    (googleLogin)="openLoginModal()"
-    (goBack)="handleAuthGoBack()">
+  <app-auth-page [initialTab]="authInitialTab" (loginSuccess)="handleAuthLogin($event)" (demoLogin)="performDemoLogin()"
+    (googleLogin)="openLoginModal()" (goBack)="handleAuthGoBack()">
   </app-auth-page>
 </div>
 
@@ -23,57 +14,69 @@
 <div *ngIf="stage !== 'auth'" class="min-h-[calc(100vh-61px)] flex bg-background text-primary">
 
   <!-- Fixed Left Sidebar (Active in App Dashboards) -->
-  <app-sidebar 
-    *ngIf="stage !== 'hero' && stage !== 'auth' && stage !== 'about_us' && stage !== 'services' && stage !== 'blog' && stage !== 'processing' && stage !== 'mapping'" 
-    [activeStage]="stage" 
-    (selectStage)="handleStageSelect($event)" 
-    (importIncremental)="startIncrementalImport()"
+  <app-sidebar
+    *ngIf="stage !== 'hero' && stage !== 'auth' && stage !== 'about_us' && stage !== 'services' && stage !== 'blog' && stage !== 'processing' && stage !== 'mapping'"
+    [activeStage]="stage" (selectStage)="handleStageSelect($event)" (importIncremental)="startIncrementalImport()"
     (importNew)="clearAllDataAndRestart()">
   </app-sidebar>
 
   <!-- Main Content Stage -->
-  <main class="flex-1 transition-all" [ngClass]="{'pl-64': stage !== 'hero' && stage !== 'auth' && stage !== 'about_us' && stage !== 'services' && stage !== 'blog' && stage !== 'processing' && stage !== 'mapping'}">
+  <main class="flex-1 transition-all"
+    [ngClass]="{'pl-64': stage !== 'hero' && stage !== 'auth' && stage !== 'about_us' && stage !== 'services' && stage !== 'blog' && stage !== 'processing' && stage !== 'mapping'}">
     <div class="max-w-[1440px] mx-auto w-full">
 
       <!-- Ingestion Pipeline Stepper Bar (Active during Data Ingestion & Profiling) -->
-      <div *ngIf="stage === 'csv-upload' || stage === 'processing' || stage === 'mapping' || stage === 'dataset-profile'" 
-           class="my-6 mx-6 md:mx-10 p-4 bg-white border border-slate-200/80 rounded-2xl shadow-xs animate-fade-in">
-        <div class="max-w-3xl mx-auto flex items-center justify-between font-sans text-xs">
-          <!-- Step 1: Upload -->
-          <div class="flex items-center gap-2" [ngClass]="getStepClass('csv-upload')">
-            <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px]" [ngClass]="getStepNumClass('csv-upload')">1</span>
-            <span class="hidden sm:inline font-semibold">Tải dữ liệu lên</span>
-          </div>
+      <div
+        *ngIf="stage === 'csv-upload' || stage === 'processing' || stage === 'mapping' || stage === 'dataset-profile'"
+        class="max-w-4xl mx-auto px-4 pt-6 pb-2 animate-fade-in">
+        <div class="bg-white border border-slate-200/90 rounded-2xl shadow-xs p-3.5 sm:p-4">
+          <div class="flex items-center justify-between font-sans text-xs">
+            <!-- Step 1: Upload -->
+            <div class="flex items-center gap-2" [ngClass]="getStepClass('csv-upload')">
+              <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] transition-all"
+                [ngClass]="getStepNumClass('csv-upload')">1</span>
+              <span class="font-bold tracking-tight">1. Tải dữ liệu lên</span>
+            </div>
 
-          <div class="h-0.5 flex-1 mx-3 bg-slate-200"></div>
+            <div class="h-0.5 flex-1 mx-2 sm:mx-4 rounded-full transition-all"
+              [ngClass]="{'bg-indigo-600': stage !== 'csv-upload', 'bg-slate-200': stage === 'csv-upload'}"></div>
 
-          <!-- Step 2: Processing -->
-          <div class="flex items-center gap-2" [ngClass]="getStepClass('processing')">
-            <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px]" [ngClass]="getStepNumClass('processing')">2</span>
-            <span class="hidden sm:inline font-semibold">Kiểm tra dữ liệu</span>
-          </div>
+            <!-- Step 2: Processing -->
+            <div class="flex items-center gap-2" [ngClass]="getStepClass('processing')">
+              <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] transition-all"
+                [ngClass]="getStepNumClass('processing')">2</span>
+              <span class="font-bold tracking-tight">2. Kiểm tra dữ liệu</span>
+            </div>
 
-          <div class="h-0.5 flex-1 mx-3 bg-slate-200"></div>
+            <div class="h-0.5 flex-1 mx-2 sm:mx-4 rounded-full transition-all"
+              [ngClass]="{'bg-indigo-600': stage === 'mapping' || stage === 'dataset-profile', 'bg-slate-200': stage !== 'mapping' && stage !== 'dataset-profile'}">
+            </div>
 
-          <!-- Step 3: Mapping -->
-          <div class="flex items-center gap-2" [ngClass]="getStepClass('mapping')">
-            <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px]" [ngClass]="getStepNumClass('mapping')">3</span>
-            <span class="hidden sm:inline font-semibold">Xác nhận cột</span>
-          </div>
+            <!-- Step 3: Mapping -->
+            <div class="flex items-center gap-2" [ngClass]="getStepClass('mapping')">
+              <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] transition-all"
+                [ngClass]="getStepNumClass('mapping')">3</span>
+              <span class="font-bold tracking-tight">3. Xác nhận cột</span>
+            </div>
 
-          <div class="h-0.5 flex-1 mx-3 bg-slate-200"></div>
+            <div class="h-0.5 flex-1 mx-2 sm:mx-4 rounded-full transition-all"
+              [ngClass]="{'bg-indigo-600': stage === 'dataset-profile', 'bg-slate-200': stage !== 'dataset-profile'}">
+            </div>
 
-          <!-- Step 4: Dataset Profile -->
-          <div class="flex items-center gap-2" [ngClass]="getStepClass('dataset-profile')">
-            <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px]" [ngClass]="getStepNumClass('dataset-profile')">4</span>
-            <span class="hidden sm:inline font-semibold">Tổng quan file nạp</span>
+            <!-- Step 4: Dataset Profile -->
+            <div class="flex items-center gap-2" [ngClass]="getStepClass('dataset-profile')">
+              <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] transition-all"
+                [ngClass]="getStepNumClass('dataset-profile')">4</span>
+              <span class="font-bold tracking-tight">4. Tổng quan file nạp</span>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- 1. Landing Page Stage (Trust Theater Hero) -->
       <div *ngIf="stage === 'hero'" class="fade-in">
-        <app-trust-theater-hero [user]="currentUser" (upload)="startProcessing($event)" (openLogin)="openLoginModal()" (navigateStage)="handleStageSelect($event)"></app-trust-theater-hero>
+        <app-trust-theater-hero [user]="currentUser" (upload)="startProcessing($event)" (openLogin)="openLoginModal()"
+          (navigateStage)="handleStageSelect($event)"></app-trust-theater-hero>
       </div>
 
       <!-- 1.1 About Us Stage (/api/v1/about_us) -->
@@ -93,25 +96,24 @@
 
       <!-- 2. CSV Upload & Profiling Stage -->
       <div *ngIf="stage === 'csv-upload'" class="fade-in">
-        <app-csv-upload (continueToMapping)="handleCsvProfileComplete($event)"></app-csv-upload>
+        <app-csv-upload [initialErrorMessage]="uploadErrorMessage" [initialFile]="uploadFile"
+          (continueToMapping)="handleCsvProfileComplete($event)"></app-csv-upload>
       </div>
 
       <!-- 2.1 Processing Screen Stage -->
       <div *ngIf="stage === 'processing'" class="fade-in">
-        <app-processing-screen [file]="uploadFile" (mappingReady)="handleMappingReady($event)"></app-processing-screen>
+        <app-processing-screen [file]="uploadFile" [sessionId]="activeSessionId" (mappingReady)="handleMappingReady($event)" (cancelImport)="handleCancelImport()"></app-processing-screen>
       </div>
 
       <!-- 3. AI Data Mapping Confirmation Stage -->
       <div *ngIf="stage === 'mapping'" class="fade-in">
-        <div *ngIf="isProcessingBatch" class="min-h-screen flex items-center justify-center">
-          <div class="text-accent font-mono text-xl animate-pulse">Đang nạp dữ liệu vào CSDL siêu tốc...</div>
+        <div *ngIf="isProcessingBatch">
+          <app-processing-screen [file]="uploadFile" [sessionId]="activeSessionId" (mappingReady)="handleMappingReady($event)" (cancelImport)="handleCancelImport()"></app-processing-screen>
         </div>
-        
+
         <div *ngIf="!isProcessingBatch">
-          <app-data-mapping-confirm 
-            [headers]="mappingData?.headers || []" 
-            [sampleData]="mappingData?.sampleData || []" 
-            [aiSuggestions]="mappingData?.aiSuggestions || null" 
+          <app-data-mapping-confirm [headers]="mappingData?.headers || []" [sampleData]="mappingData?.sampleData || []"
+            [aiSuggestions]="mappingData?.aiSuggestions || null"
             (confirmMapping)="handleConfirmMapping($event.finalMapping)">
           </app-data-mapping-confirm>
         </div>
@@ -119,120 +121,162 @@
 
       <!-- 3.1 Dataset Profiling Stage -->
       <div *ngIf="stage === 'dataset-profile'" class="fade-in font-mono">
-        <app-dataset-profile-dashboard 
-          [sessionId]="activeSessionId" 
-          [profileData]="datasetProfileData" 
+        <app-dataset-profile-dashboard [sessionId]="activeSessionId" [profileData]="datasetProfileData"
           (proceedToAnalysis)="handleProceedFromProfile()">
         </app-dataset-profile-dashboard>
       </div>
 
       <!-- 3.2 Executive Dashboard Stage (Module 1 - Trang chủ Tổng quan) -->
       <div *ngIf="stage === 'executive-dashboard'" class="fade-in px-6 md:px-10 py-8">
-        <app-executive-dashboard
-          [data]="dashboardData"
-          [sessionId]="activeSessionId"
-          (analyzeSku)="handleStageSelect('slow-moving-risk')"
-          (navigateTo)="handleStageSelect($event)">
+        <app-executive-dashboard [data]="dashboardData" [sessionId]="activeSessionId"
+          (analyzeSku)="handleStageSelect('slow-moving-risk')" (navigateTo)="handleStageSelect($event)">
         </app-executive-dashboard>
       </div>
 
       <!-- 9. Slow-Moving Risk Dashboard Stage (Tab 2: RỦI RO) -->
       <div *ngIf="stage === 'slow-moving-risk'" class="fade-in px-6 md:px-10 py-8">
-        <app-slow-moving-risk-dashboard
-          [sessionId]="activeSessionId"
-          [skuId]="selectedSkuId"
+        <app-slow-moving-risk-dashboard [sessionId]="activeSessionId" [skuId]="selectedSkuId"
           (navigateTo)="handleStageSelect($event)">
         </app-slow-moving-risk-dashboard>
       </div>
 
       <!-- 10. Capital Exposure Dashboard Stage (Module 05 Engine) -->
       <div *ngIf="stage === 'capital-exposure'" class="fade-in px-6 md:px-10 py-8">
-        <app-capital-exposure-dashboard></app-capital-exposure-dashboard>
+        <app-capital-exposure-dashboard (navigateTo)="handleStageSelect($event)"></app-capital-exposure-dashboard>
       </div>
 
       <!-- 11. Decision Support Dashboard Stage (Module 06 Engine) -->
       <div *ngIf="stage === 'decision-support'" class="fade-in px-6 md:px-10 py-8">
-        <app-decision-support-dashboard></app-decision-support-dashboard>
+        <app-decision-support-dashboard (navigateTo)="handleStageSelect($event)"></app-decision-support-dashboard>
       </div>
 
 
     </div>
   </main>
 
-<!-- Persistent Copilot Assistant Widget -->
-<app-copilot-widget [contextSku]="selectedSkuId" [activeStage]="stage"></app-copilot-widget>
+  <!-- Persistent Copilot Assistant Widget -->
+  <app-copilot-widget [contextSku]="selectedSkuId" [activeStage]="stage"></app-copilot-widget>
 
 
 
-<!-- Login Modal Overlay -->
-<app-login-modal 
-  *ngIf="isLoginOpen" 
-  (close)="closeLoginModal()" 
-  (loginSuccess)="handleLoginSuccess($event)">
-</app-login-modal>
+  <!-- Login Modal Overlay -->
+  <app-login-modal *ngIf="isLoginOpen" (close)="closeLoginModal()" (loginSuccess)="handleLoginSuccess($event)">
+  </app-login-modal>
 
-<!-- Requires Phone Number Modal Overlay -->
-<div *ngIf="requiresPhone" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 transition-all duration-300">
-  <div class="bg-surface/90 border border-border-base rounded-3xl p-8 max-w-md w-full shadow-material-lg relative transform scale-100 flex flex-col gap-6 animate-scale-up">
-    <!-- Close button -->
-    <button (click)="requiresPhone = false" class="absolute top-5 right-5 text-secondary hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-surface-hover cursor-pointer" aria-label="Đóng cửa sổ">
-      <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="18" y1="6" x2="6" y2="18"></line>
-        <line x1="6" y1="6" x2="18" y2="18"></line>
-      </svg>
-    </button>
+  <!-- Requires Phone Number Modal Overlay -->
+  <div *ngIf="requiresPhone"
+    class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 transition-all duration-300">
+    <div
+      class="bg-surface/90 border border-border-base rounded-3xl p-8 max-w-md w-full shadow-material-lg relative transform scale-100 flex flex-col gap-6 animate-scale-up">
+      <!-- Close button -->
+      <button (click)="requiresPhone = false"
+        class="absolute top-5 right-5 text-secondary hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-surface-hover cursor-pointer"
+        aria-label="Đóng cửa sổ">
+        <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
 
-    <header class="space-y-2">
-      <div class="flex items-center gap-2">
-        <div class="w-7 h-7 rounded-lg bg-accent flex items-center justify-center text-white shadow-material">
-          <svg class="w-4 h-4 text-white fill-current" viewBox="0 0 24 24">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-          </svg>
-        </div>
-        <span class="text-[10px] font-mono text-accent tracking-widest uppercase font-bold">SupplyForge OS</span>
-      </div>
-      <h2 class="font-tight font-black text-primary text-xl sm:text-2xl mt-2 tracking-tight">Hoàn tất hồ sơ đăng ký</h2>
-      <p class="text-secondary text-[11px] sm:text-xs leading-relaxed">
-        Chào mừng <strong>{{ tempPhoneUser.name }}</strong>! Vui lòng bổ sung số điện thoại liên hệ để đồng bộ thông tin đối tác CRM Odoo.
-      </p>
-    </header>
-
-    <form (ngSubmit)="submitPhoneNumber()" class="space-y-4">
-      <div class="space-y-1.5">
-        <label for="phoneNumber" class="block text-[11px] font-bold text-primary uppercase tracking-wider">Số điện thoại liên hệ</label>
-        <div class="relative flex items-center">
-          <span class="absolute left-4 text-secondary">
-            <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+      <header class="space-y-2">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-accent flex items-center justify-center text-white shadow-material">
+            <svg class="w-4 h-4 text-white fill-current" viewBox="0 0 24 24">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
             </svg>
-          </span>
-          <input type="tel" 
-                 id="phoneNumber"
-                 [(ngModel)]="phoneNumberInput" 
-                 name="phoneNumber" 
-                 placeholder="Ví dụ: 0987654321" 
-                 required
-                 class="w-full bg-background border border-border-base rounded-xl pl-11 pr-4 py-3 text-xs text-primary outline-none focus:ring-1 focus:ring-accent transition-all font-mono" />
+          </div>
+          <span class="text-[10px] font-mono text-accent tracking-widest uppercase font-bold">SupplyForge OS</span>
         </div>
-        <p *ngIf="phoneError" class="text-danger text-[10px] font-bold mt-1.5 flex items-center gap-1">
-          <svg class="w-3.5 h-3.5 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-          <span>{{ phoneError }}</span>
+        <h2 class="font-tight font-black text-primary text-xl sm:text-2xl mt-2 tracking-tight">Hoàn tất hồ sơ đăng ký
+        </h2>
+        <p class="text-secondary text-[11px] sm:text-xs leading-relaxed">
+          Chào mừng <strong>{{ tempPhoneUser.name }}</strong>! Vui lòng bổ sung số điện thoại liên hệ để đồng bộ thông
+          tin đối tác CRM Odoo.
         </p>
+      </header>
+
+      <form (ngSubmit)="submitPhoneNumber()" class="space-y-4">
+        <div class="space-y-1.5">
+          <label for="phoneNumber" class="block text-[11px] font-bold text-primary uppercase tracking-wider">Số điện
+            thoại liên hệ</label>
+          <div class="relative flex items-center">
+            <span class="absolute left-4 text-secondary">
+              <svg class="w-4 h-4 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path
+                  d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z">
+                </path>
+              </svg>
+            </span>
+            <input type="tel" id="phoneNumber" [(ngModel)]="phoneNumberInput" name="phoneNumber"
+              placeholder="Ví dụ: 0987654321" required
+              class="w-full bg-background border border-border-base rounded-xl pl-11 pr-4 py-3 text-xs text-primary outline-none focus:ring-1 focus:ring-accent transition-all font-mono" />
+          </div>
+          <p *ngIf="phoneError" class="text-danger text-[10px] font-bold mt-1.5 flex items-center gap-1">
+            <svg class="w-3.5 h-3.5 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span>{{ phoneError }}</span>
+          </p>
+        </div>
+
+        <div class="pt-2 flex gap-3">
+          <button type="button" (click)="requiresPhone = false"
+            class="w-1/3 bg-background border border-border-base text-secondary font-bold text-xs py-3.5 rounded-xl hover:bg-surface-hover cursor-pointer active:scale-95 transition-all">
+            Hủy bỏ
+          </button>
+          <button type="submit" [disabled]="phoneLoading"
+            class="flex-1 bg-accent text-white font-tight font-bold text-xs py-3.5 rounded-xl hover:bg-blue-600 transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer shadow-material">
+            <span *ngIf="!phoneLoading">Xác nhận hoàn tất</span>
+            <span *ngIf="phoneLoading"
+              class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Clear Data Confirmation Modal (Archival Backup Alert) -->
+  <div *ngIf="isClearModalOpen"
+    class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+    <div
+      class="bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-6 relative overflow-hidden">
+      <!-- Header -->
+      <div class="flex items-start gap-4">
+        <div
+          class="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+            </path>
+          </svg>
+        </div>
+        <div class="space-y-1">
+          <h3 class="text-base font-bold text-slate-900">Xác nhận xóa toàn bộ dữ liệu?</h3>
+          <p class="text-xs text-slate-600 leading-relaxed font-medium">
+            Tất cả dữ liệu sản phẩm, đơn hàng và phân tích trên Dashboard sẽ được xóa sạch. Sau đó bạn có thể nhập dữ
+            liệu mới.
+          </p>
+        </div>
       </div>
 
-      <div class="pt-2 flex gap-3">
-        <button type="button" (click)="requiresPhone = false" class="w-1/3 bg-background border border-border-base text-secondary font-bold text-xs py-3.5 rounded-xl hover:bg-surface-hover cursor-pointer active:scale-95 transition-all">
+      <!-- Actions -->
+      <div class="flex items-center justify-end gap-3 pt-2">
+        <button (click)="cancelClearModal()" type="button" [disabled]="isClearingData"
+          class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-100 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
           Hủy bỏ
         </button>
-        <button type="submit" [disabled]="phoneLoading" class="flex-1 bg-accent text-white font-tight font-bold text-xs py-3.5 rounded-xl hover:bg-blue-600 transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer shadow-material">
-          <span *ngIf="!phoneLoading">Xác nhận hoàn tất</span>
-          <span *ngIf="phoneLoading" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+        <button (click)="confirmClearData()" type="button" [disabled]="isClearingData"
+          class="px-5 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-all cursor-pointer shadow-xs flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed">
+          <span *ngIf="isClearingData"
+            class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+          <span>{{ isClearingData ? 'Đang xóa...' : 'Xóa Toàn Bộ & Nhập Mới' }}</span>
         </button>
       </div>
-    </form>
+    </div>
   </div>
 </div>

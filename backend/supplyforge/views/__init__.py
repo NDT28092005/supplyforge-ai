@@ -15,7 +15,12 @@ from .shopee import (
     shopee_webhook, trigger_sync, get_sync_status,
 )
 from .dss_web import dss_upload, dss_summary, dss_sku_detail
-from .ingestion import ingestion_upload, ingestion_session_detail, ingestion_session_list, analyze_file, process_file, clear_data
+from .ingestion import (
+    ingestion_upload, ingestion_session_detail, ingestion_session_list,
+    analyze_file, process_file, clear_data, process_file_async, get_ingestion_progress,
+    cancel_ingestion_session, get_record_lineage, get_error_matrix,
+    get_post_import_quality_report, propagate_pipeline_health_score, verify_tenant_isolation
+)
 from .dataset_profiling import trigger_dataset_profiling, get_dataset_profile, get_sku_profiles
 from .column_mapping import trigger_column_mapping, submit_mapping_override, get_mapping_audit
 from .schema_validation import validate_canonical_schema, get_schema_validation_report
@@ -99,7 +104,7 @@ __all__ = [
     'ping', 'check_data',
     'google_callback', 'verify_token', 'register_user', 'login_user', 'google_complete_phone',
     'sync_products', 'sync_orders',
-    'analyze_file', 'process_file', 'clear_data',
+    'analyze_file', 'process_file', 'clear_data', 'process_file_async', 'get_ingestion_progress', 'cancel_ingestion_session', 'get_record_lineage', 'get_error_matrix',
     'refresh_dead_stock', 'get_dead_stock', 'get_aging',
     'get_portfolio_command', 'get_financial_analysis',
     'get_sku_xai',

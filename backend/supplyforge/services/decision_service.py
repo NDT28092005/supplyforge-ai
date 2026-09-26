@@ -141,6 +141,11 @@ class DecisionPersistenceService:
         dataset_version: Optional[str] = None
     ) -> Any:
         """Queries DecisionRecords with optional filtering criteria."""
+        from supplyforge.models import Product
+        if not Product.objects.exists():
+            DecisionRecord.objects.all().delete()
+            return DecisionRecord.objects.none()
+
         queryset = DecisionRecord.objects.all()
 
         if risk_class:

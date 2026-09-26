@@ -11,34 +11,41 @@
     <div *ngIf="!loading" class="space-y-10">
 
       <!-- Header Page Card (when on list view) -->
-      <header *ngIf="!selectedArticle" class="bg-white border border-slate-200/80 p-8 sm:p-12 rounded-3xl shadow-xs text-center space-y-4">
-        <span class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-4 py-1.5 rounded-full inline-block">
-          API: /api/v1/blog · Blog &amp; Kiến thức Kho hàng
+      <header *ngIf="!selectedArticle"
+        class="bg-white border border-slate-200/80 p-8 sm:p-12 rounded-3xl shadow-xs text-center space-y-4">
+        <span
+          class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-4 py-1.5 rounded-full inline-block">
+          Blog &amp; Kiến thức Kho hàng
         </span>
         <h1 class="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
           Góc Kiến thức Quản trị Tồn kho &amp; Dòng vốn
         </h1>
         <p class="text-slate-600 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed font-medium">
-          Tổng hợp các bài viết phân tích, kinh nghiệm và chiến lược tối ưu hóa kho hàng dành cho nhà bán lẻ và E-commerce.
+          Tổng hợp các bài viết phân tích, kinh nghiệm và chiến lược tối ưu hóa kho hàng dành cho nhà bán lẻ và
+          E-commerce.
         </p>
       </header>
 
       <!-- ARTICLE DETAIL VIEW -->
-      <article *ngIf="selectedArticle" class="bg-white border border-slate-200/80 p-8 sm:p-12 rounded-3xl shadow-xs space-y-8 animate-fade-in">
+      <article *ngIf="selectedArticle"
+        class="bg-white border border-slate-200/80 p-8 sm:p-12 rounded-3xl shadow-xs space-y-8 animate-fade-in">
         <div class="flex items-center justify-between border-b border-slate-100 pb-5">
-          <button (click)="backToList()" 
-                  class="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer">
+          <button (click)="backToList()"
+            class="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer">
             <span>&larr; Quay lại danh sách bài viết</span>
           </button>
-          <span class="text-[10px] font-mono font-bold text-slate-400">API: /api/v1/blog/{{ selectedArticle.slug }}</span>
+          <span class="text-[10px] font-mono font-bold text-slate-400">API: /api/v1/blog/{{ selectedArticle.slug
+            }}</span>
         </div>
 
         <div class="space-y-3">
           <div class="flex items-center gap-3">
-            <span class="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full uppercase tracking-wider font-mono">
+            <span
+              class="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full uppercase tracking-wider font-mono">
               {{ selectedArticle.category }}
             </span>
-            <span class="text-xs text-slate-400 font-mono">{{ selectedArticle.date }} · {{ selectedArticle.read_time }}</span>
+            <span class="text-xs text-slate-400 font-mono">{{ selectedArticle.date }} · {{ selectedArticle.read_time
+              }}</span>
           </div>
           <h1 class="text-2xl sm:text-4xl font-black text-slate-900 leading-tight">
             {{ selectedArticle.title }}
@@ -53,7 +60,8 @@
         </div>
 
         <!-- Key Takeaways Box -->
-        <div *ngIf="selectedArticle.key_takeaways" class="bg-indigo-50/70 border border-indigo-100 p-6 rounded-2xl space-y-3">
+        <div *ngIf="selectedArticle.key_takeaways"
+          class="bg-indigo-50/70 border border-indigo-100 p-6 rounded-2xl space-y-3">
           <h4 class="text-xs font-bold text-indigo-900 uppercase tracking-wider">Điểm cốt lõi cần nhớ:</h4>
           <ul class="space-y-2 text-xs sm:text-sm text-indigo-800 pl-5 list-disc font-semibold">
             <li *ngFor="let point of selectedArticle.key_takeaways">{{ point }}</li>
@@ -63,11 +71,11 @@
 
       <!-- BLOG LIST GRID -->
       <section *ngIf="!selectedArticle" class="grid grid-cols-1 md:grid-cols-2 gap-6" aria-label="Danh sách bài viết">
-        <article *ngFor="let post of posts" 
-                 (click)="readArticle(post.slug)"
-                 class="bg-white border border-slate-200/80 p-7 rounded-3xl shadow-xs space-y-4 hover:border-indigo-300 transition-all cursor-pointer group">
+        <article *ngFor="let post of posts" (click)="readArticle(post.slug)"
+          class="bg-white border border-slate-200/80 p-7 rounded-3xl shadow-xs space-y-4 hover:border-indigo-300 transition-all cursor-pointer group">
           <div class="flex items-center justify-between">
-            <span class="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full uppercase tracking-wider font-mono">
+            <span
+              class="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full uppercase tracking-wider font-mono">
               {{ post.category }}
             </span>
             <span class="text-[11px] text-slate-400 font-mono">{{ post.read_time }}</span>
@@ -82,7 +90,8 @@
             </p>
           </div>
 
-          <div class="pt-2 flex items-center justify-between border-t border-slate-100 text-xs font-bold text-indigo-600">
+          <div
+            class="pt-2 flex items-center justify-between border-t border-slate-100 text-xs font-bold text-indigo-600">
             <span>Đọc bài viết chi tiết</span>
             <span class="transition-transform group-hover:translate-x-1">&rarr;</span>
           </div>

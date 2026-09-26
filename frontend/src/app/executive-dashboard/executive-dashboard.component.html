@@ -42,6 +42,26 @@
     </div>
   </div>
 
+  <!-- Empty State Banner when no data -->
+  <div *ngIf="kpiGrid.monitoredSkus === '0 SKU'" class="bg-amber-50 border border-amber-200 rounded-3xl p-8 text-center space-y-4 shadow-xs">
+    <div class="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto font-bold">
+      <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+      </svg>
+    </div>
+    <div class="space-y-1">
+      <h3 class="text-lg font-bold text-slate-900">Chưa có dữ liệu sản phẩm trong hệ thống</h3>
+      <p class="text-xs sm:text-sm text-slate-600 font-medium max-w-lg mx-auto">
+        Hiện tại dữ liệu đã được xóa hoặc chưa được nạp tệp mới. Vui lòng tải lên tệp CSV bán hàng để khởi tạo báo cáo Tổng quan &amp; Rủi ro.
+      </p>
+    </div>
+    <button (click)="navigateTo.emit('csv-upload')" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all cursor-pointer shadow-xs inline-flex items-center gap-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+      </svg>
+      <span>Tải tệp CSV mới ngay</span>
+    </button>
+  </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 2. LƯỚI KPI (GRID 2 DÒNG x 3 CỘT — LARGER FONT SIZES & "VỐN TỒN ĐỌNG")-->
@@ -145,7 +165,7 @@
               <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
               An toàn
             </span>
-            <span class="font-black text-emerald-700 font-mono text-base">69%</span>
+            <span class="font-black text-emerald-700 font-mono text-base">{{ riskBreakdown[0]?.pct || '0%' }}</span>
           </div>
 
           <div class="flex items-center justify-between p-3 bg-amber-50/70 rounded-xl border border-amber-100">
@@ -153,7 +173,7 @@
               <span class="w-3 h-3 rounded-full bg-amber-500"></span>
               Cần theo dõi
             </span>
-            <span class="font-black text-amber-700 font-mono text-base">6%</span>
+            <span class="font-black text-amber-700 font-mono text-base">{{ riskBreakdown[1]?.pct || '0%' }}</span>
           </div>
 
           <div class="flex items-center justify-between p-3 bg-rose-50/70 rounded-xl border border-rose-100">
@@ -161,7 +181,7 @@
               <span class="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></span>
               Rủi ro cao
             </span>
-            <span class="font-black text-rose-700 font-mono text-base">25%</span>
+            <span class="font-black text-rose-700 font-mono text-base">{{ riskBreakdown[2]?.pct || '0%' }}</span>
           </div>
         </div>
 
@@ -186,19 +206,19 @@
           <!-- Item 1 -->
           <li
             class="flex items-center gap-3.5 text-slate-700 font-bold p-3 bg-slate-50/70 rounded-xl border border-slate-100">
-            <span><strong class="text-slate-900 text-base">25 sản phẩm</strong> cần được xem xét</span>
+            <span><strong class="text-slate-900 text-base">{{ attentionNotice.highRiskCountText }}</strong> cần được xem xét</span>
           </li>
 
           <!-- Item 2 -->
           <li
             class="flex items-center gap-3.5 text-slate-700 font-bold p-3 bg-slate-50/70 rounded-xl border border-slate-100">
-            <span><strong class="text-slate-900 text-base">10 sản phẩm</strong> nằm kho 61–90 ngày</span>
+            <span><strong class="text-slate-900 text-base">{{ attentionNotice.slowCountText }}</strong> nằm kho 61–90 ngày</span>
           </li>
 
           <!-- Item 3 -->
           <li
             class="flex items-center gap-3.5 text-slate-700 font-bold p-3 bg-slate-50/70 rounded-xl border border-slate-100">
-            <span><strong class="text-slate-900 text-base">15 sản phẩm</strong> nằm kho trên 90 ngày</span>
+            <span><strong class="text-slate-900 text-base">{{ attentionNotice.deadCountText }}</strong> nằm kho trên 90 ngày</span>
           </li>
         </ul>
       </div>

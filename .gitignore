@@ -47,4 +47,6 @@ models/
 predictions/
 reports/
 frontend/.angular/
+backend/uploads/
+uploads/
 *.csv

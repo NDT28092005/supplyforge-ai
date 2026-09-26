@@ -13,22 +13,27 @@
         Đo lường lượng tiền vốn đang bị chôn trong kho, phân rã mức độ rủi ro và xác định ưu tiên giải phóng dòng tiền
       </p>
     </div>
+  </div>
 
-    <!-- Header Controls -->
-    <div class="flex items-center gap-3 shrink-0 flex-wrap">
-      <div class="relative">
-        <select [(ngModel)]="selectedPeriod"
-          class="bg-white border border-slate-200/90 text-slate-700 font-bold text-sm px-5 py-3 pr-10 rounded-2xl cursor-pointer outline-none focus:border-indigo-500 shadow-xs appearance-none">
-          <option value="30 ngày qua">Kỳ phân tích: 30 ngày qua</option>
-          <option value="90 ngày qua">Kỳ phân tích: 90 ngày qua</option>
-          <option value="Từ trước tới nay">Kỳ phân tích: Tất cả</option>
-        </select>
-        <svg class="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" viewBox="0 0 24 24"
-          fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-      </div>
+  <!-- Empty State when skuItems.length === 0 -->
+  <div *ngIf="skuItems.length === 0" class="bg-amber-50 border border-amber-200 rounded-3xl p-8 text-center space-y-4 shadow-xs">
+    <div class="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto font-bold">
+      <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+      </svg>
     </div>
+    <div class="space-y-1">
+      <h3 class="text-lg font-bold text-slate-900">Chưa có dữ liệu đánh giá vốn đọng trong kho</h3>
+      <p class="text-xs sm:text-sm text-slate-600 font-medium max-w-lg mx-auto">
+        Hiện tại chưa có bản ghi sản phẩm nào. Vui lòng nạp tệp CSV bán hàng mới để hệ thống tính toán giá trị vốn tồn đọng.
+      </p>
+    </div>
+    <button (click)="navigateTo.emit('csv-upload')" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all cursor-pointer shadow-xs inline-flex items-center gap-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+      </svg>
+      <span>Tải tệp CSV mới ngay</span>
+    </button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -75,7 +80,7 @@
           {{ summaryGrid.highRiskExposure }}
         </div>
         <div class="text-xs text-rose-800/80 font-medium mt-1 flex items-center justify-between">
-          <span>Vốn chôn ở 25 SKU thuộc nhóm rủi ro cao</span>
+          <span>Vốn chôn ở {{ highRiskCount }} SKU thuộc nhóm rủi ro cao</span>
           <span class="text-rose-700 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
         </div>
       </div>
@@ -140,7 +145,7 @@
         </div>
         <span
           class="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
-          100 SKU
+          {{ totalCount }} SKU
         </span>
       </div>
 
@@ -303,7 +308,9 @@
 
             <!-- Risk Status Badge -->
             <td class="py-4 px-4 text-center whitespace-nowrap">
-              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border whitespace-nowrap" [ngClass]="{
+              <span
+                class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border whitespace-nowrap"
+                [ngClass]="{
                   'bg-rose-50 text-rose-800 border-rose-200': item.riskClass === 'HIGH_RISK',
                   'bg-amber-50 text-amber-800 border-amber-200': item.riskClass === 'MEDIUM_RISK',
                   'bg-emerald-50 text-emerald-800 border-emerald-200': item.riskClass === 'LOW_RISK'

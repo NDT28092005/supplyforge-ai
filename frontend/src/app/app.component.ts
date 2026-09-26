@@ -60,6 +60,7 @@ export class AppComponent implements OnInit {
   authInitialTab: 'login' | 'register' = 'login';
 
   uploadFile: File | null = null;
+  uploadErrorMessage: string = '';
   mappingData: any = null;
   activeSessionId: string = '';
   datasetProfileData: any = null;
@@ -191,6 +192,7 @@ export class AppComponent implements OnInit {
   // --- File Import Flow ---
   startProcessing(event: { file: File }): void {
     this.uploadFile = event.file;
+    this.uploadErrorMessage = '';
     this.stage = 'processing';
 
     this.apiService.uploadCsvV2(event.file, 1, 'INITIAL').subscribe({
@@ -198,6 +200,13 @@ export class AppComponent implements OnInit {
         if (res?.sessionId) {
           this.activeSessionId = res.sessionId;
         }
+
+        if (res?.status === 'REJECT' || res?.profile?.validation?.status === 'REJECT') {
+          this.uploadErrorMessage = res?.error || res?.profile?.validation?.errors?.join('; ') || 'Tệp CSV không hợp lệ hoặc bị hệ thống từ chối.';
+          this.stage = 'csv-upload';
+          return;
+        }
+
         const profile = res?.profile;
         if (profile) {
           this.mappingData = {
@@ -212,18 +221,43 @@ export class AppComponent implements OnInit {
           this.autoMapFields(this.mappingData);
           this.stage = 'mapping';
         } else {
+          this.uploadErrorMessage = 'Không nhận diện được cấu trúc tệp CSV.';
           this.stage = 'csv-upload';
         }
       },
       error: (err: any) => {
         console.error('Hero upload error:', err);
+        this.uploadErrorMessage = err.error?.error || 'Tệp CSV không hợp lệ (sai mã hóa, trùng cột, thiếu header hoặc rỗng).';
         this.stage = 'csv-upload';
       }
     });
   }
 
-  handleCsvProfileComplete(event: { file: File; profileData: any }): void {
+  handleCancelImport(): void {
+    if (this.activeSessionId) {
+      this.apiService.cancelIngestionSession(this.activeSessionId).subscribe({
+        next: () => {
+          console.log('Ingestion session cancelled on backend');
+        },
+        error: (err) => console.error('Cancel session error:', err)
+      });
+    }
+    this.uploadFile = null;
+    this.mappingData = null;
+    this.activeSessionId = '';
+    this.uploadErrorMessage = 'Đã hủy nạp tệp theo yêu cầu của bạn.';
+    this.isProcessingBatch = false;
+    this.stage = 'csv-upload';
+  }
+
+  handleCsvProfileComplete(event: { file: File; profileData: any; sessionType?: 'INITIAL' | 'INCREMENTAL' }): void {
     this.uploadFile = event.file;
+    if (event.sessionType) {
+      this.importMode = event.sessionType === 'INCREMENTAL' ? 'incremental' : 'fresh';
+    }
+    if (event.profileData?.sessionId) {
+      this.activeSessionId = event.profileData.sessionId;
+    }
     const profile = event.profileData?.profile;
 
     if (profile) {
@@ -296,29 +330,45 @@ export class AppComponent implements OnInit {
   handleConfirmMapping(finalMapping: Record<string, string>): void {
     this.isProcessingBatch = true;
     const targetFile = this.uploadFile;
+    const sessionType = this.importMode === 'fresh' ? 'INITIAL' : 'INCREMENTAL';
 
-    const onProfilingComplete = (profileRes: any) => {
+    const onProfilingComplete = (profileRes: any, processRes?: any) => {
       this.isProcessingBatch = false;
-      this.datasetProfileData = profileRes?.profile || profileRes;
+      const baseProfile = profileRes?.profile || profileRes || {};
+      const proc = processRes || {};
+      this.datasetProfileData = {
+        ...baseProfile,
+        ...proc,
+        import_type: proc.import_type || sessionType,
+        duplicate_rows: proc.duplicate_rows ?? baseProfile.duplicate_rows ?? 0,
+        updated_rows: proc.updated_rows ?? proc.details?.updated_rows ?? baseProfile.updated_rows ?? 0,
+        data_corrections: proc.data_corrections ?? proc.details?.data_corrections ?? baseProfile.data_corrections ?? [],
+        rows_rejected: proc.rows_rejected ?? baseProfile.rows_rejected ?? 0,
+        rejected_rows: proc.rejected_rows ?? proc.details?.rejected_rows ?? baseProfile.rejected_rows ?? [],
+        overlap_detected: proc.overlap_detected ?? baseProfile.overlap_detected ?? false,
+        rows_received: proc.rows_received ?? baseProfile.rows_received ?? 0,
+        new_rows: proc.new_rows ?? baseProfile.new_rows ?? 0,
+        temporal_range: proc.temporal_range ?? baseProfile.temporal_range ?? null
+      };
       this.stage = 'dataset-profile';
     };
 
     if (this.activeSessionId) {
       this.apiService.triggerDatasetProfiling(this.activeSessionId, finalMapping).subscribe({
-        next: (res) => {
+        next: (profileRes) => {
           if (targetFile) {
-            this.apiService.processFile(targetFile, finalMapping).subscribe();
+            this.apiService.processFile(targetFile, finalMapping, 'user_default_001', sessionType).subscribe({
+              next: (processRes) => onProfilingComplete(profileRes, processRes),
+              error: () => onProfilingComplete(profileRes)
+            });
+          } else {
+            onProfilingComplete(profileRes);
           }
-          onProfilingComplete(res);
         },
         error: () => {
           if (targetFile) {
-            this.apiService.processFile(targetFile, finalMapping).subscribe({
-              next: () => {
-                this.isProcessingBatch = false;
-                this.loadDashboardData();
-                this.stage = 'executive-dashboard';
-              },
+            this.apiService.processFile(targetFile, finalMapping, 'user_default_001', sessionType).subscribe({
+              next: (processRes) => onProfilingComplete(null, processRes),
               error: () => {
                 this.isProcessingBatch = false;
                 this.loadDashboardData();
@@ -333,12 +383,8 @@ export class AppComponent implements OnInit {
         }
       });
     } else if (targetFile) {
-      this.apiService.processFile(targetFile, finalMapping).subscribe({
-        next: () => {
-          this.isProcessingBatch = false;
-          this.loadDashboardData();
-          this.stage = 'executive-dashboard';
-        },
+      this.apiService.processFile(targetFile, finalMapping, 'user_default_001', sessionType).subscribe({
+        next: (processRes) => onProfilingComplete(null, processRes),
         error: () => {
           this.isProcessingBatch = false;
           this.loadDashboardData();
@@ -355,11 +401,18 @@ export class AppComponent implements OnInit {
   handleProceedFromProfile(): void {
     if (this.activeSessionId) {
       this.apiService.runM3RiskAssessmentAssembly(this.activeSessionId).subscribe({
-        next: () => this.apiService.runM3RiskMonitoring(this.activeSessionId).subscribe(),
-        error: (err) => console.warn('M3 assembly trigger error:', err)
+        next: () => {
+          this.apiService.runM3RiskMonitoring(this.activeSessionId).subscribe();
+          this.loadDashboardData();
+        },
+        error: (err) => {
+          console.warn('M3 assembly trigger error:', err);
+          this.loadDashboardData();
+        }
       });
+    } else {
+      this.loadDashboardData();
     }
-    this.loadDashboardData();
     this.stage = 'executive-dashboard';
   }
 
@@ -380,7 +433,13 @@ export class AppComponent implements OnInit {
           const deadList = res.deadStockSkus || [];
           const allSkus = [...deadList, ...slowList, ...watchlistList, ...healthyList];
 
+          if (allSkus.length === 0) {
+            this.setEmptyDashboardData();
+            return;
+          }
+
           let topStale = [...deadList, ...slowList].map((item: any) => ({
+            sku: item.sku || item.item_sku || item.name || 'SKU Sản phẩm',
             name: item.name || item.product_name || 'SKU Sản phẩm',
             frozenValueVnd: item.totalValue || item.frozenValueVnd || ((item.quantity || 1) * (item.costPrice || 50000)) || 0,
             lastRecordDate: item.lastRecordDate || 'N/A'
@@ -388,61 +447,50 @@ export class AppComponent implements OnInit {
 
           if (topStale.length === 0 && allSkus.length > 0) {
             topStale = allSkus.map((item: any) => ({
+              sku: item.sku || item.item_sku || item.name || 'SKU Sản phẩm',
               name: item.name || item.product_name || 'SKU Sản phẩm',
               frozenValueVnd: item.totalValue || item.frozenValueVnd || ((item.quantity || 1) * (item.costPrice || 50000)) || 0,
               lastRecordDate: item.lastRecordDate || 'N/A'
             })).slice(0, 5);
           }
 
-          const finalDeadStockValue = (deadVal > 0 || slowVal > 0) ? (deadVal + slowVal) : (allSkus.length > 0 ? Math.round(totalInvVal * 0.35) : 485000000);
-          const finalStaleCount = (deadList.length + slowList.length) > 0 ? (deadList.length + slowList.length) : (allSkus.length > 0 ? Math.ceil(allSkus.length * 0.35) : 142);
-          const finalInventoryValue = totalInvVal > 0 ? totalInvVal : (allSkus.length > 0 ? 650000000 : 1700000000);
-          const finalTotalCount = allSkus.length > 0 ? allSkus.length : 500;
+          const finalDeadStockValue = deadVal + slowVal;
+          const finalStaleCount = deadList.length + slowList.length;
           const finalBleedingRate = res.totalBleedingRateMonthly || Math.round(finalDeadStockValue * 0.08);
 
-          if (topStale.length === 0) {
-            topStale = [
-              { name: 'Áo thun Polo Cotton Premium (Trắng XL)', frozenValueVnd: 45000000, lastRecordDate: '2026-04-12' },
-              { name: 'Giày Sneaker Running V3 (Đen 42)', frozenValueVnd: 38000000, lastRecordDate: '2026-03-28' },
-              { name: 'Balo chống nước Laptop 15.6 inch', frozenValueVnd: 29000000, lastRecordDate: '2026-04-01' },
-              { name: 'Tai nghe Bluetooth Noise Cancelling', frozenValueVnd: 22000000, lastRecordDate: '2026-02-15' },
-              { name: 'Ví da Nam Dáng Ngang Handmade', frozenValueVnd: 18000000, lastRecordDate: '2026-03-10' }
-            ];
-          }
-
           this.dashboardData = {
+            hasData: true,
             ...res,
             totalDeadStockValueVnd: finalDeadStockValue,
             staleSkuCount: finalStaleCount,
             estimatedLoss30DaysVnd: finalBleedingRate,
-            totalInventoryValueVnd: finalInventoryValue,
-            totalRootSkuCount: finalTotalCount,
+            totalInventoryValueVnd: totalInvVal,
+            totalRootSkuCount: allSkus.length,
             topStaleSkus: topStale
           };
         } else {
-          this.setFallbackDashboardData();
+          this.setEmptyDashboardData();
         }
       },
       error: () => {
-        this.setFallbackDashboardData();
+        this.setEmptyDashboardData();
       }
     });
   }
 
-  setFallbackDashboardData(): void {
+  setEmptyDashboardData(): void {
     this.dashboardData = {
-      totalDeadStockValueVnd: 485000000,
-      staleSkuCount: 142,
-      estimatedLoss30DaysVnd: 38800000,
-      totalInventoryValueVnd: 1700000000,
-      totalRootSkuCount: 500,
-      topStaleSkus: [
-        { name: 'Áo thun Polo Cotton Premium (Trắng XL)', frozenValueVnd: 45000000, lastRecordDate: '2026-04-12' },
-        { name: 'Giày Sneaker Running V3 (Đen 42)', frozenValueVnd: 38000000, lastRecordDate: '2026-03-28' },
-        { name: 'Balo chống nước Laptop 15.6 inch', frozenValueVnd: 29000000, lastRecordDate: '2026-04-01' },
-        { name: 'Tai nghe Bluetooth Noise Cancelling', frozenValueVnd: 22000000, lastRecordDate: '2026-02-15' },
-        { name: 'Ví da Nam Dáng Ngang Handmade', frozenValueVnd: 18000000, lastRecordDate: '2026-03-10' }
-      ]
+      hasData: false,
+      totalDeadStockValueVnd: 0,
+      staleSkuCount: 0,
+      estimatedLoss30DaysVnd: 0,
+      totalInventoryValueVnd: 0,
+      totalRootSkuCount: 0,
+      healthySkus: [],
+      watchlistSkus: [],
+      slowMovingSkus: [],
+      deadStockSkus: [],
+      topStaleSkus: []
     };
   }
 
@@ -505,28 +553,67 @@ export class AppComponent implements OnInit {
     return 'bg-surface-hover text-secondary border border-border-base';
   }
 
+  // Import mode flag: 'incremental' = add data on top, 'fresh' = clear old + import new
+  importMode: 'incremental' | 'fresh' = 'incremental';
+  isClearingData = false;
+
   startIncrementalImport(): void {
+    this.importMode = 'incremental';
     this.uploadFile = null;
     this.mappingData = null;
+    this.activeSessionId = '';
     this.stage = 'csv-upload';
   }
 
-  clearAllDataAndRestart(): void {
+  // Clear Data Modal State
+  isClearModalOpen = false;
+
+  openClearModal(): void {
+    this.isClearModalOpen = true;
+  }
+
+  cancelClearModal(): void {
+    this.isClearModalOpen = false;
+  }
+
+  confirmClearData(): void {
+    this.isClearModalOpen = false;
+    this.isClearingData = true;
     this.apiService.clearData().subscribe({
       next: () => {
-        this.resetAllStates();
+        this.isClearingData = false;
+        this.resetAllStatesAndGoToUpload();
       },
       error: () => {
-        this.resetAllStates();
+        this.isClearingData = false;
+        this.resetAllStatesAndGoToUpload();
       }
     });
+  }
+
+  clearAllDataAndRestart(): void {
+    this.importMode = 'fresh';
+    this.openClearModal();
   }
 
   resetAllStates(): void {
     this.uploadFile = null;
     this.mappingData = null;
     this.dashboardData = null;
+    this.activeSessionId = '';
+    this.selectedSkuId = null;
+    this.datasetProfileData = null;
     this.stage = 'hero';
+  }
+
+  resetAllStatesAndGoToUpload(): void {
+    this.uploadFile = null;
+    this.mappingData = null;
+    this.dashboardData = null;
+    this.activeSessionId = '';
+    this.selectedSkuId = null;
+    this.datasetProfileData = null;
+    this.stage = 'csv-upload';
   }
 
   // --- Auth Page Navigation ---

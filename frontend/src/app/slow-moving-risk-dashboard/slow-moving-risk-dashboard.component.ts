@@ -64,13 +64,188 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   constructor(private apiService: ApiService) {}
 
   ngOnInit(): void {
-    this.generateMockData();
-    if (this.skuId) {
-      const match = this.items.find(i => i.sku === this.skuId);
-      if (match) {
-        this.openDrawer(match);
+    this.loadRealAssessments();
+  }
+
+  loadRealAssessments(): void {
+    this.apiService.getM3RiskAssessments().subscribe({
+      next: (res: any) => {
+        if (res && res.assessments && res.assessments.length > 0) {
+          this.items = res.assessments.map((a: any) => this.mapAssessmentToSkuRiskItem(a));
+          if (this.skuId) {
+            const match = this.items.find(i => i.sku === this.skuId);
+            if (match) this.openDrawer(match);
+          }
+        } else {
+          this.loadFromDashboardData();
+        }
+      },
+      error: () => {
+        this.loadFromDashboardData();
       }
+    });
+  }
+
+  loadFromDashboardData(): void {
+    this.apiService.getDashboard(1).subscribe({
+      next: (res: any) => {
+        if (!res) {
+          this.items = [];
+          return;
+        }
+        const healthyList = (res.healthySkus || []).map((item: any) => ({ ...item, _riskClass: 'LOW_RISK' }));
+        const watchList = (res.watchlistSkus || []).map((item: any) => ({ ...item, _riskClass: 'MEDIUM_RISK' }));
+        const slowList = (res.slowMovingSkus || []).map((item: any) => ({ ...item, _riskClass: 'HIGH_RISK' }));
+        const deadList = (res.deadStockSkus || []).map((item: any) => ({ ...item, _riskClass: 'HIGH_RISK' }));
+
+        const allSkus = [...deadList, ...slowList, ...watchList, ...healthyList];
+        if (allSkus.length > 0) {
+          this.items = allSkus.map((item: any) => this.mapDashboardSkuToRiskItem(item));
+          if (this.skuId) {
+            const match = this.items.find(i => i.sku === this.skuId);
+            if (match) this.openDrawer(match);
+          }
+        } else {
+          this.items = [];
+        }
+      },
+      error: () => {
+        this.items = [];
+      }
+    });
+  }
+
+  mapDashboardSkuToRiskItem(item: any): SkuRiskItem {
+    const riskClass = item._riskClass as 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK';
+    const capVal = item.totalValue || ((item.quantity || 1) * (item.costPrice || 50000));
+    const formatCap = (val: number) => {
+      if (!val || val === 0) return '0';
+      if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
+      if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+      if (val >= 1000) return `${(val / 1000).toFixed(0)}K`;
+      return `${Math.round(val)}`;
+    };
+
+    const dslsDays = item.daysInInventory || 0;
+    const probPct = riskClass === 'HIGH_RISK' ? '96.5%' : (riskClass === 'MEDIUM_RISK' ? '65.0%' : '15.0%');
+    const probVal = riskClass === 'HIGH_RISK' ? 0.965 : (riskClass === 'MEDIUM_RISK' ? 0.65 : 0.15);
+    const zeroRatePct = dslsDays > 90 ? '92.5%' : (dslsDays > 30 ? '55.0%' : '12.0%');
+
+    const shapFactors: ShapFactorItem[] = [];
+    if (dslsDays > 30) {
+      shapFactors.push({
+        label: 'Số ngày chưa có đơn hàng mới',
+        subDesc: `Đã ${dslsDays} ngày chưa phát sinh giao dịch mới`,
+        impactText: dslsDays > 90 ? 'Tác động rất mạnh' : 'Tác động mạnh',
+        score: dslsDays > 90 ? 5 : 4,
+        pct: Math.min(100, Math.round(dslsDays / 2)),
+        severity: dslsDays > 90 ? 'red' : 'amber'
+      });
     }
+    if (shapFactors.length === 0) {
+      shapFactors.push({
+        label: 'Tốc độ bán hàng ổn định',
+        subDesc: 'Sức mua đều đặn hàng ngày',
+        impactText: 'Mức an toàn',
+        score: 1,
+        pct: 15,
+        severity: 'emerald'
+      });
+    }
+
+    return {
+      sku: item.sku || item.item_sku || item.name || 'SKU_UNSET',
+      name: item.name || item.product_name || item.sku || 'Sản phẩm',
+      riskClass: riskClass,
+      probabilityPct: probPct,
+      probabilityValue: probVal,
+      velocity: item.velocities?.weighted || 0.1,
+      dslsDays: dslsDays,
+      capitalExposure: formatCap(capVal),
+      sales30d: item.velocities?.simple ? Math.round(item.velocities.simple * 30) : 0,
+      sales90d: item.velocities?.weighted ? Math.round(item.velocities.weighted * 90) : 0,
+      zeroRatePct: zeroRatePct,
+      demandProb: 0.1,
+      demandPattern: dslsDays > 90 ? 'Bán lắt nhắt' : (dslsDays > 30 ? 'Bán không đều' : 'Bán đều đặn'),
+      shapFactors: shapFactors,
+      conclusion: `Sản phẩm có chu kỳ lưu kho ${dslsDays} ngày, thuộc nhóm rủi ro ${riskClass === 'HIGH_RISK' ? 'cao' : (riskClass === 'MEDIUM_RISK' ? 'cần theo dõi' : 'an toàn')}.`
+    };
+  }
+
+  mapAssessmentToSkuRiskItem(a: any): SkuRiskItem {
+    const ev = a.evidence || {};
+    const rawClass = a.risk?.class || a.risk_class || 'LOW_RISK';
+    const riskClass = (rawClass === 'CRITICAL' ? 'HIGH_RISK' : rawClass) as 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK';
+    const probVal = a.risk?.probability !== undefined ? a.risk.probability : (a.risk_probability !== undefined ? a.risk_probability : 0.5);
+    const probPct = `${(probVal * 100).toFixed(1)}%`;
+    const velocity = ev.sales_velocity_90d || ev.velocity_90d || 0;
+    const dslsDays = ev.dsls || 0;
+    const zeroRatePct = `${((ev.zero_rate_90d || 0) * 100).toFixed(1)}%`;
+
+    const capVal = ev.totalValue || ((ev.sold_90d || 1) * 50000);
+    const capitalExposure = capVal >= 1000000000 ? `${(capVal / 1000000000).toFixed(1)}B` : `${(capVal / 1000000).toFixed(1)}M`;
+
+    const shapFactors: ShapFactorItem[] = [];
+    if (ev.zero_rate_90d && ev.zero_rate_90d > 0.5) {
+      shapFactors.push({
+        label: 'Tỷ lệ ngày không bán (90 ngày qua)',
+        subDesc: `${zeroRatePct} thời gian không phát sinh đơn hàng nào`,
+        impactText: 'Tác động rất mạnh',
+        score: 5,
+        pct: Math.round((ev.zero_rate_90d || 0) * 100),
+        severity: 'red'
+      });
+    }
+    if (dslsDays > 30) {
+      shapFactors.push({
+        label: 'Số ngày chưa có đơn hàng mới',
+        subDesc: `Đã ${dslsDays} ngày kể từ đơn hàng phát sinh gần nhất`,
+        impactText: 'Tác động mạnh',
+        score: 4,
+        pct: Math.min(100, Math.round(dslsDays / 2)),
+        severity: dslsDays > 90 ? 'red' : 'amber'
+      });
+    }
+    if (velocity < 1.0) {
+      shapFactors.push({
+        label: 'Tốc độ tiêu thụ trung bình (Sales Velocity)',
+        subDesc: `Sức bán trung bình ${velocity.toFixed(2)} sản phẩm/ngày`,
+        impactText: 'Tác động mạnh',
+        score: 4,
+        pct: Math.max(20, Math.round((1 - velocity) * 100)),
+        severity: 'amber'
+      });
+    }
+    if (shapFactors.length === 0) {
+      shapFactors.push({
+        label: 'Tốc độ bán hàng ổn định',
+        subDesc: 'Sức mua đều đặn hàng ngày',
+        impactText: 'Mức an toàn',
+        score: 1,
+        pct: 15,
+        severity: 'emerald'
+      });
+    }
+
+    const roundTwo = (n: number) => Math.round(n * 100) / 100;
+
+    return {
+      sku: a.sku || a.canonical_sku_id || 'SKU_UNSET',
+      name: a.product_name || a.sku || 'Sản phẩm',
+      riskClass: riskClass,
+      probabilityPct: probPct,
+      probabilityValue: probVal,
+      velocity: velocity,
+      dslsDays: dslsDays,
+      capitalExposure: capitalExposure,
+      sales30d: ev.sold_30d || 0,
+      sales90d: ev.sold_90d || 0,
+      zeroRatePct: zeroRatePct,
+      demandProb: roundTwo(1.0 - (ev.zero_rate_90d || 0)),
+      demandPattern: velocity > 1.0 ? 'Smooth' : ((ev.zero_rate_90d || 0) > 0.7 ? 'Intermittent' : 'Lumpy'),
+      shapFactors: shapFactors,
+      conclusion: Array.isArray(a.primary_signals) ? a.primary_signals.join(', ') : (a.conclusion || 'SKU lưu thông thuộc diện quản lý rủi ro.')
+    };
   }
 
   generateMockData(): void {

@@ -52,7 +52,7 @@ def create_capital_exposure_analysis(request):
         from django.db.models import Max
 
         # Use real product data from database
-        products = Product.objects.filter(stock__gt=0)[:100]
+        products = Product.objects.all()
 
         if products.exists():
             # Determine reference date from actual data
@@ -113,22 +113,47 @@ def create_capital_exposure_analysis(request):
                         'risk_score': float(r.risk_score),
                     })
                 else:
+                    dsls_val = row.get('dsls', 0)
+                    if dsls_val > 90:
+                        r_cls = 'CRITICAL'
+                        r_prob = 0.95
+                        r_score = 95.0
+                    elif dsls_val > 60:
+                        r_cls = 'HIGH_RISK'
+                        r_prob = 0.80
+                        r_score = 80.0
+                    elif dsls_val > 30:
+                        r_cls = 'MEDIUM_RISK'
+                        r_prob = 0.50
+                        r_score = 50.0
+                    else:
+                        r_cls = 'LOW_RISK'
+                        r_prob = 0.15
+                        r_score = 15.0
+
                     risk_assessments.append({
                         'sku': sku,
-                        'risk_class': 'MEDIUM_RISK',
-                        'risk_probability': 0.5,
-                        'risk_score': 50.0,
+                        'risk_class': r_cls,
+                        'risk_probability': r_prob,
+                        'risk_score': r_score,
                     })
         else:
-            # Fallback to minimal sample data if no products imported
-            sample_df = pd.DataFrame([
-                {'sku': f'SKU_{1000+i}', 'product_name': f'Product {i}', 'category': 'General', 'stock_on_hand': 50 + i*10, 'unit_cost': 100000.0 + i*5000, 'dsls': 15 + i*40, 'last_sale_date': None}
-                for i in range(5)
-            ])
-            risk_assessments = [
-                {'sku': f'SKU_{1000+i}', 'risk_class': ['CRITICAL', 'HIGH_RISK', 'MEDIUM_RISK', 'LOW_RISK'][i % 4], 'risk_probability': 0.95 - i*0.15, 'risk_score': 95.0 - i*15}
-                for i in range(5)
-            ]
+            return Response({
+                "status": "SUCCESS",
+                "message": "No products exist in database.",
+                "analysis_id": "EMPTY_ANALYSIS",
+                "merchant_id": merchant_id,
+                "dataset_version": dataset_version,
+                "summary": {
+                    "total_inventory_value": 0.0,
+                    "total_capital_exposure": 0.0,
+                    "high_risk_capital_exposure": 0.0,
+                    "estimated_annual_opportunity_cost": 0.0,
+                    "total_skus": 0
+                },
+                "items": [],
+                "top_financial_skus": []
+            }, status=status.HTTP_200_OK)
 
         # Generate sample pipeline dataset if no custom data attached
         val_engine = CapitalValuationEngine()

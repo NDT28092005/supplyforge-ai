@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../api.service';
@@ -48,6 +48,8 @@ export interface DecisionItem {
   styleUrls: ['./decision-support-dashboard.component.css']
 })
 export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
+  @Output() navigateTo = new EventEmitter<string>();
+
   isLoading = false;
   errorMessage = '';
 
@@ -105,21 +107,111 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
       next: (data: DecisionItem[]) => {
         if (data && data.length > 0) {
           this.decisions = this.normalizeDecisionsData(data);
+          this.applySearchFilter();
+          this.calculateKpis();
+          this.isLoading = false;
         } else {
-          this.decisions = this.generateMockDecisions();
+          this.loadFromDashboardData();
+        }
+      },
+      error: (err: any) => {
+        this.loadFromDashboardData();
+      }
+    });
+  }
+
+  loadFromDashboardData(): void {
+    this.apiService.getDashboard(1).subscribe({
+      next: (res: any) => {
+        if (!res) {
+          this.decisions = [];
+          this.applySearchFilter();
+          this.calculateKpis();
+          this.isLoading = false;
+          return;
+        }
+        const healthyList = (res.healthySkus || []).map((item: any) => ({ ...item, _riskClass: 'LOW_RISK' }));
+        const watchList = (res.watchlistSkus || []).map((item: any) => ({ ...item, _riskClass: 'MEDIUM_RISK' }));
+        const slowList = (res.slowMovingSkus || []).map((item: any) => ({ ...item, _riskClass: 'HIGH_RISK' }));
+        const deadList = (res.deadStockSkus || []).map((item: any) => ({ ...item, _riskClass: 'HIGH_RISK' }));
+
+        const allSkus = [...deadList, ...slowList, ...watchList, ...healthyList];
+        if (allSkus.length > 0) {
+          this.decisions = allSkus.map((item: any, idx: number) => this.mapDashboardSkuToDecision(item, idx));
+        } else {
+          this.decisions = [];
         }
         this.applySearchFilter();
         this.calculateKpis();
         this.isLoading = false;
       },
-      error: (err: any) => {
-        console.warn('API connection failed, falling back to dynamic decision generator:', err);
-        this.decisions = this.generateMockDecisions();
+      error: () => {
+        this.decisions = [];
         this.applySearchFilter();
         this.calculateKpis();
         this.isLoading = false;
       }
     });
+  }
+
+  mapDashboardSkuToDecision(item: any, idx: number): DecisionItem {
+    const riskClass = item._riskClass as string;
+    const cap = item.totalValue || ((item.quantity || 1) * (item.costPrice || 50000));
+    const dsls = item.daysInInventory || 0;
+
+    let action = 'MONITOR';
+    let discountRate = 0.0;
+    let priority = 'P4';
+    let priorityScore = 20;
+
+    if (riskClass === 'HIGH_RISK') {
+      action = dsls > 90 ? 'CLEARANCE' : 'DISCOUNT';
+      discountRate = dsls > 90 ? 0.40 : 0.25;
+      priority = idx < 5 ? 'P1' : 'P2';
+      priorityScore = 95 - idx;
+    } else if (riskClass === 'MEDIUM_RISK') {
+      action = 'PROMOTION';
+      discountRate = 0.15;
+      priority = 'P3';
+      priorityScore = 60;
+    }
+
+    const rec = Math.round(cap * (1.0 - discountRate));
+    const residual = cap - rec;
+    const recRate = 1.0 - discountRate;
+
+    return {
+      decision_id: `DEC-${item.sku || idx + 1}`,
+      sku: item.sku || item.item_sku || item.name || `SKU-${idx + 1}`,
+      risk: {
+        class: riskClass,
+        score: riskClass === 'HIGH_RISK' ? 0.95 : (riskClass === 'MEDIUM_RISK' ? 0.65 : 0.15)
+      },
+      decision: {
+        action: action,
+        discount_rate: discountRate,
+        action_parameters: { discount: `${Math.round(discountRate * 100)}%` },
+        priority: priority,
+        priority_score: priorityScore,
+        priority_rank: idx + 1,
+        urgency: riskClass === 'HIGH_RISK' ? 'Thực thi ngay' : 'Theo dõi & đẩy đơn',
+        confidence: '95.0%',
+        status: 'RECOMMENDED'
+      },
+      financial_impact: {
+        capital_exposure: cap,
+        expected_recovery_value: rec,
+        recovery_rate: recRate,
+        residual_exposure: residual
+      },
+      explanation: {
+        explanation_id: `EXP-${item.sku || idx + 1}`,
+        reason_codes: [`DSLS_${dsls}_DAYS`]
+      },
+      metadata: { dataset_version: 'v1.0', policy_version: 'v1.0', engine_version: 'v1.0' },
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
   }
 
   normalizeDecisionsData(data: DecisionItem[]): DecisionItem[] {

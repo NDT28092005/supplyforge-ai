@@ -8,7 +8,7 @@ for all at-risk SKUs after CSV data ingestion.
 import logging
 from typing import List, Dict, Any
 
-from supplyforge.models import Product, SlowMovingRiskAssessment
+from supplyforge.models import Product, SlowMovingRiskAssessment, DecisionRecord
 from supplyforge.services.decision_service import DecisionPersistenceService
 
 logger = logging.getLogger(__name__)
@@ -25,10 +25,10 @@ class AutoDecisionGeneratorService:
         """
         assessments = SlowMovingRiskAssessment.objects.all()
         if not assessments.exists():
-            from supplyforge.views.risk_assessment_api import _auto_populate_assessments_from_products
-            _auto_populate_assessments_from_products()
-            assessments = SlowMovingRiskAssessment.objects.all()
+            DecisionRecord.objects.all().delete()
+            return []
 
+        DecisionRecord.objects.all().delete()
         products = {p.item_sku or p.third_party_id or f"SKU_{p.id}": p for p in Product.objects.all()}
 
         created_decisions = []

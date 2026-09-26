@@ -77,18 +77,11 @@ def run_and_persist_assessments(request=None, session_id=None, workspace_id=1, u
     reports_dir = os.path.join(PROJECT_ROOT, 'reports')
 
     if pred_df is None or pred_df.empty:
-        c_path = os.path.join(data_dir, 'slow_moving_risk_classifications.csv')
-        if os.path.exists(c_path):
-            try:
-                pred_df = pd.read_csv(c_path)
-            except Exception:
-                pass
+        _auto_populate_assessments_from_products(session_id)
+        if request is not None:
+            return Response({'status': 'SUCCESS', 'message': 'Auto-populated risk assessments from products.'})
+        return {'status': 'SUCCESS'}
 
-    if pred_df is None or pred_df.empty:
-        return Response(
-            {'error': 'Chưa tìm thấy dữ liệu M3-03/M3-04 Predictions. Vui lòng thực thi M3-03 / M3-04 trước.'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
 
     try:
         assembler = RiskAssessmentAssembler(session_id=str(session.id))
@@ -377,9 +370,10 @@ def _auto_populate_assessments_from_products(session_id=None):
                 })
 
     if not real_items:
+        SlowMovingRiskAssessment.objects.all().delete()
         return
 
-    # Delete any old orphan demo assessments (e.g. CSKU_101, CSKU_102)
+    # Delete any old orphan demo assessments
     SlowMovingRiskAssessment.objects.all().delete()
 
     # 3. Compute real evidence for each SKU from Order/OrderItem history
@@ -457,6 +451,22 @@ def _auto_populate_assessments_from_products(session_id=None):
             session_obj = None
     if not session_obj:
         session_obj = IngestionSession.objects.order_by('-created_at').first()
+    if not session_obj:
+        import uuid
+        from supplyforge.models import Workspace
+        ws = Workspace.objects.filter(id=1).first()
+        if not ws:
+            ws = Workspace.objects.first()
+        if not ws:
+            ws = Workspace.objects.create(id=1, name='Default Workspace')
+        session_obj = IngestionSession.objects.create(
+            id=uuid.uuid4(),
+            workspace=ws,
+            original_filename='system_auto_session.csv',
+            status='COMPLETED',
+            readiness_status='READY',
+            readiness_score=100.0
+        )
 
     assessments_to_create = []
 

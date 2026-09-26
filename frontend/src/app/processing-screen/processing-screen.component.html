@@ -1,35 +1,59 @@
 <div class="min-h-screen bg-slate-50/50 flex flex-col items-center justify-center px-6">
-  <div class="w-full max-w-md bg-white border border-slate-200/80 p-8 rounded-3xl shadow-xs space-y-6 animate-fade-in">
+  <div class="w-full max-w-lg bg-white border border-slate-200/80 p-8 rounded-3xl shadow-xs space-y-6 animate-fade-in">
     <div class="text-center space-y-1">
       <p class="text-xs font-bold text-indigo-600 uppercase tracking-wider">
-        Đang xử lý dữ liệu
+        Tiến trình nạp tệp
       </p>
-      <h3 class="text-xl font-black text-slate-900 font-sans">Vui lòng chờ trong giây lát</h3>
+      <h3 class="text-xl font-black text-slate-900 font-sans">Đang đồng bộ dữ liệu vào hệ thống</h3>
     </div>
 
     <!-- Progress Bar -->
-    <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
-      <div class="bg-indigo-600 h-2 rounded-full transition-all duration-500" [style.width.%]="progress"></div>
-    </div>
-
-    <!-- Step Items -->
-    <div class="space-y-3 font-sans pt-2">
-      <div *ngFor="let step of steps; let i = index"
-           class="flex items-center gap-3 transition-all duration-300"
-           [ngClass]="{ 'opacity-40': i < stepIndex, 'opacity-100': i === stepIndex, 'opacity-20': i > stepIndex }">
-        <div class="w-2 h-2 rounded-full flex-shrink-0"
-             [ngClass]="{ 'bg-emerald-500': i < stepIndex, 'bg-indigo-600 animate-pulse': i === stepIndex, 'bg-slate-300': i > stepIndex }">
-        </div>
-        <span class="text-xs font-bold" [ngClass]="{ 'text-slate-900': i === stepIndex, 'text-slate-600': i !== stepIndex }">
-          {{ step.label }}
-        </span>
+    <div class="space-y-1.5">
+      <div class="flex justify-between items-center text-xs font-bold text-slate-600">
+        <span>Tổng tiến trình xử lý</span>
+        <span class="font-mono text-indigo-600 font-black text-sm">{{ progress }}%</span>
+      </div>
+      <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200">
+        <div class="bg-indigo-600 h-2.5 rounded-full transition-all duration-500" [style.width.%]="progress"></div>
       </div>
     </div>
 
-    <div class="pt-2 text-right border-t border-slate-100">
-      <span class="font-mono font-black text-2xl text-indigo-600">
-        {{ progress }}%
-      </span>
+    <!-- Granular Pipeline Stage Breakdown (IR-013) -->
+    <div class="space-y-2.5 font-sans pt-2">
+      <div *ngFor="let step of steps; let i = index"
+        class="flex items-center justify-between p-2.5 rounded-xl border transition-all duration-300" [ngClass]="{
+             'bg-emerald-50/80 border-emerald-200 opacity-100': i < stepIndex,
+             'bg-indigo-50/80 border-indigo-200 shadow-xs opacity-100': i === stepIndex,
+             'bg-slate-50/50 border-slate-100 opacity-40': i > stepIndex
+           }">
+        <div class="flex items-center gap-3">
+          <div class="w-2.5 h-2.5 rounded-full flex-shrink-0"
+            [ngClass]="{ 'bg-emerald-500': i < stepIndex, 'bg-indigo-600 animate-pulse': i === stepIndex, 'bg-slate-300': i > stepIndex }">
+          </div>
+          <span class="text-xs font-bold"
+            [ngClass]="{ 'text-slate-900': i === stepIndex, 'text-emerald-900': i < stepIndex, 'text-slate-500': i > stepIndex }">
+            {{ step.label }}
+          </span>
+        </div>
+        <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full border" [ngClass]="{
+                'bg-emerald-100 text-emerald-800 border-emerald-300': i < stepIndex,
+                'bg-indigo-100 text-indigo-800 border-indigo-300': i === stepIndex,
+                'bg-slate-100 text-slate-400 border-slate-200': i > stepIndex
+              }">
+          {{ i < stepIndex ? '100%' : (i===stepIndex ? (progress + '%' ) : '0%' ) }} </span>
+      </div>
+    </div>
+
+    <!-- IR-014 Cancel Import Button -->
+    <div class="pt-4 border-t border-slate-100 flex justify-center">
+      <button (click)="onCancel()"
+        type="button"
+        class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 hover:bg-rose-100 hover:border-rose-300 active:scale-95 transition-all cursor-pointer shadow-xs">
+        <svg class="w-4 h-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+        Hủy nạp tệp (Cancel Import)
+      </button>
     </div>
   </div>
 </div>

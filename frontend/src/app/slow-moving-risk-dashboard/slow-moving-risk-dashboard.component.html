@@ -13,19 +13,28 @@
         Sản phẩm nào đang bán chậm và nguyên nhân là gì
       </p>
     </div>
-
-    <!-- Quick Summary Badge -->
-    <div class="flex items-center gap-3 shrink-0">
-      <div class="bg-rose-50 border border-rose-200 p-4 rounded-2xl flex items-center gap-3">
-        <div class="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></div>
-        <div>
-          <div class="text-xs font-bold text-rose-800 uppercase tracking-wider">Cần xử lý</div>
-          <div class="text-xl font-black text-rose-600 font-mono">25 sản phẩm bán chậm</div>
-        </div>
-      </div>
-    </div>
   </div>
 
+  <!-- Empty State when items.length === 0 -->
+  <div *ngIf="items.length === 0" class="bg-amber-50 border border-amber-200 rounded-3xl p-8 text-center space-y-4 shadow-xs">
+    <div class="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto font-bold">
+      <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+      </svg>
+    </div>
+    <div class="space-y-1">
+      <h3 class="text-lg font-bold text-slate-900">Chưa có dữ liệu đánh giá rủi ro hàng tồn kho</h3>
+      <p class="text-xs sm:text-sm text-slate-600 font-medium max-w-lg mx-auto">
+        Hiện chưa có bản ghi sản phẩm nào. Vui lòng nạp tệp CSV lịch sử bán hàng để hệ thống đánh giá tốc độ bán và phân tích rủi ro.
+      </p>
+    </div>
+    <button (click)="navigateTo.emit('csv-upload')" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all cursor-pointer shadow-xs inline-flex items-center gap-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+      </svg>
+      <span>Tải tệp CSV mới ngay</span>
+    </button>
+  </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- PHẦN A: BẢNG DANH SÁCH RỦI RO (MAIN VIEW)                          -->
@@ -486,22 +495,23 @@
               <div>Cần chú ý</div>
               <div class="text-[11px] text-amber-700 font-mono font-normal">50% - 85%</div>
             </div>
-            <div class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold space-y-0.5">
+            <div
+              class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold space-y-0.5">
               <div>Bình thường</div>
               <div class="text-[11px] text-emerald-700 font-mono font-normal">Mức độ < 50%</div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Footer Button -->
-      <div class="pt-3 flex justify-end">
-        <button (click)="closeShapCalcModal()"
-          class="w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm py-3 rounded-2xl transition-colors cursor-pointer text-center active:scale-95 shadow-sm">
-          Tôi đã hiểu
-        </button>
+        <!-- Footer Button -->
+        <div class="pt-3 flex justify-end">
+          <button (click)="closeShapCalcModal()"
+            class="w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm py-3 rounded-2xl transition-colors cursor-pointer text-center active:scale-95 shadow-sm">
+            Tôi đã hiểu
+          </button>
+        </div>
       </div>
     </div>
-  </div>
 
-</div>
+  </div>

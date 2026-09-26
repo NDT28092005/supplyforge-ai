@@ -84,15 +84,109 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
     { sku: 'CRIT-017', capitalExposure: '84.8M', riskLevel: 'HIGH_RISK', badgeClass: 'bg-rose-600 text-white' }
   ];
 
+  // Attention Notice State
+  attentionNotice = {
+    highRiskCountText: '25 sản phẩm',
+    slowCountText: '10 sản phẩm',
+    deadCountText: '15 sản phẩm'
+  };
+
   constructor(private apiService: ApiService) {}
 
   ngOnInit(): void {
-    // Component initialization
+    this.updateDashboardFromData();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes['data']) {
+      this.updateDashboardFromData();
+    }
     if (this.donutChartInstance) {
       this.initDonutChart();
+    }
+  }
+
+  updateDashboardFromData(): void {
+    if (!this.data) return;
+
+    const healthyList = this.data.healthySkus || [];
+    const watchList = this.data.watchlistSkus || [];
+    const slowList = this.data.slowMovingSkus || [];
+    const deadList = this.data.deadStockSkus || [];
+
+    const safeCount = healthyList.length;
+    const watchCount = watchList.length;
+    const slowCount = slowList.length;
+    const deadCount = deadList.length;
+    const highRiskCount = slowCount + deadCount;
+    const totalCount = safeCount + watchCount + highRiskCount;
+
+    this.attentionNotice = {
+      highRiskCountText: `${highRiskCount} sản phẩm`,
+      slowCountText: `${slowCount} sản phẩm`,
+      deadCountText: `${deadCount} sản phẩm`
+    };
+
+    if (totalCount > 0) {
+      const safePctVal = Math.round((safeCount / totalCount) * 100);
+      const watchPctVal = Math.round((watchCount / totalCount) * 100);
+      const highRiskPctVal = Math.max(0, 100 - safePctVal - watchPctVal);
+
+      const totalCapVnd = this.data.totalInventoryValueVnd || (
+        healthyList.reduce((acc: number, item: any) => acc + (item.totalValue || 0), 0) +
+        slowList.reduce((acc: number, item: any) => acc + (item.totalValue || 0), 0) +
+        deadList.reduce((acc: number, item: any) => acc + (item.totalValue || 0), 0)
+      );
+
+      const topStale = this.data.topStaleSkus || [];
+      const topPriorityVal = topStale.length > 0 ? (topStale[0].frozenValueVnd || topStale[0].totalValue || 0) : 0;
+
+      const formatCurrencyShort = (val: number) => {
+        if (!val || val === 0) return '0';
+        if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
+        if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+        if (val >= 1000) return `${(val / 1000).toFixed(0)}K`;
+        return `${val}`;
+      };
+
+      this.kpiGrid = {
+        monitoredSkus: `${totalCount} SKU`,
+        safePct: `${safePctVal}%`,
+        highRiskSkus: `${highRiskCount} SKU`,
+        needActionPct: `${highRiskPctVal}%`,
+        totalCapitalExposure: formatCurrencyShort(totalCapVnd),
+        topPriorityValue: formatCurrencyShort(topPriorityVal)
+      };
+
+      this.riskBreakdown = [
+        { label: 'An toàn', pct: `${safePctVal}%`, value: safePctVal, color: this.COLOR_SAFE },
+        { label: 'Cần theo dõi', pct: `${watchPctVal}%`, value: watchPctVal, color: this.COLOR_WATCH },
+        { label: 'Rủi ro cao', pct: `${highRiskPctVal}%`, value: highRiskPctVal, color: this.COLOR_HIGH_RISK }
+      ];
+
+      if (topStale.length > 0) {
+        this.topPriorities = topStale.slice(0, 3).map((item: any) => ({
+          sku: item.name || item.sku || 'SKU Sản phẩm',
+          capitalExposure: formatCurrencyShort(item.frozenValueVnd || item.totalValue || 0),
+          riskLevel: 'HIGH_RISK',
+          badgeClass: 'bg-rose-600 text-white'
+        }));
+      } else {
+        this.topPriorities = [];
+      }
+    } else {
+      this.kpiGrid = {
+        monitoredSkus: '0 SKU',
+        safePct: '0%',
+        highRiskSkus: '0 SKU',
+        needActionPct: '0%',
+        totalCapitalExposure: '0',
+        topPriorityValue: '0'
+      };
+      this.riskBreakdown = [
+        { label: 'Chưa có dữ liệu', pct: '0%', value: 0, color: '#94A3B8' }
+      ];
+      this.topPriorities = [];
     }
   }
 
@@ -169,11 +263,11 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
               show: false
             }
           },
-          data: [
-            { value: 69, name: 'An toàn', itemStyle: { color: this.COLOR_SAFE } },
-            { value: 6, name: 'Cần theo dõi', itemStyle: { color: this.COLOR_WATCH } },
-            { value: 25, name: 'Rủi ro cao', itemStyle: { color: this.COLOR_HIGH_RISK } }
-          ]
+          data: this.riskBreakdown.map(b => ({
+            value: b.value,
+            name: b.label,
+            itemStyle: { color: b.color }
+          }))
         }
       ]
     };
