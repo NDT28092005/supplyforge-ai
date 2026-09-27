@@ -1,6 +1,7 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ApiService } from '../api.service';
 
 export interface CapitalSkuItem {
@@ -9,10 +10,10 @@ export interface CapitalSkuItem {
   riskClass: 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK';
   probabilityPct: string;
   dslsDays: number;
-  capitalExposure: string; // e.g. "93.8M"
-  capitalPriority: string; // e.g. "92.3M"
-  opportunityCost: string; // e.g. "4.7M"
-  agingBucket: string; // e.g. "Trên 90 ngày"
+  capitalExposure: string;
+  capitalPriority: string;
+  opportunityCost: string;
+  agingBucket: string;
   sales30d: number;
   sales90d: number;
   zeroRatePct: string;
@@ -42,17 +43,14 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
 
   @Output() navigateTo = new EventEmitter<string>();
 
-  // Filter & Search State
-  selectedRiskFilter: string = ''; // '' = Tất cả (100), 'HIGH_RISK' = 25, 'MEDIUM_RISK' = 6, 'LOW_RISK' = 69
+  selectedRiskFilter: string = '';
   searchTerm: string = '';
   selectedPeriod: string = '30 ngày qua';
 
-  // Modal State
   drawerOpen: boolean = false;
   selectedSkuItem: CapitalSkuItem | null = null;
   showShapCalcModal: boolean = false;
 
-  // KPI Summary
   summaryGrid = {
     totalExposure: '0',
     highRiskExposure: '0',
@@ -60,14 +58,14 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
     affectedSkus: '0 SKU'
   };
 
-  // Distributions Data
   riskDistribution: any[] = [];
   agingDistribution: any[] = [];
-
-  // Mock 100 SKUs List
   skuItems: CapitalSkuItem[] = [];
 
-  constructor(private apiService: ApiService) {}
+  constructor(
+    private apiService: ApiService,
+    private router: Router
+  ) {}
 
   formatCurrencyShort(val: number): string {
     if (!val || val === 0) return '0';
@@ -131,7 +129,6 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
   }
 
   processRealData(analysisRes: any, itemsList: any[]): void {
-    // 1. Map SKU Items first
     this.skuItems = itemsList.map((i: any) => {
       const rawClass = i.slow_moving_risk_class || i.risk_class || 'LOW_RISK';
       const riskClass: 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK' = (rawClass === 'CRITICAL' || rawClass === 'HIGH_RISK') ? 'HIGH_RISK' : (rawClass === 'MEDIUM_RISK' ? 'MEDIUM_RISK' : 'LOW_RISK');
@@ -171,7 +168,6 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
       };
     });
 
-    // 2. Compute Summary KPIs directly from skuItems
     const totalVal = this.skuItems.reduce((acc, i) => acc + (i as any).capitalExposureVal, 0);
     const totalOppCost = this.skuItems.reduce((acc, i) => acc + (i as any).opportunityCostVal, 0);
     const highRiskItems = this.skuItems.filter(i => i.riskClass === 'HIGH_RISK');
@@ -184,7 +180,6 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
       affectedSkus: `${highRiskItems.length} SKU`
     };
 
-    // 3. Compute Risk Distribution directly from skuItems
     const highItems = this.skuItems.filter(i => i.riskClass === 'HIGH_RISK');
     const medItems = this.skuItems.filter(i => i.riskClass === 'MEDIUM_RISK');
     const lowItems = this.skuItems.filter(i => i.riskClass === 'LOW_RISK');
@@ -201,7 +196,6 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
       { label: 'An toàn', exposure: this.formatCurrencyShort(lowExp), sharePct: calcSharePct(lowExp), count: lowItems.length, color: 'bg-emerald-500', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
     ];
 
-    // 4. Compute Aging Distribution directly from skuItems
     const freshItems = this.skuItems.filter(i => i.dslsDays <= 30);
     const agingItems = this.skuItems.filter(i => i.dslsDays > 30 && i.dslsDays <= 60);
     const atRiskItems = this.skuItems.filter(i => i.dslsDays > 60 && i.dslsDays <= 90);
@@ -220,177 +214,20 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
     ];
   }
 
-  generateMockData(): void {
-    const list: CapitalSkuItem[] = [];
-
-    // 1. Exact Wireframe SKU: CRIT-024
-    list.push({
-      sku: 'CRIT-024',
-      name: 'Sản phẩm Nguy Cơ Bán Chậm Rất Cao 24',
-      riskClass: 'HIGH_RISK',
-      probabilityPct: '98.4%',
-      dslsDays: 199,
-      capitalExposure: '93.8M',
-      capitalPriority: '92.3M',
-      opportunityCost: '4.7M',
-      agingBucket: 'Trên 90 ngày',
-      sales30d: 2,
-      sales90d: 5,
-      zeroRatePct: '94.9%',
-      demandProb: 0.04,
-      demandPattern: 'Bán lắt nhắt',
-      shapFactors: [
-        { label: 'Tỷ lệ ngày không bán (90 ngày qua)', subDesc: '94.9% thời gian không phát sinh đơn hàng nào', impactText: 'Tác động rất mạnh', score: 5, pct: 95, severity: 'red' },
-        { label: 'Số ngày chôn hàng chưa bán được (DSLS)', subDesc: 'Đã 199 ngày kể từ đơn hàng phát sinh gần nhất', impactText: 'Tác động mạnh', score: 4, pct: 80, severity: 'red' },
-        { label: 'Tốc độ tiêu thụ trung bình (Sales Velocity)', subDesc: 'Sức bán cực yếu, trung bình 0.08 sản phẩm/ngày', impactText: 'Tác động mạnh', score: 4, pct: 75, severity: 'amber' }
-      ],
-      conclusion: 'SKU chôn lượng vốn lớn nhất trong kho, cần áp dụng chiến dịch giải phóng vốn ngay.'
-    });
-
-    // 2. Exact Wireframe SKU: CRIT-019
-    list.push({
-      sku: 'CRIT-019',
-      name: 'Sản phẩm Nguy Cơ Bán Chậm Rất Cao 19',
-      riskClass: 'HIGH_RISK',
-      probabilityPct: '97.9%',
-      dslsDays: 204,
-      capitalExposure: '88.7M',
-      capitalPriority: '86.8M',
-      opportunityCost: '4.4M',
-      agingBucket: 'Trên 90 ngày',
-      sales30d: 3,
-      sales90d: 7,
-      zeroRatePct: '92.1%',
-      demandProb: 0.05,
-      demandPattern: 'Bán lắt nhắt',
-      shapFactors: [
-        { label: 'Tỷ lệ ngày không bán (90 ngày qua)', subDesc: '92.1% thời gian không phát sinh đơn hàng nào', impactText: 'Tác động rất mạnh', score: 5, pct: 92, severity: 'red' },
-        { label: 'Số ngày chôn hàng chưa bán được (DSLS)', subDesc: 'Đã 204 ngày chưa bán thêm được sản phẩm nào', impactText: 'Tác động mạnh', score: 4, pct: 85, severity: 'red' }
-      ],
-      conclusion: 'SKU chôn vốn kéo dài trên 200 ngày, chi phí gánh vốn phát sinh liên tục.'
-    });
-
-    // 3. Exact Wireframe SKU: CRIT-017
-    list.push({
-      sku: 'CRIT-017',
-      name: 'Sản phẩm Nguy Cơ Bán Chậm Rất Cao 17',
-      riskClass: 'HIGH_RISK',
-      probabilityPct: '97.2%',
-      dslsDays: 199,
-      capitalExposure: '84.8M',
-      capitalPriority: '82.4M',
-      opportunityCost: '4.2M',
-      agingBucket: 'Trên 90 ngày',
-      sales30d: 2,
-      sales90d: 6,
-      zeroRatePct: '93.5%',
-      demandProb: 0.04,
-      demandPattern: 'Bán lắt nhắt',
-      shapFactors: [
-        { label: 'Tỷ lệ ngày không bán (90 ngày qua)', subDesc: '93.5% thời gian không có lượt mua mới', impactText: 'Tác động rất mạnh', score: 5, pct: 93, severity: 'red' },
-        { label: 'Số ngày chôn hàng chưa bán được (DSLS)', subDesc: 'Đã 199 ngày chôn vốn trong kho', impactText: 'Tác động mạnh', score: 4, pct: 80, severity: 'red' }
-      ],
-      conclusion: 'Sản phẩm có lượng vốn ứ đọng cao, ưu tiên cắt giảm tồn kho.'
-    });
-
-    // Generate remaining 22 HIGH_RISK items (Total 25 HIGH_RISK)
-    for (let i = 1; i <= 22; i++) {
-      const pad = i.toString().padStart(3, '0');
-      const cap = (75 - i * 2.2).toFixed(1);
-      const prio = (parseFloat(cap) * 0.95).toFixed(1);
-      list.push({
-        sku: `CRIT-${pad}`,
-        name: `Sản phẩm Nguy Cơ Bán Chậm Rất Cao ${i}`,
-        riskClass: 'HIGH_RISK',
-        probabilityPct: `${(96.5 - i * 0.4).toFixed(1)}%`,
-        dslsDays: 95 + i * 4,
-        capitalExposure: `${cap}M`,
-        capitalPriority: `${prio}M`,
-        opportunityCost: `${(parseFloat(cap) * 0.05).toFixed(1)}M`,
-        agingBucket: i % 2 === 0 ? 'Trên 90 ngày' : '61–90 ngày',
-        sales30d: 1 + (i % 3),
-        sales90d: 4 + (i % 5),
-        zeroRatePct: `${(90 + (i % 6)).toFixed(1)}%`,
-        demandProb: 0.05,
-        demandPattern: i % 2 === 0 ? 'Bán lắt nhắt' : 'Bán không đều',
-        shapFactors: [
-          { label: 'Tỷ lệ ngày không bán', subDesc: 'Hơn 90% thời gian không bán được đơn nào', impactText: 'Tác động rất mạnh', score: 5, pct: 90, severity: 'red' },
-          { label: 'Số ngày chôn hàng (DSLS)', subDesc: `Đã ${95 + i * 4} ngày chưa có giao dịch mới`, impactText: 'Tác động mạnh', score: 4, pct: 80, severity: 'red' }
-        ],
-        conclusion: 'Sản phẩm có lượng hàng chôn dài ngày, cần xem xét xử lý vốn.'
-      });
-    }
-
-    // Generate 6 MEDIUM_RISK items
-    for (let i = 1; i <= 6; i++) {
-      const pad = i.toString().padStart(3, '0');
-      const cap = (22 - i * 1.5).toFixed(1);
-      list.push({
-        sku: `WATCH-${pad}`,
-        name: `Sản phẩm Cần Theo Dõi ${i}`,
-        riskClass: 'MEDIUM_RISK',
-        probabilityPct: `${(68.5 - i * 1.5).toFixed(1)}%`,
-        dslsDays: 35 + i * 4,
-        capitalExposure: `${cap}M`,
-        capitalPriority: `${(parseFloat(cap) * 0.6).toFixed(1)}M`,
-        opportunityCost: `${(parseFloat(cap) * 0.03).toFixed(1)}M`,
-        agingBucket: '31–60 ngày',
-        sales30d: 8 + i,
-        sales90d: 22 + i * 2,
-        zeroRatePct: `${(60 + i * 2).toFixed(1)}%`,
-        demandProb: 0.22,
-        demandPattern: 'Bán không đều',
-        shapFactors: [
-          { label: 'Tốc độ bán giảm nhẹ', subDesc: 'Sức mua chậm hơn so với trung bình cùng kỳ', impactText: 'Tác động trung bình', score: 3, pct: 50, severity: 'amber' }
-        ],
-        conclusion: 'Tồn đọng vốn mức vừa phải, theo dõi sát lượng xuất kho.'
-      });
-    }
-
-    // Generate 69 LOW_RISK items
-    for (let i = 1; i <= 69; i++) {
-      const pad = i.toString().padStart(3, '0');
-      const cap = (10 - (i % 8) * 0.9).toFixed(1);
-      list.push({
-        sku: `SAFE-${pad}`,
-        name: `Sản phẩm An Toàn ${i}`,
-        riskClass: 'LOW_RISK',
-        probabilityPct: `${(18.5 - (i % 15) * 0.8).toFixed(1)}%`,
-        dslsDays: 2 + (i % 12),
-        capitalExposure: `${cap}M`,
-        capitalPriority: `0.0M`,
-        opportunityCost: `0.1M`,
-        agingBucket: 'Dưới 30 ngày',
-        sales30d: 28 + (i % 15),
-        sales90d: 85 + (i % 40),
-        zeroRatePct: `${(15 + (i % 10)).toFixed(1)}%`,
-        demandProb: 0.88,
-        demandPattern: 'Bán đều đặn',
-        shapFactors: [
-          { label: 'Tốc độ bán ổn định', subDesc: 'Sức mua đều đặn hàng ngày', impactText: 'Mức an toàn', score: 1, pct: 15, severity: 'emerald' }
-        ],
-        conclusion: 'Hàng lưu thông nhanh, dòng vốn quay vòng tối ưu.'
-      });
-    }
-
-    this.skuItems = list;
-  }
-
-  // Getters for Filter Chip Counts
   get totalCount(): number {
-    return this.skuItems.length; // 100
+    return this.skuItems.length;
   }
 
   get highRiskCount(): number {
-    return this.skuItems.filter(i => i.riskClass === 'HIGH_RISK').length; // 25
+    return this.skuItems.filter(i => i.riskClass === 'HIGH_RISK').length;
   }
 
   get watchCount(): number {
-    return this.skuItems.filter(i => i.riskClass === 'MEDIUM_RISK').length; // 6
+    return this.skuItems.filter(i => i.riskClass === 'MEDIUM_RISK').length;
   }
 
   get safeCount(): number {
-    return this.skuItems.filter(i => i.riskClass === 'LOW_RISK').length; // 69
+    return this.skuItems.filter(i => i.riskClass === 'LOW_RISK').length;
   }
 
   get filteredSkuItems(): CapitalSkuItem[] {
@@ -443,11 +280,13 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
   navigateToRisk(): void {
     this.closeSkuDetail();
     this.navigateTo.emit('slow-moving-risk');
+    this.router.navigate(['/app/risk']);
   }
 
   navigateToDecisions(): void {
     this.closeSkuDetail();
     this.navigateTo.emit('decision-support');
+    this.router.navigate(['/app/decisions']);
   }
 
   getMonthlyHoldingCost(exposureStr: string): string {

@@ -376,34 +376,62 @@ def _auto_populate_assessments_from_products(session_id=None):
     # Delete any old orphan demo assessments
     SlowMovingRiskAssessment.objects.all().delete()
 
-    # 3. Compute real evidence for each SKU from Order/OrderItem history
-    from django.db import connection
+    # 3. Compute real evidence in bulk queries across all SKUs & product names
     evidence_map = {}
+    
+    oi_stats_90d_sku = OrderItem.objects.filter(
+        order__created_at__gte=ninety_days_ago, order__created_at__lte=ref_date
+    ).values('sku').annotate(
+        sold_90d=Sum('quantity'),
+        last_sale=Max('order__created_at'),
+        order_days_cnt=Count('order__created_at__date', distinct=True)
+    )
+    stats_90d_sku = {r['sku'].upper().strip(): r for r in oi_stats_90d_sku if r.get('sku')}
+
+    oi_stats_90d_name = OrderItem.objects.filter(
+        order__created_at__gte=ninety_days_ago, order__created_at__lte=ref_date
+    ).values('product_name').annotate(
+        sold_90d=Sum('quantity'),
+        last_sale=Max('order__created_at'),
+        order_days_cnt=Count('order__created_at__date', distinct=True)
+    )
+    stats_90d_name = {r['product_name'].strip(): r for r in oi_stats_90d_name if r.get('product_name')}
+
+    oi_stats_30d_sku = OrderItem.objects.filter(
+        order__created_at__gte=thirty_days_ago, order__created_at__lte=ref_date
+    ).values('sku').annotate(sold_30d=Sum('quantity'))
+    stats_30d_sku = {r['sku'].upper().strip(): r['sold_30d'] for r in oi_stats_30d_sku if r.get('sku')}
+
+    oi_stats_30d_name = OrderItem.objects.filter(
+        order__created_at__gte=thirty_days_ago, order__created_at__lte=ref_date
+    ).values('product_name').annotate(sold_30d=Sum('quantity'))
+    stats_30d_name = {r['product_name'].strip(): r['sold_30d'] for r in oi_stats_30d_name if r.get('product_name')}
+
+    oi_stats_7d_sku = OrderItem.objects.filter(
+        order__created_at__gte=seven_days_ago, order__created_at__lte=ref_date
+    ).values('sku').annotate(sold_7d=Sum('quantity'))
+    stats_7d_sku = {r['sku'].upper().strip(): r['sold_7d'] for r in oi_stats_7d_sku if r.get('sku')}
+
+    oi_stats_7d_name = OrderItem.objects.filter(
+        order__created_at__gte=seven_days_ago, order__created_at__lte=ref_date
+    ).values('product_name').annotate(sold_7d=Sum('quantity'))
+    stats_7d_name = {r['product_name'].strip(): r['sold_7d'] for r in oi_stats_7d_name if r.get('product_name')}
+
+    total_orders_sku = {r['sku'].upper().strip(): r['cnt'] for r in OrderItem.objects.values('sku').annotate(cnt=Count('id')) if r.get('sku')}
+    total_orders_name = {r['product_name'].strip(): r['cnt'] for r in OrderItem.objects.values('product_name').annotate(cnt=Count('id')) if r.get('product_name')}
+
     for item in real_items:
-        sku_val = item.get('item_sku') or item.get('sku')
-        match_q = Q(sku=sku_val) | Q(sku__iexact=sku_val)
-        if item.get('item_id'):
-            match_q = match_q | Q(item_id=item['item_id'])
-        if item.get('product_name'):
-            match_q = match_q | Q(product_name=item['product_name'])
+        s_val = (item.get('item_sku') or item.get('sku') or '').upper().strip()
+        p_name = (item.get('product_name') or '').strip()
 
-        # Total sold in 90d, 30d, 7d windows
-        sold_90d = OrderItem.objects.filter(
-            match_q, order__created_at__gte=ninety_days_ago, order__created_at__lte=ref_date
-        ).aggregate(total=Sum('quantity'))['total'] or 0
+        st90 = stats_90d_sku.get(s_val) or stats_90d_name.get(p_name) or {}
+        sold_90d = st90.get('sold_90d') or 0
+        sold_30d = stats_30d_sku.get(s_val) or stats_30d_name.get(p_name) or 0
+        sold_7d = stats_7d_sku.get(s_val) or stats_7d_name.get(p_name) or 0
+        last_sale = st90.get('last_sale')
+        order_days_90d = st90.get('order_days_cnt') or 0
+        total_orders = total_orders_sku.get(s_val) or total_orders_name.get(p_name) or 0
 
-        sold_30d = OrderItem.objects.filter(
-            match_q, order__created_at__gte=thirty_days_ago, order__created_at__lte=ref_date
-        ).aggregate(total=Sum('quantity'))['total'] or 0
-
-        sold_7d = OrderItem.objects.filter(
-            match_q, order__created_at__gte=seven_days_ago, order__created_at__lte=ref_date
-        ).aggregate(total=Sum('quantity'))['total'] or 0
-
-        # Last sale date (DSLS)
-        last_sale = OrderItem.objects.filter(match_q).aggregate(
-            last_date=Max('order__created_at')
-        )['last_date']
         if last_sale:
             if hasattr(last_sale, 'tzinfo') and last_sale.tzinfo is not None:
                 last_sale = last_sale.replace(tzinfo=None)
@@ -411,25 +439,12 @@ def _auto_populate_assessments_from_products(session_id=None):
         else:
             dsls = 999
 
-        # Sales velocity (units/day over 90d)
         velocity_90d = round(float(sold_90d) / 90.0, 4) if sold_90d else 0.0
         velocity_30d = round(float(sold_30d) / 30.0, 4) if sold_30d else 0.0
-
-        # Number of distinct days with orders in 90d
-        order_days_90d = OrderItem.objects.filter(
-            match_q, order__created_at__gte=ninety_days_ago, order__created_at__lte=ref_date
-        ).values('order__created_at__date').distinct().count()
-
-        # Zero-rate: fraction of days without sales in 90d window
         zero_rate_90d = round(1.0 - (order_days_90d / 90.0), 3) if order_days_90d else 1.0
-
-        # ADI (Average Demand Interval)
         adi = round(90.0 / max(order_days_90d, 1), 2)
 
-        # Total orders count
-        total_orders = OrderItem.objects.filter(match_q).aggregate(cnt=Count('id'))['cnt'] or 0
-
-        evidence_map[item['sku']] = {
+        evidence_map[s_val] = {
             'sold_90d': int(sold_90d),
             'sold_30d': int(sold_30d),
             'sold_7d': int(sold_7d),

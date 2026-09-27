@@ -1,10 +1,11 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router, RouterModule } from '@angular/router';
 
 @Component({
   selector: 'app-sidebar',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterModule],
   templateUrl: './sidebar.component.html',
   styleUrls: ['./sidebar.component.css']
 })
@@ -14,9 +15,7 @@ export class SidebarComponent {
   @Output() importNew = new EventEmitter<void>();
   @Output() importIncremental = new EventEmitter<void>();
 
-  navigateTo(stage: string): void {
-    this.selectStage.emit(stage);
-  }
+  constructor(public router: Router) {}
 
   onImportIncrementalClick(): void {
     this.importIncremental.emit();

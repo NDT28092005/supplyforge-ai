@@ -1,5 +1,6 @@
 import { Component, OnInit, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { ApiService } from '../api.service';
 
 @Component({
@@ -15,7 +16,10 @@ export class AboutUsPageComponent implements OnInit {
   data: any = null;
   loading = true;
 
-  constructor(private apiService: ApiService) {}
+  constructor(
+    private apiService: ApiService,
+    private router: Router
+  ) {}
 
   ngOnInit(): void {
     this.apiService.getAboutUs().subscribe({
@@ -32,5 +36,12 @@ export class AboutUsPageComponent implements OnInit {
 
   onAction(target: string): void {
     this.navigateAction.emit(target);
+    if (target === 'csv-upload' || target === 'hero') {
+      this.router.navigate(['/app/import']);
+    } else if (target === 'executive-dashboard') {
+      this.router.navigate(['/app/dashboard']);
+    } else {
+      this.router.navigate(['/']);
+    }
   }
 }

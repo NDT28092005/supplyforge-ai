@@ -1,7 +1,9 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../api.service';
+import { IngestionStateService } from '../core/state/ingestion-state.service';
 
 export interface SkuProfileItem {
   sku: string;
@@ -38,9 +40,25 @@ export class DatasetProfileDashboardComponent implements OnInit, OnChanges {
   totalPages: number = 1;
   loadingSkus: boolean = false;
 
-  constructor(private apiService: ApiService) {}
+  constructor(
+    private apiService: ApiService,
+    private ingestionState: IngestionStateService,
+    private route: ActivatedRoute,
+    private router: Router
+  ) {}
 
   ngOnInit(): void {
+    const routeSessionId = this.route.snapshot.paramMap.get('sessionId');
+    if (routeSessionId && routeSessionId !== 'default') {
+      this.sessionId = routeSessionId;
+    } else if (!this.sessionId) {
+      this.sessionId = this.ingestionState.state.activeSessionId;
+    }
+
+    if (!this.profileData) {
+      this.profileData = this.ingestionState.state.datasetProfileData;
+    }
+
     this.ensureProfileData();
     if (this.sessionId) {
       this.loadProfile();
@@ -154,5 +172,18 @@ export class DatasetProfileDashboardComponent implements OnInit, OnChanges {
 
   onProceed(): void {
     this.proceedToAnalysis.emit();
+    if (this.sessionId) {
+      this.apiService.runM3RiskAssessmentAssembly(this.sessionId).subscribe({
+        next: () => {
+          this.apiService.runM3RiskMonitoring(this.sessionId).subscribe();
+          this.router.navigate(['/app/dashboard']);
+        },
+        error: () => {
+          this.router.navigate(['/app/dashboard']);
+        }
+      });
+    } else {
+      this.router.navigate(['/app/dashboard']);
+    }
   }
 }

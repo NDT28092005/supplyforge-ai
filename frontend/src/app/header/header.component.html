@@ -26,33 +26,29 @@
   <!-- CENTER: Navigation & Info Links (About, Services, Blog) -->
   <div class="hidden md:flex items-center gap-1 sm:gap-2">
     <!-- Home button -->
-    <button (click)="onNavigate('hero')"
-      [ngClass]="stage === 'hero' ? 'bg-slate-100 text-slate-900 font-bold' : 'text-slate-600 hover:bg-slate-50 font-semibold'"
-      class="px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer">
+    <a routerLink="/" routerLinkActive="bg-slate-100 text-slate-900 font-bold" [routerLinkActiveOptions]="{exact: true}"
+      class="px-3.5 py-1.5 rounded-xl text-xs text-slate-600 hover:bg-slate-50 font-semibold transition-all cursor-pointer">
       Trang chủ
-    </button>
+    </a>
 
     <!-- About Us Link -->
-    <button (click)="onNavigate('about_us')"
-      [ngClass]="stage === 'about_us' ? 'bg-slate-100 text-slate-900 font-bold' : 'text-slate-600 hover:bg-slate-50 font-semibold'"
-      class="px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer">
+    <a routerLink="/about" routerLinkActive="bg-slate-100 text-slate-900 font-bold"
+      class="px-3.5 py-1.5 rounded-xl text-xs text-slate-600 hover:bg-slate-50 font-semibold transition-all cursor-pointer">
       Giới thiệu
-    </button>
+    </a>
 
     <!-- Services Link -->
-    <button (click)="onNavigate('services')"
-      [ngClass]="stage === 'services' ? 'bg-slate-100 text-slate-900 font-bold' : 'text-slate-600 hover:bg-slate-50 font-semibold'"
-      class="px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer">
+    <a routerLink="/services" routerLinkActive="bg-slate-100 text-slate-900 font-bold"
+      class="px-3.5 py-1.5 rounded-xl text-xs text-slate-600 hover:bg-slate-50 font-semibold transition-all cursor-pointer">
       Dịch vụ
-    </button>
+    </a>
 
     <!-- Blog & Stock Knowledge Link -->
-    <button (click)="onNavigate('blog')"
-      [ngClass]="stage === 'blog' ? 'bg-indigo-50 text-indigo-700 font-bold border border-indigo-100' : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/60 font-semibold'"
-      class="px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5">
+    <a routerLink="/blog" routerLinkActive="bg-indigo-50 text-indigo-700 font-bold border border-indigo-100"
+      class="px-3.5 py-1.5 rounded-xl text-xs text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/60 font-semibold transition-all cursor-pointer flex items-center gap-1.5">
       <span class="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
       <span>Blog Kho Hàng</span>
-    </button>
+    </a>
   </div>
 
   <!-- RIGHT: Login / User Profile & Actions -->

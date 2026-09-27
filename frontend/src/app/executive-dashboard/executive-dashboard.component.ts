@@ -14,7 +14,9 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ApiService } from '../api.service';
+import { DashboardStateService } from '../core/state/dashboard-state.service';
 
 declare var echarts: any;
 
@@ -91,10 +93,79 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
     deadCountText: '15 sản phẩm'
   };
 
-  constructor(private apiService: ApiService) {}
+  constructor(
+    private apiService: ApiService,
+    private dashboardState: DashboardStateService,
+    private router: Router
+  ) {}
 
   ngOnInit(): void {
-    this.updateDashboardFromData();
+    if (!this.data) {
+      this.data = this.dashboardState.state.dashboardData;
+    }
+    if (!this.data) {
+      this.fetchDashboardData();
+    } else {
+      this.updateDashboardFromData();
+    }
+  }
+
+  fetchDashboardData(): void {
+    this.loading = true;
+    this.apiService.getDashboard(1).subscribe({
+      next: (res) => {
+        this.loading = false;
+        if (res) {
+          const healthyVal = res.totalHealthyValue || 0;
+          const watchlistVal = res.totalWatchlistValue || 0;
+          const slowVal = res.totalSlowMovingValue || 0;
+          const deadVal = res.totalDeadStockValue || 0;
+          const totalInvVal = healthyVal + watchlistVal + slowVal + deadVal;
+
+          const healthyList = res.healthySkus || [];
+          const watchlistList = res.watchlistSkus || [];
+          const slowList = res.slowMovingSkus || [];
+          const deadList = res.deadStockSkus || [];
+          const allSkus = [...deadList, ...slowList, ...watchlistList, ...healthyList];
+
+          let topStale = [...deadList, ...slowList].map((item: any) => ({
+            sku: item.sku || item.item_sku || item.name || 'SKU Sản phẩm',
+            name: item.name || item.product_name || 'SKU Sản phẩm',
+            frozenValueVnd: item.totalValue || item.frozenValueVnd || ((item.quantity || 1) * (item.costPrice || 50000)) || 0,
+            lastRecordDate: item.lastRecordDate || 'N/A'
+          })).slice(0, 5);
+
+          if (topStale.length === 0 && allSkus.length > 0) {
+            topStale = allSkus.map((item: any) => ({
+              sku: item.sku || item.item_sku || item.name || 'SKU Sản phẩm',
+              name: item.name || item.product_name || 'SKU Sản phẩm',
+              frozenValueVnd: item.totalValue || item.frozenValueVnd || ((item.quantity || 1) * (item.costPrice || 50000)) || 0,
+              lastRecordDate: item.lastRecordDate || 'N/A'
+            })).slice(0, 5);
+          }
+
+          const finalDeadStockValue = deadVal + slowVal;
+          const finalStaleCount = deadList.length + slowList.length;
+          const finalBleedingRate = res.totalBleedingRateMonthly || Math.round(finalDeadStockValue * 0.08);
+
+          this.data = {
+            hasData: true,
+            ...res,
+            totalDeadStockValueVnd: finalDeadStockValue,
+            staleSkuCount: finalStaleCount,
+            estimatedLoss30DaysVnd: finalBleedingRate,
+            totalInventoryValueVnd: totalInvVal,
+            totalRootSkuCount: allSkus.length,
+            topStaleSkus: topStale
+          };
+          this.dashboardState.setDashboardData(this.data);
+          this.updateDashboardFromData();
+        }
+      },
+      error: () => {
+        this.loading = false;
+      }
+    });
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -284,6 +355,7 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
 
   refreshData(): void {
     this.isRefreshing = true;
+    this.fetchDashboardData();
     setTimeout(() => {
       this.isRefreshing = false;
       this.initDonutChart();
@@ -292,17 +364,24 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
 
   onViewRiskAnalysisClick(): void {
     this.navigateTo.emit('slow-moving-risk');
+    this.router.navigate(['/app/risk']);
   }
 
   onViewAllClick(): void {
     this.navigateTo.emit('slow-moving-risk');
+    this.router.navigate(['/app/risk']);
   }
 
   onSelectSku(sku: string): void {
     this.analyzeSku.emit(sku);
+    this.dashboardState.setSelectedSkuId(sku);
+    this.router.navigate(['/app/risk'], { queryParams: { sku } });
   }
 
   onNavigateToStage(targetStage: string): void {
     this.navigateTo.emit(targetStage);
+    if (targetStage === 'slow-moving-risk') this.router.navigate(['/app/risk']);
+    else if (targetStage === 'capital-exposure') this.router.navigate(['/app/capital']);
+    else if (targetStage === 'decision-support') this.router.navigate(['/app/decisions']);
   }
 }

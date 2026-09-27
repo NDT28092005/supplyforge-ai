@@ -260,46 +260,70 @@ class DynamicFileImportService:
         expiry_idx = find_index('expirationDate', ['expiration date', 'hạn sử dụng', 'expiry', 'hsd'])
 
         # --- Stage 4: Data Cleaning Helpers ---
+        from django.utils import timezone
+
         def parse_decimal(s):
             if not s: return Decimal('0.00')
-            s = str(s).strip()
-            s = re.sub(r'[^\d.,]', '', s)
-            if not s: return Decimal('0.00')
-            if '.' in s and ',' in s:
-                if s.rfind('.') > s.rfind(','):
-                    s = s.replace(',', '')
-                else:
-                    s = s.replace('.', '').replace(',', '.')
-            elif ',' in s:
-                parts = s.split(',')
-                if len(parts) == 2 and len(parts[1]) == 3:
-                    s = s.replace(',', '')
-                else:
-                    s = s.replace(',', '.')
-            elif '.' in s:
-                parts = s.split('.')
-                if len(parts) == 2 and len(parts[1]) == 3:
-                    s = s.replace('.', '')
-                elif len(parts) > 2:
-                    s = s.replace('.', '')
+            s_clean = str(s).strip()
             try:
-                return Decimal(s)
+                return Decimal(s_clean)
+            except Exception:
+                pass
+            s_clean = re.sub(r'[^\d.,]', '', s_clean)
+            if not s_clean: return Decimal('0.00')
+            if '.' in s_clean and ',' in s_clean:
+                if s_clean.rfind('.') > s_clean.rfind(','):
+                    s_clean = s_clean.replace(',', '')
+                else:
+                    s_clean = s_clean.replace('.', '').replace(',', '.')
+            elif ',' in s_clean:
+                parts = s_clean.split(',')
+                if len(parts) == 2 and len(parts[1]) == 3:
+                    s_clean = s_clean.replace(',', '')
+                else:
+                    s_clean = s_clean.replace(',', '.')
+            elif '.' in s_clean:
+                parts = s_clean.split('.')
+                if len(parts) == 2 and len(parts[1]) == 3:
+                    s_clean = s_clean.replace('.', '')
+                elif len(parts) > 2:
+                    s_clean = s_clean.replace('.', '')
+            try:
+                return Decimal(s_clean)
             except Exception:
                 return Decimal('0.00')
 
         def parse_int(s):
             if not s: return 0
             try:
-                return int(re.sub(r'[^0-9]', '', s))
+                return int(s)
+            except Exception:
+                pass
+            try:
+                return int(re.sub(r'[^0-9]', '', str(s)))
             except Exception:
                 return 0
 
+        cached_date_fmt = None
         def parse_date(date_str):
+            nonlocal cached_date_fmt
             if not date_str: return None
             d_clean = date_str.strip()
-            for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y"]:
+            if cached_date_fmt:
                 try:
-                    return datetime.strptime(d_clean, fmt)
+                    dt = datetime.strptime(d_clean, cached_date_fmt)
+                    if timezone.is_naive(dt):
+                        dt = timezone.make_aware(dt)
+                    return dt
+                except Exception:
+                    pass
+            for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y", "%m/%d/%Y"]:
+                try:
+                    dt = datetime.strptime(d_clean, fmt)
+                    cached_date_fmt = fmt
+                    if timezone.is_naive(dt):
+                        dt = timezone.make_aware(dt)
+                    return dt
                 except Exception:
                     pass
             return None
@@ -594,9 +618,14 @@ class DynamicFileImportService:
             "timestamp": datetime.now().isoformat()
         }
 
+        existing_products_dict = {
+            p.item_sku: p for p in Product.objects.filter(user_id=user_id)
+        }
         products_to_create = []
+        products_to_update = []
+
         for sku_val, cat in sku_catalog.items():
-            existing_p = Product.objects.filter(user_id=user_id, item_sku=sku_val).first()
+            existing_p = existing_products_dict.get(sku_val)
             calculated_stock = cat['stock'] if (cat.get('stock') is not None and cat['stock'] > 0) else max(1, int(cat['total_qty'] * 0.08))
 
             prod_lineage = {**base_lineage_meta, "record_id": sku_val, "record_type": "product"}
@@ -606,7 +635,7 @@ class DynamicFileImportService:
                 if cat['price'] > 0: existing_p.price = cat['price']
                 if cat['cost'] > 0: existing_p.cost = cat['cost']
                 if calculated_stock > 0: existing_p.stock = (existing_p.stock or 0) + calculated_stock
-                existing_p.updated_at = datetime.now()
+                existing_p.updated_at = timezone.now()
 
                 p_data = existing_p.data or {}
                 hist = p_data.get("import_history", [])
@@ -614,7 +643,7 @@ class DynamicFileImportService:
                 p_data["lineage"] = prod_lineage
                 p_data["import_history"] = hist
                 existing_p.data = p_data
-                existing_p.save()
+                products_to_update.append(existing_p)
             else:
                 prod_id = uuid.uuid4().hex[:24]
                 p_data = {
@@ -631,7 +660,7 @@ class DynamicFileImportService:
                     stock=calculated_stock,
                     third_party_id=f"csv_import_{import_time}",
                     created_at=cat['min_date'],
-                    updated_at=datetime.now(),
+                    updated_at=timezone.now(),
                     expiration_date=cat['expiration_date'],
                     active_on_web=True,
                     data=p_data
@@ -639,9 +668,12 @@ class DynamicFileImportService:
                 products_to_create.append(p)
 
         if products_to_create:
-            Product.objects.bulk_create(products_to_create)
+            Product.objects.bulk_create(products_to_create, batch_size=2000)
+        if products_to_update:
+            Product.objects.bulk_update(products_to_update, ['price', 'cost', 'stock', 'updated_at', 'data'], batch_size=2000)
 
         orders_to_create = []
+        orders_to_update = []
         items_to_create = []
 
         order_groups = {}
@@ -659,14 +691,14 @@ class DynamicFileImportService:
             if oid in existing_orders_map:
                 o = existing_orders_map[oid]
                 o.amount = (o.amount or Decimal('0')) + total_amount
-                o.updated_at = datetime.now()
+                o.updated_at = timezone.now()
                 o_data = o.data or {}
                 o_hist = o_data.get("import_history", [])
                 o_hist.append({**ord_lineage, "action": "UPDATE"})
                 o_data["lineage"] = ord_lineage
                 o_data["import_history"] = o_hist
                 o.data = o_data
-                o.save()
+                orders_to_update.append(o)
             else:
                 o_pk = uuid.uuid4().hex[:24]
                 o_data = {
@@ -682,7 +714,7 @@ class DynamicFileImportService:
                     buyer_user_name=first_item['buyer'],
                     cancelled_after_packaged=False,
                     created_at=first_item['date'],
-                    updated_at=datetime.now(),
+                    updated_at=timezone.now(),
                     data=o_data
                 )
                 orders_to_create.append(o)
@@ -701,6 +733,8 @@ class DynamicFileImportService:
 
         if orders_to_create:
             Order.objects.bulk_create(orders_to_create, batch_size=2000)
+        if orders_to_update:
+            Order.objects.bulk_update(orders_to_update, ['amount', 'updated_at', 'data'], batch_size=2000)
         if items_to_create:
             OrderItem.objects.bulk_create(items_to_create, batch_size=2000)
 

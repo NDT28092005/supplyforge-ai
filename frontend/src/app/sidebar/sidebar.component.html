@@ -1,16 +1,12 @@
 <aside
   class="w-64 bg-surface border-r border-border-base fixed inset-y-0 left-0 z-30 flex flex-col justify-between p-6 pt-24 transition-all">
   <div>
-    <!-- Navigation Links — 2 Tabs: "Tổng quan" & "Rủi ro" -->
+    <!-- Navigation Links — 4 Tabs: "Tổng quan", "Rủi ro", "Đánh giá vốn", "Khuyến nghị xả hàng" -->
     <nav class="space-y-1.5">
       <!-- Tab 1: Tổng quan -->
-      <button (click)="navigateTo('executive-dashboard')"
-        class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer"
-        [ngClass]="activeStage === 'executive-dashboard' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'">
-        <span *ngIf="activeStage === 'executive-dashboard'"
-          class="absolute left-0 top-3 bottom-3 w-1 bg-indigo-600 rounded-r-md"></span>
-        <svg class="w-4 h-4 transition-transform group-hover:scale-105"
-          [ngClass]="activeStage === 'executive-dashboard' ? 'text-indigo-600' : 'text-slate-500'" viewBox="0 0 24 24"
+      <a routerLink="/app/dashboard" routerLinkActive="bg-indigo-50 text-indigo-700 border-indigo-200 font-bold active-link"
+        class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
+        <svg class="w-4 h-4 transition-transform group-hover:scale-105 text-slate-500" viewBox="0 0 24 24"
           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="7" height="7" rx="1"></rect>
           <rect x="14" y="3" width="7" height="7" rx="1"></rect>
@@ -18,16 +14,12 @@
           <rect x="3" y="14" width="7" height="7" rx="1"></rect>
         </svg>
         <span>Tổng quan</span>
-      </button>
+      </a>
 
       <!-- Tab 2: Rủi ro -->
-      <button (click)="navigateTo('slow-moving-risk')"
-        class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer"
-        [ngClass]="(activeStage === 'slow-moving-risk' || activeStage === 'risk-workspace') ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'">
-        <span *ngIf="activeStage === 'slow-moving-risk' || activeStage === 'risk-workspace'"
-          class="absolute left-0 top-3 bottom-3 w-1 bg-indigo-600 rounded-r-md"></span>
-        <svg class="w-4 h-4 transition-transform group-hover:scale-105"
-          [ngClass]="(activeStage === 'slow-moving-risk' || activeStage === 'risk-workspace') ? 'text-indigo-600' : 'text-slate-500'"
+      <a routerLink="/app/risk" routerLinkActive="bg-indigo-50 text-indigo-700 border-indigo-200 font-bold active-link"
+        class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
+        <svg class="w-4 h-4 transition-transform group-hover:scale-105 text-slate-500"
           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
           stroke-linejoin="round">
           <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
@@ -35,37 +27,29 @@
           <line x1="12" y1="17" x2="12.01" y2="17"></line>
         </svg>
         <span>Rủi ro</span>
-      </button>
+      </a>
 
       <!-- Tab 3: Đánh giá vốn -->
-      <button (click)="navigateTo('capital-exposure')"
-        class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer"
-        [ngClass]="activeStage === 'capital-exposure' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'">
-        <span *ngIf="activeStage === 'capital-exposure'"
-          class="absolute left-0 top-3 bottom-3 w-1 bg-indigo-600 rounded-r-md"></span>
-        <svg class="w-4 h-4 transition-transform group-hover:scale-105"
-          [ngClass]="activeStage === 'capital-exposure' ? 'text-indigo-600' : 'text-slate-500'" viewBox="0 0 24 24"
+      <a routerLink="/app/capital" routerLinkActive="bg-indigo-50 text-indigo-700 border-indigo-200 font-bold active-link"
+        class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
+        <svg class="w-4 h-4 transition-transform group-hover:scale-105 text-slate-500" viewBox="0 0 24 24"
           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="1" x2="12" y2="23"></line>
           <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
         </svg>
         <span>Đánh giá vốn</span>
-      </button>
+      </a>
 
       <!-- Tab 4: Khuyến nghị xả hàng -->
-      <button (click)="navigateTo('decision-support')"
-        class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer"
-        [ngClass]="activeStage === 'decision-support' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'">
-        <span *ngIf="activeStage === 'decision-support'"
-          class="absolute left-0 top-3 bottom-3 w-1 bg-indigo-600 rounded-r-md"></span>
-        <svg class="w-4 h-4 transition-transform group-hover:scale-105"
-          [ngClass]="activeStage === 'decision-support' ? 'text-indigo-600' : 'text-slate-500'" viewBox="0 0 24 24"
+      <a routerLink="/app/decisions" routerLinkActive="bg-indigo-50 text-indigo-700 border-indigo-200 font-bold active-link"
+        class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
+        <svg class="w-4 h-4 transition-transform group-hover:scale-105 text-slate-500" viewBox="0 0 24 24"
           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
           <polyline points="22 4 12 14.01 9 11.01"></polyline>
         </svg>
         <span>Khuyến nghị xả hàng</span>
-      </button>
+      </a>
     </nav>
   </div>
 

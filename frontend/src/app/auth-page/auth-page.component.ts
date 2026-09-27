@@ -1,7 +1,9 @@
-import { Component, Output, EventEmitter, Input } from '@angular/core';
+import { Component, Output, EventEmitter, Input, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ApiService } from '../api.service';
+import { AuthService } from '../auth.service';
 
 @Component({
   selector: 'app-auth-page',
@@ -10,7 +12,7 @@ import { ApiService } from '../api.service';
   templateUrl: './auth-page.component.html',
   styleUrls: ['./auth-page.component.css']
 })
-export class AuthPageComponent {
+export class AuthPageComponent implements OnInit {
   @Input() initialTab: 'login' | 'register' = 'login';
   @Output() loginSuccess = new EventEmitter<{ name: string; email: string; storeName?: string }>();
   @Output() demoLogin = new EventEmitter<void>();
@@ -38,7 +40,11 @@ export class AuthPageComponent {
     confirmPassword: ''
   };
 
-  constructor(private apiService: ApiService) { }
+  constructor(
+    private apiService: ApiService,
+    private authService: AuthService,
+    private router: Router
+  ) { }
 
   ngOnInit(): void {
     this.activeTab = this.initialTab;
@@ -54,7 +60,6 @@ export class AuthPageComponent {
     this.showPassword = !this.showPassword;
   }
 
-  // --- Login via Real MySQL Backend API ---
   onLogin(): void {
     this.errorMessage = '';
     if (!this.loginForm.email || !this.loginForm.password) {
@@ -73,13 +78,16 @@ export class AuthPageComponent {
       next: (res: any) => {
         this.loading = false;
         if (res.token) {
-          localStorage.setItem('sf_auth_token', res.token);
+          this.authService.setToken(res.token);
         }
         const userName = res.user?.name || this.loginForm.email.split('@')[0];
-        this.loginSuccess.emit({
+        const userObj = {
           name: userName,
           email: res.user?.email || this.loginForm.email
-        });
+        };
+        this.authService.setCurrentUser(userObj);
+        this.loginSuccess.emit(userObj);
+        this.router.navigate(['/app/dashboard']);
       },
       error: (err: any) => {
         this.loading = false;
@@ -88,7 +96,6 @@ export class AuthPageComponent {
     });
   }
 
-  // --- Register User directly into MySQL Database ---
   onRegister(): void {
     this.errorMessage = '';
 
@@ -130,25 +137,23 @@ export class AuthPageComponent {
         this.loading = false;
         this.successMessage = 'Tạo tài khoản thành công! Đang đăng nhập...';
 
-        // Auto login after successful MySQL registration
         setTimeout(() => {
           this.apiService.loginUser(this.registerForm.email, this.registerForm.password).subscribe({
             next: (loginRes: any) => {
               if (loginRes.token) {
-                localStorage.setItem('sf_auth_token', loginRes.token);
+                this.authService.setToken(loginRes.token);
               }
-              this.loginSuccess.emit({
+              const userObj = {
                 name: this.registerForm.fullName,
                 email: this.registerForm.email,
                 storeName: this.registerForm.storeName || undefined
-              });
+              };
+              this.authService.setCurrentUser(userObj);
+              this.loginSuccess.emit(userObj);
+              this.router.navigate(['/app/dashboard']);
             },
             error: () => {
-              this.loginSuccess.emit({
-                name: this.registerForm.fullName,
-                email: this.registerForm.email,
-                storeName: this.registerForm.storeName || undefined
-              });
+              this.router.navigate(['/app/dashboard']);
             }
           });
         }, 800);
@@ -160,23 +165,22 @@ export class AuthPageComponent {
     });
   }
 
-  // --- Demo Login ---
   onDemoLogin(): void {
-    // Try logging in as demo user to backend or fallback
     this.apiService.loginUser('demo@supplyforge.ai', 'demo123').subscribe({
       next: (res: any) => {
         if (res.token) {
-          localStorage.setItem('sf_auth_token', res.token);
+          this.authService.setToken(res.token);
         }
         this.demoLogin.emit();
+        this.router.navigate(['/app/dashboard']);
       },
       error: () => {
         this.demoLogin.emit();
+        this.router.navigate(['/app/dashboard']);
       }
     });
   }
 
-  // --- Google & Social OAuth Login ---
   onGoogleLogin(): void {
     const googleWin = window as any;
     if (typeof googleWin !== 'undefined' && googleWin.google?.accounts?.id) {
@@ -220,13 +224,16 @@ export class AuthPageComponent {
       next: (res: any) => {
         this.loading = false;
         if (res.token) {
-          localStorage.setItem('sf_auth_token', res.token);
+          this.authService.setToken(res.token);
         }
         const userName = res.user?.name || res.user?.email?.split('@')[0] || 'Google User';
-        this.loginSuccess.emit({
+        const userObj = {
           name: userName,
           email: res.user?.email
-        });
+        };
+        this.authService.setCurrentUser(userObj);
+        this.loginSuccess.emit(userObj);
+        this.router.navigate(['/app/dashboard']);
       },
       error: (err: any) => {
         this.loading = false;
@@ -239,12 +246,11 @@ export class AuthPageComponent {
     this.onGoogleLogin();
   }
 
-  // --- Navigation ---
   onGoBack(): void {
     this.goBack.emit();
+    this.router.navigate(['/']);
   }
 
-  // --- Helpers ---
   private isValidEmail(email: string): boolean {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }

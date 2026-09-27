@@ -1,7 +1,9 @@
 import { Component, EventEmitter, Output, Input, OnInit, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ApiService } from '../api.service';
+import { IngestionStateService } from '../core/state/ingestion-state.service';
 
 export interface ProfileResponse {
   sessionId: string;
@@ -93,7 +95,11 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
     document.body.removeChild(link);
   }
 
-  constructor(private apiService: ApiService) {}
+  constructor(
+    private apiService: ApiService,
+    private ingestionState: IngestionStateService,
+    private router: Router
+  ) {}
 
   ngOnInit(): void {
     this.applyInitialInputs();
@@ -106,10 +112,17 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
   }
 
   private applyInitialInputs(): void {
-    if (this.initialFile) {
+    const state = this.ingestionState.state;
+    if (state.uploadFile) {
+      this.selectedFile = state.uploadFile;
+    } else if (this.initialFile) {
       this.selectedFile = this.initialFile;
     }
-    if (this.initialErrorMessage) {
+
+    if (state.uploadErrorMessage) {
+      this.errorMessage = state.uploadErrorMessage;
+      this.uploadStatus = 'error';
+    } else if (this.initialErrorMessage) {
       this.errorMessage = this.initialErrorMessage;
       this.uploadStatus = 'error';
     }
@@ -150,15 +163,17 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
     if (!file.name.toLowerCase().endsWith('.csv')) {
       this.errorMessage = 'Chỉ hỗ trợ tệp định dạng .csv. Vui lòng kiểm tra lại.';
       this.uploadStatus = 'error';
+      this.ingestionState.setErrorMessage(this.errorMessage);
       return;
     }
 
     this.selectedFile = file;
+    this.ingestionState.setFile(file);
     this.errorMessage = '';
+    this.ingestionState.setErrorMessage('');
     this.uploadStatus = 'uploading';
     this.uploadProgress = 15;
 
-    // Simulate progress while uploading and streaming
     const progressInterval = setInterval(() => {
       if (this.uploadProgress < 85) {
         this.uploadProgress += 10;
@@ -172,6 +187,24 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
         this.profileResult = res;
         this.uploadStatus = 'profiled';
 
+        if (res.sessionId) {
+          this.ingestionState.setSessionId(res.sessionId);
+        }
+
+        const profile = res.profile;
+        if (profile) {
+          const mappingData = {
+            headers: profile.headers,
+            sampleData: profile.previewRows ? profile.previewRows[0] : null,
+            aiSuggestions: {
+              sku_column_index: profile.headers.indexOf(profile.skuColumnDetected),
+              record_date_column_index: profile.headers.indexOf(profile.dateColumnDetected),
+              confidence: 'High (Streaming CSV Profiler)'
+            }
+          };
+          this.ingestionState.setMappingData(mappingData);
+        }
+
         if (res.idempotent_retry) {
           this.showIdempotentModal = true;
         }
@@ -179,7 +212,9 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
       error: (err: any) => {
         clearInterval(progressInterval);
         this.uploadStatus = 'error';
-        this.errorMessage = err.error?.error || 'Có lỗi xảy ra trong quá trình nạp và phân tích tệp CSV.';
+        const msg = err.error?.error || 'Có lỗi xảy ra trong quá trình nạp và phân tích tệp CSV.';
+        this.errorMessage = msg;
+        this.ingestionState.setErrorMessage(msg);
       }
     });
   }
@@ -203,6 +238,7 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
     this.errorMessage = '';
     this.uploadProgress = 0;
     this.showIdempotentModal = false;
+    this.ingestionState.reset();
   }
 
   proceedMapping(): void {
@@ -217,6 +253,7 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
         profileData: this.profileResult,
         sessionType: this.sessionType
       });
+      this.router.navigate(['/app/import/mapping']);
     }
   }
 
