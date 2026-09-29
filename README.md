@@ -72,7 +72,19 @@ Sau khi các container khởi động hoàn tất, bạn có thể truy cập h�
 - **Backend API status (Ping)**: `http://localhost:8080/api/v1/ping`
 - **Liveness Probe**: `http://localhost:8080/health/live`
 - **Readiness Probe**: `http://localhost:8080/health/ready`
+- **API Version Info**: `http://localhost:8080/api/version`
+- **Celery Worker Status**: `http://localhost:8080/api/v1/health/celery`
 - **MySQL Database**: `localhost:3306`
+- **Redis Cache/Broker**: `localhost:6379`
+
+### Các Container Services được tự động khởi tạo:
+1. `frontend`: Single Page App (Angular JS/TS phục vụ bởi Nginx).
+2. `backend`: REST API Server (Django / Gunicorn / Python 3.11).
+3. `mysql`: Database Server (MySQL 8.0).
+4. `redis`: In-memory data store & Celery Broker (Redis 7).
+5. `celery_data`: Dedicated Worker cho xử lý dữ liệu và CSV Ingestion (`data_worker` queue).
+6. `celery_ml`: Dedicated Worker cho mô hình ML & Risk Calibration (`ml_worker` queue).
+7. `celery_decision`: Dedicated Worker cho Decision Engine & Action Planning (`decision_worker` queue).
 
 ---
 

@@ -1,16 +1,15 @@
-# Use official light-weight Python image
+# SupplyForge AI — Backend & Celery Worker Container Image
 FROM python:3.11-slim
 
-# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 
-# Set work directory
 WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    curl \
     libmariadb-dev-compat \
     libmariadb-dev \
     pkg-config \
@@ -23,8 +22,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project files
 COPY . /app/
 
-# Expose backend port
 EXPOSE 8080
 
-# Command to run migrations and start server
-CMD python manage.py makemigrations supplyforge && python manage.py migrate && python manage.py seed_db && python manage.py runserver 0.0.0.0:8080
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=15s \
+    CMD curl -f http://localhost:8080/health/live || exit 1
+
+# Default startup command for Django API
+CMD python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8080
