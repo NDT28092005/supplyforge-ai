@@ -5,17 +5,33 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load environment variables (supports backend/.env and root .env)
+# Determine environment (development | staging | production)
+APP_ENV = os.getenv('APP_ENV', os.getenv('ENVIRONMENT', 'development')).lower()
+
+# Load environment variables (.env.<APP_ENV>, .env, root .env)
+env_file_specific = BASE_DIR / f'.env.{APP_ENV}'
+if env_file_specific.exists():
+    load_dotenv(env_file_specific)
+elif (BASE_DIR.parent / f'.env.{APP_ENV}').exists():
+    load_dotenv(BASE_DIR.parent / f'.env.{APP_ENV}')
+
 load_dotenv(BASE_DIR / '.env')
 load_dotenv(BASE_DIR.parent / '.env')
+
+# App Versioning
+VERSION_FILE = BASE_DIR.parent / 'VERSION'
+if VERSION_FILE.exists():
+    APP_VERSION = VERSION_FILE.read_text().strip()
+else:
+    APP_VERSION = '1.0.0'
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-supplyforge-ai-mvp-secret-key-change-me')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
+DEBUG = os.getenv('DJANGO_DEBUG', 'True' if APP_ENV == 'development' else 'False') == 'True'
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', '*').split(',') if host.strip()]
 
 # Application definition
 INSTALLED_APPS = [

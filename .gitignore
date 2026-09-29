@@ -1,7 +1,12 @@
 # Environment & Secrets
 .env
 .env.local
+.env.development
+.env.staging
+.env.production
 *.env
+!.env.example
+!backend/.env.example
 
 # Python & Virtual Environments
 __pycache__/

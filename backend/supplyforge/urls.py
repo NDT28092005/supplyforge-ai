@@ -9,7 +9,11 @@ from supplyforge.views.export_views import (
 
 urlpatterns = [
 
-    # Health & System
+    # Health & System Liveness & Readiness Probes (Phase 0)
+    path('health/live', views.health_live, name='health_live_root'),
+    path('health/ready', views.health_ready, name='health_ready_root'),
+    path('api/v1/health/live', views.health_live, name='health_live_v1'),
+    path('api/v1/health/ready', views.health_ready, name='health_ready_v1'),
     path('api/v1/ping', views.ping, name='ping'),
     path('api/v1/data/check', views.check_data, name='check_data'),
 
