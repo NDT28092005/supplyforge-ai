@@ -69,8 +69,24 @@ docker compose up --build
 
 Sau khi các container khởi động hoàn tất, bạn có thể truy cập hệ thống tại:
 - **Frontend SPA**: `http://localhost:3000`
-- **Backend API status**: `http://localhost:8080/api/v1/ping`
+- **Backend API status (Ping)**: `http://localhost:8080/api/v1/ping`
+- **Liveness Probe**: `http://localhost:8080/health/live`
+- **Readiness Probe**: `http://localhost:8080/health/ready`
 - **MySQL Database**: `localhost:3306`
+
+---
+
+## 3.1 Cấu hình Môi trường (Environment Foundation)
+
+Hệ thống hỗ trợ 3 môi trường phát triển chính thông qua biến `APP_ENV`:
+
+| Môi trường | File cấu hình | Mô tả |
+| :--- | :--- | :--- |
+| **development** | `backend/.env.development` | Môi trường phát triển cục bộ (Debug `True`, SQLite/MySQL local) |
+| **staging** | `backend/.env.staging` | Môi trường kiểm thử staging (Template không commit secret thật) |
+| **production** | `backend/.env.production` | Môi trường production chính thức (Template không commit secret thật) |
+
+Khai báo mẫu mặc định được lưu ở `backend/.env.example` và `.env.example` tại thư mục gốc. Phiên bản hệ thống được định nghĩa tại file [VERSION](file:///home/nguyen-dai-tung/supplyforge-ai/VERSION).
 
 ---
 
