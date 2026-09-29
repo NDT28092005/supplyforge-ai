@@ -19,6 +19,26 @@ logger = logging.getLogger(__name__)
 LOCK_TTL_SECONDS = 30 * 60  # 30 minutes
 
 
+@shared_task(name="health_check_task", bind=True)
+def health_check_task(self, worker_type: str = "data_worker") -> dict:
+    """
+    Task 1.3: Celery Health Check Task.
+    Verifies worker execution for Data Worker, ML Worker, or Decision Worker.
+    """
+    from django.utils import timezone
+    timestamp = timezone.now().isoformat()
+    logger.info(
+        f"[CeleryHealthCheck] Task ID={self.request.id} executed successfully for worker_type={worker_type} at {timestamp}"
+    )
+    return {
+        "status": "ok",
+        "worker_type": worker_type,
+        "task_id": str(self.request.id),
+        "timestamp": timestamp,
+    }
+
+
+
 def _acquire_redis_lock(lock_key: str, ttl: int = LOCK_TTL_SECONDS) -> bool:
     import redis as redis_lib
 

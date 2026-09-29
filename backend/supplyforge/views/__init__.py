@@ -1,7 +1,8 @@
 # supplyforge/views package
 # Re-export all view functions for clean URL routing and external imports
 
-from .health import ping, check_data, health_live, health_ready
+from .health import ping, check_data, health_live, health_ready, health_celery
+from .version import get_version_info
 from .auth import (
     google_callback, verify_token, register_user, verify_email, resend_verification_email,
     login_user, refresh_token_api, logout_user, get_current_user, google_complete_phone,
@@ -118,7 +119,7 @@ from .export_views import (
 
 __all__ = [
     'about_us_api', 'services_api', 'blog_list_api', 'blog_detail_api',
-    'ping', 'check_data', 'health_live', 'health_ready',
+    'ping', 'check_data', 'health_live', 'health_ready', 'health_celery', 'get_version_info',
     'google_callback', 'verify_token', 'register_user', 'login_user', 'google_complete_phone',
     'forgot_password', 'reset_password',
     'sync_products', 'sync_orders',

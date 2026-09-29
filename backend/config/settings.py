@@ -186,6 +186,11 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+if 'test' in os.sys.argv or os.getenv('CELERY_TASK_ALWAYS_EAGER') == 'True':
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
+
+
 # Sentry Configuration (Feedback Sensors)
 SENTRY_DSN = os.getenv('SENTRY_DSN', '')
 if SENTRY_DSN:

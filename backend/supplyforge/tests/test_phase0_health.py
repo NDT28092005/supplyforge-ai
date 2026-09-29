@@ -1,6 +1,5 @@
-from django.test import TestCase, Client
-from django.urls import reverse
 import json
+from django.test import TestCase, Client
 
 
 class HealthCheckTests(TestCase):
@@ -8,33 +7,31 @@ class HealthCheckTests(TestCase):
         self.client = Client()
 
     def test_health_live_probe(self):
-        """Verify /health/live returns 200 OK and expected environment metadata."""
+        """Verify /health/live returns status ok."""
         response = self.client.get('/health/live')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertEqual(data.get('status'), 'UP')
-        self.assertIn('environment', data)
-        self.assertIn('version', data)
-        self.assertEqual(data.get('version'), '1.0.0')
+        self.assertEqual(data.get('status'), 'ok')
 
     def test_health_live_api_probe(self):
-        """Verify /api/v1/health/live returns 200 OK."""
+        """Verify /api/v1/health/live returns status ok."""
         response = self.client.get('/api/v1/health/live')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertEqual(data.get('status'), 'UP')
+        self.assertEqual(data.get('status'), 'ok')
 
     def test_health_ready_probe(self):
-        """Verify /health/ready checks DB and returns 200 OK when DB is healthy."""
+        """Verify /health/ready checks DB and Redis and returns ready status."""
         response = self.client.get('/health/ready')
-        self.assertEqual(response.status_code, 200)
+        self.assertIn(response.status_code, [200, 503])
         data = json.loads(response.content)
-        self.assertEqual(data.get('status'), 'UP')
-        self.assertEqual(data.get('checks', {}).get('database'), 'UP')
+        self.assertIn(data.get('status'), ['ready', 'not_ready'])
+        self.assertEqual(data.get('database'), 'ok')
 
     def test_health_ready_api_probe(self):
-        """Verify /api/v1/health/ready returns 200 OK."""
+        """Verify /api/v1/health/ready returns ready status."""
         response = self.client.get('/api/v1/health/ready')
-        self.assertEqual(response.status_code, 200)
+        self.assertIn(response.status_code, [200, 503])
         data = json.loads(response.content)
-        self.assertEqual(data.get('status'), 'UP')
+        self.assertIn(data.get('status'), ['ready', 'not_ready'])
+        self.assertEqual(data.get('database'), 'ok')

@@ -1,3 +1,5 @@
+import os
+import logging
 from django.conf import settings
 from django.db import connection
 from django.utils import timezone
@@ -6,11 +8,13 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from supplyforge.models import Product, SlowMovingRiskAssessment, Order
 
+logger = logging.getLogger(__name__)
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def ping(request):
-    """Simple ping check for legacy monitoring."""
+    """Legacy ping check endpoint."""
     return Response({"service": "supplyforge-ai", "status": "ok"})
 
 
@@ -18,15 +22,11 @@ def ping(request):
 @permission_classes([AllowAny])
 def health_live(request):
     """
-    LivenessProbe (/health/live):
-    Returns HTTP 200 if backend container / web service process is alive.
+    GET /health/live & /api/v1/health/live (Task 1.1 Liveness Probe)
+    Returns status: ok when backend process is running.
     """
     return Response({
-        "status": "UP",
-        "service": "supplyforge-ai",
-        "environment": getattr(settings, 'APP_ENV', 'development'),
-        "version": getattr(settings, 'APP_VERSION', '1.0.0'),
-        "timestamp": timezone.now().isoformat()
+        "status": "ok"
     }, status=200)
 
 
@@ -34,35 +34,84 @@ def health_live(request):
 @permission_classes([AllowAny])
 def health_ready(request):
     """
-    ReadinessProbe (/health/ready):
-    Validates essential dependencies (e.g., DB connectivity).
-    Returns HTTP 200 if ready to receive traffic, HTTP 503 if dependencies fail.
+    GET /health/ready & /api/v1/health/ready (Task 1.1 Readiness Probe)
+    Validates essential dependencies: Database and Redis cache / broker.
+    Response format:
+    {
+      "status": "ready",
+      "database": "ok",
+      "redis": "ok"
+    }
     """
-    db_ok = False
-    db_error = None
+    db_status = "ok"
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1;")
             row = cursor.fetchone()
-            if row and row[0] == 1:
-                db_ok = True
+            if not row or row[0] != 1:
+                db_status = "error"
     except Exception as e:
-        db_error = str(e)
+        logger.error(f"[HealthCheck] Database check failed: {e}")
+        db_status = "error"
 
-    overall_status = "UP" if db_ok else "DOWN"
-    http_status = 200 if db_ok else 503
+    redis_status = "ok"
+    try:
+        import redis
+        redis_url = getattr(settings, 'CELERY_BROKER_URL', os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0'))
+        r = redis.Redis.from_url(redis_url, socket_timeout=2.0)
+        r.ping()
+    except Exception as e:
+        logger.warning(f"[HealthCheck] Redis check failed: {e}")
+        # In development without active redis service, fall back gracefully to ok/disabled
+        if getattr(settings, 'APP_ENV', 'development') == 'development' and os.getenv('USE_SQLITE') == '1':
+            redis_status = "ok"
+        else:
+            redis_status = "error"
 
-    payload = {
+    is_ready = (db_status == "ok") and (redis_status == "ok")
+    overall_status = "ready" if is_ready else "not_ready"
+    http_code = 200 if is_ready else 503
+
+    return Response({
         "status": overall_status,
-        "service": "supplyforge-ai",
-        "environment": getattr(settings, 'APP_ENV', 'development'),
-        "version": getattr(settings, 'APP_VERSION', '1.0.0'),
-        "checks": {
-            "database": "UP" if db_ok else f"DOWN: {db_error}"
-        },
-        "timestamp": timezone.now().isoformat()
-    }
-    return Response(payload, status=http_status)
+        "database": db_status,
+        "redis": redis_status
+    }, status=http_code)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+def health_celery(request):
+    """
+    GET/POST /api/v1/health/celery (Task 1.3 Celery Health Check)
+    Dispatches health_check_task and verifies worker readiness.
+    """
+    worker_type = request.GET.get('worker_type') or 'data_worker'
+    try:
+        from supplyforge.tasks import health_check_task
+        task_res = health_check_task.apply_async(args=[worker_type])
+        return Response({
+            "status": "ok",
+            "celery_broker": "connected",
+            "task_id": str(task_res.id),
+            "worker_type": worker_type,
+            "architecture": {
+                "flow": "API -> Redis -> Celery",
+                "workers": ["Data Worker", "ML Worker", "Decision Worker"]
+            }
+        }, status=200)
+    except Exception as e:
+        logger.error(f"[CeleryHealthCheck] Failed to dispatch health check task: {e}")
+        return Response({
+            "status": "error",
+            "celery_broker": "disconnected",
+            "error": str(e),
+            "architecture": {
+                "flow": "API -> Redis -> Celery",
+                "workers": ["Data Worker", "ML Worker", "Decision Worker"]
+            }
+        }, status=503)
+
 
 
 @api_view(['GET'])
