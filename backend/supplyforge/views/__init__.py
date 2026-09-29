@@ -3,7 +3,9 @@
 
 from .health import ping, check_data
 from .auth import (
-    google_callback, verify_token, register_user, login_user, google_complete_phone,
+    google_callback, verify_token, register_user, verify_email, resend_verification_email,
+    login_user, refresh_token_api, logout_user, get_current_user, google_complete_phone,
+    forgot_password, reset_password, update_user_profile, update_me_profile, check_object_ownership,
 )
 from .sync import sync_products, sync_orders
 from .leak_detector import refresh_dead_stock, get_dead_stock, get_aging
@@ -19,7 +21,8 @@ from .ingestion import (
     ingestion_upload, ingestion_session_detail, ingestion_session_list,
     analyze_file, process_file, clear_data, process_file_async, get_ingestion_progress,
     cancel_ingestion_session, get_record_lineage, get_error_matrix,
-    get_post_import_quality_report, propagate_pipeline_health_score, verify_tenant_isolation
+    get_post_import_quality_report, propagate_pipeline_health_score, verify_tenant_isolation,
+    tenant_delete_data, verify_tenant_context
 )
 from .dataset_profiling import trigger_dataset_profiling, get_dataset_profile, get_sku_profiles
 from .column_mapping import trigger_column_mapping, submit_mapping_override, get_mapping_audit
@@ -90,7 +93,13 @@ from .decision_views import (
     DecisionDetailView,
     DecisionStatusUpdateView,
     DecisionHistoryView,
-    DecisionExplanationView
+    DecisionExplanationView,
+    DecisionSimulationView
+)
+from .action_plan_views import (
+    ActionPlanListCreateView,
+    ActionPlanStatusUpdateView,
+    ActionPlanOutcomeView
 )
 from .content_views import (
     about_us_api,
@@ -98,13 +107,23 @@ from .content_views import (
     blog_list_api,
     blog_detail_api
 )
+from .copilot_views import CopilotChatView
+from .notification_views import list_notifications, mark_notifications_read, create_notification
+from .export_views import (
+    ExportRiskReportView,
+    ExportCapitalReportView,
+    ExportDecisionReportView,
+    ExportActionPlanReportView
+)
 
 __all__ = [
     'about_us_api', 'services_api', 'blog_list_api', 'blog_detail_api',
     'ping', 'check_data',
     'google_callback', 'verify_token', 'register_user', 'login_user', 'google_complete_phone',
+    'forgot_password', 'reset_password',
     'sync_products', 'sync_orders',
     'analyze_file', 'process_file', 'clear_data', 'process_file_async', 'get_ingestion_progress', 'cancel_ingestion_session', 'get_record_lineage', 'get_error_matrix',
+    'tenant_delete_data', 'verify_tenant_context',
     'refresh_dead_stock', 'get_dead_stock', 'get_aging',
     'get_portfolio_command', 'get_financial_analysis',
     'get_sku_xai',
@@ -154,7 +173,13 @@ __all__ = [
     'get_capital_exposure_risk_distribution',
     'DecisionListCreateView', 'DecisionDetailView',
     'DecisionStatusUpdateView', 'DecisionHistoryView',
-    'DecisionExplanationView'
+    'DecisionExplanationView', 'DecisionSimulationView',
+    'ActionPlanListCreateView', 'ActionPlanStatusUpdateView', 'ActionPlanOutcomeView',
+    'CopilotChatView',
+    'list_notifications', 'mark_notifications_read', 'create_notification',
+    'ExportRiskReportView', 'ExportCapitalReportView',
+    'ExportDecisionReportView', 'ExportActionPlanReportView'
 ]
+
 
 

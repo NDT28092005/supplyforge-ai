@@ -24,25 +24,45 @@ class TenantIsolationService:
     @classmethod
     def get_tenant_id_from_request(cls, request) -> str:
         """
-        Extract tenant_id / workspace_id from HTTP request headers or params.
+        TEN-002: Extract tenant_id / workspace_id from JWT payload, HTTP headers, or query parameters.
         """
+        if hasattr(request, 'authenticated_tenant_id') and request.authenticated_tenant_id:
+            return str(request.authenticated_tenant_id).strip()
+
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            token_str = auth_header[7:].strip()
+            try:
+                import jwt
+                from django.conf import settings
+                payload = jwt.decode(token_str, settings.SECRET_KEY, algorithms=['HS256'])
+                t_id = payload.get('tenant_id') or payload.get('workspace_id')
+                if t_id:
+                    return str(t_id).strip()
+            except Exception:
+                pass
+
+        data = getattr(request, 'data', {})
+        if not isinstance(data, dict):
+            data = {}
+
         tenant_id = (
             request.headers.get('X-Tenant-ID') or
             request.headers.get('X-Workspace-ID') or
-            request.data.get('tenantId') or
-            request.data.get('workspaceId') or
+            data.get('tenantId') or
+            data.get('workspaceId') or
             request.GET.get('tenantId') or
             request.GET.get('workspaceId') or
             request.GET.get('userId') or
-            'user_default_001'
+            'T001'
         )
         return str(tenant_id).strip()
 
     @classmethod
     def verify_resource_tenant_access(cls, resource_obj, tenant_id: str, action: str = "read") -> bool:
         """
-        SEC-001 & SEC-002: Validate if current tenant_id owns the given resource.
-        Supports checking user_id, workspace_id, workspace.id, or tenant_id fields.
+        TEN-002: Validate if current tenant_id owns the given resource.
+        Supports checking tenant_id, workspace_id, workspace.id, or user_id fields.
         """
         resource_tenant = None
 
@@ -55,10 +75,17 @@ class TenantIsolationService:
         elif hasattr(resource_obj, 'user_id') and resource_obj.user_id is not None:
             resource_tenant = str(resource_obj.user_id)
 
-        if resource_tenant is not None and resource_tenant != str(tenant_id):
+        if resource_tenant is None:
+            return True
+
+        # Normalize ID strings (e.g. 'T001' -> '1', 'W002' -> '2')
+        clean_req_tenant = str(tenant_id).upper().replace('T', '').replace('W', '').lstrip('0') or '1'
+        clean_res_tenant = str(resource_tenant).upper().replace('T', '').replace('W', '').lstrip('0') or '1'
+
+        if clean_res_tenant != clean_req_tenant:
             logger.warning(
-                f"[SEC-001 TENANT VIOLATION] Tenant '{tenant_id}' attempted unauthorized '{action}' "
-                f"on resource owned by tenant '{resource_tenant}' ({resource_obj.__class__.__name__})."
+                f"[TEN-002 TENANT VIOLATION] Tenant '{tenant_id}' (clean: {clean_req_tenant}) attempted unauthorized '{action}' "
+                f"on resource owned by tenant '{resource_tenant}' (clean: {clean_res_tenant}) ({resource_obj.__class__.__name__})."
             )
             return False
 

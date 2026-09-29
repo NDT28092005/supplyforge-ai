@@ -1,7 +1,7 @@
 import { Component, Output, EventEmitter, Input, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { ApiService } from '../api.service';
 import { AuthService } from '../auth.service';
 
@@ -13,17 +13,27 @@ import { AuthService } from '../auth.service';
   styleUrls: ['./auth-page.component.css']
 })
 export class AuthPageComponent implements OnInit {
-  @Input() initialTab: 'login' | 'register' = 'login';
+  @Input() initialTab: 'login' | 'register' | 'verify' | 'forgot_password' | 'reset_password' = 'login';
   @Output() loginSuccess = new EventEmitter<{ name: string; email: string; storeName?: string }>();
   @Output() demoLogin = new EventEmitter<void>();
   @Output() googleLogin = new EventEmitter<void>();
   @Output() goBack = new EventEmitter<void>();
 
-  activeTab: 'login' | 'register' = 'login';
+  activeTab: 'login' | 'register' | 'verify' | 'forgot_password' | 'reset_password' = 'login';
   loading = false;
   showPassword = false;
   successMessage = '';
   errorMessage = '';
+
+  registeredEmail = '';
+  verificationCode = '';
+  devVerificationCode = '';
+
+  resetEmail = '';
+  resetCode = '';
+  devResetCode = '';
+  newPassword = '';
+  confirmNewPassword = '';
 
   loginForm = {
     email: '',
@@ -43,14 +53,20 @@ export class AuthPageComponent implements OnInit {
   constructor(
     private apiService: ApiService,
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) { }
 
   ngOnInit(): void {
-    this.activeTab = this.initialTab;
+    const qTab = this.route.snapshot.queryParams['tab'] || this.route.snapshot.queryParams['mode'];
+    if (qTab === 'register' || qTab === 'login' || qTab === 'verify' || qTab === 'forgot_password' || qTab === 'reset_password') {
+      this.activeTab = qTab;
+    } else {
+      this.activeTab = this.initialTab;
+    }
   }
 
-  switchTab(tab: 'login' | 'register'): void {
+  switchTab(tab: 'login' | 'register' | 'verify' | 'forgot_password' | 'reset_password'): void {
     this.activeTab = tab;
     this.errorMessage = '';
     this.successMessage = '';
@@ -62,6 +78,7 @@ export class AuthPageComponent implements OnInit {
 
   onLogin(): void {
     this.errorMessage = '';
+    this.successMessage = '';
     if (!this.loginForm.email || !this.loginForm.password) {
       this.errorMessage = 'Vui lòng nhập đầy đủ email và mật khẩu.';
       return;
@@ -77,10 +94,11 @@ export class AuthPageComponent implements OnInit {
     this.apiService.loginUser(this.loginForm.email, this.loginForm.password).subscribe({
       next: (res: any) => {
         this.loading = false;
-        if (res.token) {
-          this.authService.setToken(res.token);
+        const token = res.access_token || res.token;
+        if (token) {
+          this.authService.setToken(token);
         }
-        const userName = res.user?.name || this.loginForm.email.split('@')[0];
+        const userName = res.user?.name || res.user?.display_name || this.loginForm.email.split('@')[0];
         const userObj = {
           name: userName,
           email: res.user?.email || this.loginForm.email
@@ -91,6 +109,12 @@ export class AuthPageComponent implements OnInit {
       },
       error: (err: any) => {
         this.loading = false;
+        if (err.error?.code === 'EMAIL_NOT_VERIFIED') {
+          this.registeredEmail = err.error?.email || this.loginForm.email;
+          this.errorMessage = err.error?.error || 'Tài khoản chưa được xác thực. Vui lòng nhập mã xác thực email.';
+          this.activeTab = 'verify';
+          return;
+        }
         this.errorMessage = err.error?.error || 'Email hoặc mật khẩu không chính xác.';
       }
     });
@@ -98,6 +122,7 @@ export class AuthPageComponent implements OnInit {
 
   onRegister(): void {
     this.errorMessage = '';
+    this.successMessage = '';
 
     if (!this.registerForm.fullName || !this.registerForm.email || !this.registerForm.password) {
       this.errorMessage = 'Vui lòng điền đầy đủ họ tên, email và mật khẩu.';
@@ -135,32 +160,80 @@ export class AuthPageComponent implements OnInit {
     ).subscribe({
       next: (res: any) => {
         this.loading = false;
-        this.successMessage = 'Tạo tài khoản thành công! Đang đăng nhập...';
-
-        setTimeout(() => {
-          this.apiService.loginUser(this.registerForm.email, this.registerForm.password).subscribe({
-            next: (loginRes: any) => {
-              if (loginRes.token) {
-                this.authService.setToken(loginRes.token);
-              }
-              const userObj = {
-                name: this.registerForm.fullName,
-                email: this.registerForm.email,
-                storeName: this.registerForm.storeName || undefined
-              };
-              this.authService.setCurrentUser(userObj);
-              this.loginSuccess.emit(userObj);
-              this.router.navigate(['/app/dashboard']);
-            },
-            error: () => {
-              this.router.navigate(['/app/dashboard']);
-            }
-          });
-        }, 800);
+        this.registeredEmail = this.registerForm.email;
+        this.devVerificationCode = res.verification_code || '';
+        this.successMessage = res.message || 'Đăng ký thành công! Vui lòng kiểm tra mã xác thực email.';
+        this.activeTab = 'verify';
       },
       error: (err: any) => {
         this.loading = false;
         this.errorMessage = err.error?.error || 'Đăng ký thất bại. Email hoặc SĐT có thể đã được sử dụng.';
+      }
+    });
+  }
+
+  onVerifyCode(): void {
+    this.errorMessage = '';
+    this.successMessage = '';
+
+    if (!this.registeredEmail) {
+      this.errorMessage = 'Thiếu thông tin email. Vui lòng thử đăng nhập hoặc đăng ký lại.';
+      return;
+    }
+
+    if (!this.verificationCode || this.verificationCode.trim().length !== 6) {
+      this.errorMessage = 'Vui lòng nhập đầy đủ mã xác thực 6 chữ số.';
+      return;
+    }
+
+    this.loading = true;
+
+    this.apiService.verifyEmail(this.registeredEmail, this.verificationCode.trim()).subscribe({
+      next: (res: any) => {
+        this.loading = false;
+        const token = res.access_token || res.token;
+        if (token) {
+          this.authService.setToken(token);
+        }
+
+        const userName = res.user?.name || res.user?.display_name || this.registerForm.fullName || this.registeredEmail.split('@')[0];
+        const userObj = {
+          name: userName,
+          email: res.user?.email || this.registeredEmail
+        };
+
+        this.authService.setCurrentUser(userObj);
+        this.successMessage = 'Kích hoạt tài khoản thành công! Đang chuyển hướng...';
+        this.loginSuccess.emit(userObj);
+
+        setTimeout(() => {
+          this.router.navigate(['/app/dashboard']);
+        }, 600);
+      },
+      error: (err: any) => {
+        this.loading = false;
+        this.errorMessage = err.error?.error || 'Mã xác thực không hợp lệ hoặc đã hết hạn.';
+      }
+    });
+  }
+
+  onResendCode(): void {
+    if (!this.registeredEmail) return;
+    this.loading = true;
+    this.errorMessage = '';
+    this.successMessage = '';
+
+    this.apiService.resendVerification(this.registeredEmail).subscribe({
+      next: (res: any) => {
+        this.loading = false;
+        if (res.verification_code) {
+          this.devVerificationCode = res.verification_code;
+        }
+        this.successMessage = res.message || 'Đã gửi lại mã xác thực thành công.';
+      },
+      error: (err: any) => {
+        this.loading = false;
+        this.errorMessage = err.error?.error || 'Không thể gửi lại mã. Vui lòng thử lại sau.';
       }
     });
   }
@@ -249,6 +322,66 @@ export class AuthPageComponent implements OnInit {
   onGoBack(): void {
     this.goBack.emit();
     this.router.navigate(['/']);
+  }
+
+  onForgotPassword(): void {
+    this.errorMessage = '';
+    this.successMessage = '';
+    if (!this.resetEmail || !this.isValidEmail(this.resetEmail)) {
+      this.errorMessage = 'Vui lòng nhập địa chỉ email hợp lệ.';
+      return;
+    }
+
+    this.loading = true;
+
+    this.apiService.forgotPassword(this.resetEmail).subscribe({
+      next: (res: any) => {
+        this.loading = false;
+        this.devResetCode = res.dev_reset_code || '';
+        this.successMessage = res.message || 'Mã khôi phục đã được gửi tới email của bạn.';
+        this.activeTab = 'reset_password';
+      },
+      error: (err: any) => {
+        this.loading = false;
+        this.errorMessage = err.error?.error || 'Không tìm thấy tài khoản với email này.';
+      }
+    });
+  }
+
+  onResetPassword(): void {
+    this.errorMessage = '';
+    this.successMessage = '';
+
+    if (!this.resetEmail || !this.resetCode || !this.newPassword) {
+      this.errorMessage = 'Vui lòng điền đầy đủ email, mã xác nhận và mật khẩu mới.';
+      return;
+    }
+
+    if (this.newPassword.length < 6) {
+      this.errorMessage = 'Mật khẩu mới phải có ít nhất 6 ký tự.';
+      return;
+    }
+
+    if (this.newPassword !== this.confirmNewPassword) {
+      this.errorMessage = 'Mật khẩu xác nhận không khớp. Vui lòng nhập lại.';
+      return;
+    }
+
+    this.loading = true;
+
+    this.apiService.resetPassword(this.resetEmail, this.resetCode.trim(), this.newPassword).subscribe({
+      next: (res: any) => {
+        this.loading = false;
+        this.successMessage = res.message || 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.';
+        this.loginForm.email = this.resetEmail;
+        this.loginForm.password = '';
+        this.activeTab = 'login';
+      },
+      error: (err: any) => {
+        this.loading = false;
+        this.errorMessage = err.error?.error || 'Mã xác nhận khôi phục không chính xác hoặc đã hết hạn.';
+      }
+    });
   }
 
   private isValidEmail(email: string): boolean {

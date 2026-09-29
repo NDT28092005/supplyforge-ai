@@ -1,23 +1,52 @@
-"""
-SupplyForge AI — App URL Configuration
-========================================
-All REST API endpoints consolidated cleanly into single supplyforge app.
-"""
-
 from django.urls import path
 from supplyforge import views
+from supplyforge.views.export_views import (
+    ExportRiskReportView,
+    ExportCapitalReportView,
+    ExportDecisionReportView,
+    ExportActionPlanReportView
+)
 
 urlpatterns = [
+
     # Health & System
     path('api/v1/ping', views.ping, name='ping'),
     path('api/v1/data/check', views.check_data, name='check_data'),
 
-    # Authentication & User Management (Google OAuth + Local JWT + Odoo Sync)
-    path('api/auth/google/callback', views.google_callback, name='google_callback'),
-    path('api/auth/verify', views.verify_token, name='verify_token'),
+
+    # Authentication & User Management (AUTH-001 & AUTH-002)
     path('api/auth/register', views.register_user, name='register_user'),
+    path('api/v1/auth/register', views.register_user, name='register_user_v1'),
+    path('api/auth/verify-email', views.verify_email, name='verify_email'),
+    path('api/v1/auth/verify-email', views.verify_email, name='verify_email_v1'),
+    path('api/auth/resend-verification', views.resend_verification_email, name='resend_verification_email'),
+    path('api/v1/auth/resend-verification', views.resend_verification_email, name='resend_verification_email_v1'),
+
+    path('api/auth/forgot-password', views.forgot_password, name='forgot_password'),
+    path('api/v1/auth/forgot-password', views.forgot_password, name='forgot_password_v1'),
+    path('api/auth/reset-password', views.reset_password, name='reset_password'),
+    path('api/v1/auth/reset-password', views.reset_password, name='reset_password_v1'),
+
     path('api/auth/login', views.login_user, name='login_user'),
+    path('api/v1/auth/login', views.login_user, name='login_user_v1'),
+    path('api/auth/logout', views.logout_user, name='logout_user'),
+    path('api/v1/auth/logout', views.logout_user, name='logout_user_v1'),
+    path('api/auth/refresh', views.refresh_token_api, name='refresh_token'),
+    path('api/v1/auth/refresh', views.refresh_token_api, name='refresh_token_v1'),
+    path('api/auth/verify', views.verify_token, name='verify_token'),
+    path('api/v1/auth/verify', views.verify_token, name='verify_token_v1'),
+    path('api/auth/me', views.get_current_user, name='get_current_user'),
+    path('api/v1/auth/me', views.get_current_user, name='get_current_user_v1'),
+    path('api/v1/auth/profile', views.update_user_profile, name='update_user_profile_v1'),
+    path('api/v1/auth/me/profile', views.update_me_profile, name='update_me_profile_v1'),
+    path('api/v1/me/profile', views.update_me_profile, name='update_me_profile'),
+    path('api/v1/users/update', views.update_user_profile, name='update_user_profile_legacy'),
+    path('api/v1/users/<int:target_user_id>', views.update_user_profile, name='update_target_user_profile_v1'),
+
+    path('api/auth/google/callback', views.google_callback, name='google_callback'),
+    path('api/v1/auth/google/callback', views.google_callback, name='google_callback_v1'),
     path('api/auth/google/complete-phone', views.google_complete_phone, name='google_complete_phone'),
+    path('api/v1/auth/google/complete-phone', views.google_complete_phone, name='google_complete_phone_v1'),
 
     # ── Content REST APIs (About Us, Services, Blog) ──
     path('api/v1/about_us', views.about_us_api, name='about_us_v1'),
@@ -82,6 +111,8 @@ urlpatterns = [
     path('api/v2/ingestion/sessions/<uuid:session_id>/pipeline-propagate', views.propagate_pipeline_health_score, name='propagate_pipeline_health_score'),
     path('api/v1/tenant/verify-isolation', views.verify_tenant_isolation, name='verify_tenant_isolation_v1'),
     path('api/v2/tenant/verify-isolation', views.verify_tenant_isolation, name='verify_tenant_isolation'),
+    path('api/v1/tenant/context', views.verify_tenant_context, name='verify_tenant_context_v1'),
+    path('api/v1/tenant/delete-data', views.tenant_delete_data, name='tenant_delete_data_v1'),
     path('api/v2/ingestion/sessions/<uuid:session_id>/progress', views.get_ingestion_progress, name='get_ingestion_progress'),
     path('api/v1/ingestion/history-list', views.get_all_ingestion_history_list, name='get_all_ingestion_history_list_v1'),
     path('api/v2/ingestion/history-list', views.get_all_ingestion_history_list, name='get_all_ingestion_history_list'),
@@ -361,9 +392,42 @@ urlpatterns = [
     path('api/v1/decisions/<str:decision_id>/history', views.DecisionHistoryView.as_view()),
     path('api/v1/decisions/<str:decision_id>/explanation/', views.DecisionExplanationView.as_view(), name='decision_explanation_v1'),
     path('api/v1/decisions/<str:decision_id>/explanation', views.DecisionExplanationView.as_view()),
+    path('api/v1/decisions/simulate/', views.DecisionSimulationView.as_view(), name='decision_simulate_v1'),
+    path('api/v1/decisions/simulate', views.DecisionSimulationView.as_view()),
     path('api/v1/decisions/<str:decision_id>/', views.DecisionDetailView.as_view(), name='decision_detail_v1'),
     path('api/v1/decisions/<str:decision_id>', views.DecisionDetailView.as_view()),
+
+    # ── Module 07 Action Planning: ACT-001, ACT-002, ACT-003 & ACT-004 ──
+    path('api/v1/action-plans/', views.ActionPlanListCreateView.as_view(), name='action_plan_list_create_v1'),
+    path('api/v1/action-plans', views.ActionPlanListCreateView.as_view()),
+    path('api/v1/action-plans/<str:plan_id>/status/', views.ActionPlanStatusUpdateView.as_view(), name='action_plan_status_update_v1'),
+    path('api/v1/action-plans/<str:plan_id>/status', views.ActionPlanStatusUpdateView.as_view()),
+    path('api/v1/action-plans/<str:plan_id>/outcome/', views.ActionPlanOutcomeView.as_view(), name='action_plan_outcome_update_v1'),
+    path('api/v1/action-plans/<str:plan_id>/outcome', views.ActionPlanOutcomeView.as_view()),
+
+    # ── Module 07 Copilot: COP-001 Context Awareness & COP-002 Grounded Answers ──
+    path('api/v1/copilot/chat/', views.CopilotChatView.as_view(), name='copilot_chat_v1'),
+    path('api/v1/copilot/chat', views.CopilotChatView.as_view()),
+
+    # ── Notification & Alert System: NOTI-001 & NOTI-002 ──
+    path('api/v1/notifications/', views.list_notifications, name='list_notifications_v1'),
+    path('api/v1/notifications', views.list_notifications),
+    path('api/v1/notifications/mark-read/', views.mark_notifications_read, name='mark_notifications_read_v1'),
+    path('api/v1/notifications/mark-read', views.mark_notifications_read),
+    path('api/v1/notifications/create/', views.create_notification, name='create_notification_v1'),
+    path('api/v1/notifications/create', views.create_notification),
+
+    # ── EXPORT-001 Report Export APIs ──
+    path('api/v1/export/risk', ExportRiskReportView.as_view(), name='export_risk_report'),
+    path('api/v1/export/risk/', ExportRiskReportView.as_view()),
+    path('api/v1/export/capital', ExportCapitalReportView.as_view(), name='export_capital_report'),
+    path('api/v1/export/capital/', ExportCapitalReportView.as_view()),
+    path('api/v1/export/decisions', ExportDecisionReportView.as_view(), name='export_decision_report'),
+    path('api/v1/export/decisions/', ExportDecisionReportView.as_view()),
+    path('api/v1/export/action-plans', ExportActionPlanReportView.as_view(), name='export_action_plan_report'),
+    path('api/v1/export/action-plans/', ExportActionPlanReportView.as_view()),
 ]
+
 
 
 

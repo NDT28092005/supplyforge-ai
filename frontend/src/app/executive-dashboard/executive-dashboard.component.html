@@ -1,25 +1,24 @@
-<div class="space-y-8 animate-fade-in pb-16 max-w-7xl mx-auto">
+<div class="space-y-6 animate-fade-in pb-16 max-w-7xl mx-auto font-sans">
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <!-- 1. HEADER (LARGER FONT SIZES)                                      -->
+  <!-- 1. TIÊU ĐỀ TRANG TỔNG QUAN                                         -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div
-    class="bg-white border border-slate-200/80 p-7 sm:p-9 rounded-3xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-    <div class="space-y-2">
-      <h1 class="font-sans font-black text-3xl sm:text-4xl lg:text-5xl text-slate-900 tracking-tight">
-        TỔNG QUAN
+  <div class="bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+    <div class="space-y-1">
+      <h1 class="font-bold text-2xl sm:text-3xl text-slate-900 tracking-tight">
+        Tổng Quan Cửa Hàng
       </h1>
-      <p class="text-slate-600 text-sm sm:text-base font-sans font-medium">
-        Bức tranh chung về bán hàng và vốn kho
+      <p class="text-slate-500 text-sm font-normal">
+        Bức tranh toàn cảnh về tình hình bán hàng, hàng tồn và sức khỏe dòng vốn
       </p>
     </div>
 
-    <!-- Header Right Controls -->
+    <!-- Header Controls -->
     <div class="flex items-center gap-3 shrink-0 flex-wrap">
       <button (click)="refreshData()" [disabled]="isRefreshing"
-        class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 font-bold text-sm px-5 py-3 rounded-2xl transition-all flex items-center gap-2.5 cursor-pointer active:scale-95 shadow-xs whitespace-nowrap">
-        <svg class="w-4 h-4 text-indigo-600 transition-transform" [ngClass]="{'animate-spin': isRefreshing}"
-          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-xs px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-xs whitespace-nowrap active:scale-95">
+        <svg class="w-3.5 h-3.5 text-indigo-600 transition-transform" [ngClass]="{'animate-spin': isRefreshing}"
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M23 4v6h-6"></path>
           <path d="M1 20v-6h6"></path>
           <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
@@ -29,12 +28,12 @@
 
       <div class="relative">
         <select [(ngModel)]="selectedPeriod"
-          class="bg-white border border-slate-200/90 text-slate-700 font-bold text-sm px-5 py-3 pr-10 rounded-2xl cursor-pointer outline-none focus:border-indigo-400 shadow-xs appearance-none">
+          class="bg-white border border-slate-200 text-slate-700 font-semibold text-xs px-4 py-2.5 pr-9 rounded-xl cursor-pointer outline-none focus:border-indigo-500 shadow-xs appearance-none">
           <option value="30 ngày qua">30 ngày gần đây</option>
           <option value="90 ngày qua">90 ngày gần đây</option>
           <option value="Từ trước tới nay">Toàn bộ thời gian</option>
         </select>
-        <svg class="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" viewBox="0 0 24 24"
+        <svg class="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3 pointer-events-none" viewBox="0 0 24 24"
           fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
@@ -42,237 +41,300 @@
     </div>
   </div>
 
-  <!-- Empty State Banner when no data -->
-  <div *ngIf="kpiGrid.monitoredSkus === '0 SKU'" class="bg-amber-50 border border-amber-200 rounded-3xl p-8 text-center space-y-4 shadow-xs">
-    <div class="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto font-bold">
-      <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-      </svg>
-    </div>
+  <!-- Thông báo khi chưa có dữ liệu -->
+  <div *ngIf="kpiGrid.monitoredSkus === '0 sản phẩm'" class="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center space-y-4 shadow-xs">
     <div class="space-y-1">
-      <h3 class="text-lg font-bold text-slate-900">Chưa có dữ liệu sản phẩm trong hệ thống</h3>
-      <p class="text-xs sm:text-sm text-slate-600 font-medium max-w-lg mx-auto">
-        Hiện tại dữ liệu đã được xóa hoặc chưa được nạp tệp mới. Vui lòng tải lên tệp CSV bán hàng để khởi tạo báo cáo Tổng quan &amp; Rủi ro.
+      <h3 class="text-base font-bold text-slate-900">Chưa có dữ liệu sản phẩm trong hệ thống</h3>
+      <p class="text-xs text-slate-500 font-medium max-w-lg mx-auto">
+        Vui lòng tải lên tệp CSV bán hàng để khởi tạo báo cáo Tổng quan &amp; Đánh giá rủi ro.
       </p>
     </div>
-    <button (click)="navigateTo.emit('csv-upload')" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all cursor-pointer shadow-xs inline-flex items-center gap-2">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
-      </svg>
+    <button (click)="navigateTo.emit('csv-upload')" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-all cursor-pointer shadow-xs inline-flex items-center gap-2">
       <span>Tải tệp CSV mới ngay</span>
     </button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <!-- 2. LƯỚI KPI (GRID 2 DÒNG x 3 CỘT — LARGER FONT SIZES & "VỐN TỒN ĐỌNG")-->
+  <!-- 2. LUỒNG PHÂN TÍCH TỪNG BƯỚC (DRILL DOWN STEPPER BANNER)           -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
-
-    <!-- Row 1, Col 1: 100 SKU -->
-    <div (click)="onNavigateToStage('slow-moving-risk')" title="Xem chi tiết danh sách kho hàng"
-      class="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-2 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group">
-      <div class="font-sans font-black text-3xl sm:text-4xl text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
-        {{ kpiGrid.monitoredSkus }}
-      </div>
-      <div class="text-sm text-slate-600 font-bold flex items-center justify-between">
-        <span>sản phẩm trong kho</span>
-        <span class="text-xs text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
-      </div>
+  <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs space-y-3">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+      <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">
+        Luồng phân tích từng bước
+      </span>
+      <span class="text-xs text-slate-400 font-medium hidden sm:inline">Nhấp vào từng bước để chuyển nhanh đến màn hình phân tích</span>
     </div>
 
-    <!-- Row 1, Col 2: 25 SKU -->
-    <div (click)="onNavigateToStage('slow-moving-risk')" title="Xem sản phẩm rủi ro cao"
-      class="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-2 hover:border-rose-300 hover:shadow-md transition-all cursor-pointer group">
-      <div class="font-sans font-black text-3xl sm:text-4xl text-rose-600 tracking-tight">
-        {{ kpiGrid.highRiskSkus }}
-      </div>
-      <div class="text-sm text-slate-600 font-bold flex items-center justify-between">
-        <span>cần xử lý sớm</span>
-        <span class="text-xs text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
-      </div>
+    <!-- Stepper Grid (Clean Minimalist Number Badges) -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+      <button *ngFor="let s of drillDownSteps" (click)="onNavigateToStage(s.stage)"
+        class="p-3 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between group active:scale-95"
+        [ngClass]="s.stage === 'dashboard' ? 'bg-indigo-50 border-indigo-200 text-indigo-900 shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300'">
+        <div class="flex items-center justify-between">
+          <span class="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[11px]"
+            [ngClass]="s.stage === 'dashboard' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600'">
+            {{ s.step }}
+          </span>
+          <span class="text-[10px] text-slate-400 font-mono">Bước {{ s.step }}</span>
+        </div>
+        <div class="mt-2.5">
+          <div class="font-bold text-xs truncate group-hover:text-indigo-600 transition-colors">{{ s.label }}</div>
+          <div class="text-[10px] text-slate-500 font-normal truncate mt-0.5">{{ s.description }}</div>
+        </div>
+      </button>
     </div>
-
-    <!-- Row 1, Col 3: 1.27B (Vốn tồn đọng) -->
-    <div (click)="onNavigateToStage('capital-exposure')" title="Xem đánh giá chi tiết vốn tồn đọng"
-      class="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-2 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group">
-      <div class="font-sans font-black text-3xl sm:text-4xl text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
-        {{ kpiGrid.totalCapitalExposure }}
-      </div>
-      <div class="text-sm text-slate-600 font-bold flex items-center justify-between">
-        <span>vốn đang kẹt trong kho</span>
-        <span class="text-xs text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
-      </div>
-    </div>
-
-    <!-- Row 2, Col 1: 69% -->
-    <div (click)="onNavigateToStage('slow-moving-risk')" title="Xem các sản phẩm bán ổn định"
-      class="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-2 hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer group">
-      <div class="font-sans font-black text-3xl sm:text-4xl text-emerald-600 tracking-tight">
-        {{ kpiGrid.safePct }}
-      </div>
-      <div class="text-sm text-slate-600 font-bold flex items-center justify-between">
-        <span>bán tốt, ổn định</span>
-        <span class="text-xs text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
-      </div>
-    </div>
-
-    <!-- Row 2, Col 2: 25% -->
-    <div (click)="onNavigateToStage('slow-moving-risk')" title="Xem chi tiết các mặt hàng cần xử lý"
-      class="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-2 hover:border-rose-300 hover:shadow-md transition-all cursor-pointer group">
-      <div class="font-sans font-black text-3xl sm:text-4xl text-rose-600 tracking-tight">
-        {{ kpiGrid.needActionPct }}
-      </div>
-      <div class="text-xs sm:text-sm text-slate-600 font-bold flex items-center justify-between">
-        <span>cần xử lý</span>
-        <span class="text-xs text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
-      </div>
-    </div>
-
-    <!-- Row 2, Col 3: 93.8M -->
-    <div (click)="onNavigateToStage('decision-support')" title="Xem phương án xả hàng thu hồi vốn"
-      class="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-xs space-y-2 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group">
-      <div class="font-sans font-black text-3xl sm:text-4xl text-rose-600 tracking-tight">
-        {{ kpiGrid.topPriorityValue }}
-      </div>
-      <div class="text-sm text-slate-600 font-bold flex items-center justify-between">
-        <span>chiếm vốn lớn nhất</span>
-        <span class="text-xs text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
-      </div>
-    </div>
-
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- 3. CÂU TRẢ LỜI TRỰC DIỆN: "CỬA HÀNG ĐANG THẾ NÀO?"                  -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div class="bg-white border border-slate-200 p-6 sm:p-7 rounded-2xl shadow-xs space-y-4">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+      <div class="flex items-center gap-3">
+        <h2 class="text-base font-bold text-slate-900 uppercase tracking-wider">
+          Tình trạng cửa hàng hiện tại
+        </h2>
+        <span class="px-3 py-1 rounded-lg text-xs font-bold"
+          [ngClass]="shopHealthSummary.statusLevel === 'HIGH_RISK' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'">
+          {{ shopHealthSummary.statusBadge }}
+        </span>
+      </div>
+      <span class="text-xs text-slate-400 font-medium">Tổng hợp đánh giá tự động</span>
+    </div>
+
+    <div class="space-y-1.5">
+      <h3 class="text-lg font-bold text-slate-900 tracking-tight">
+        {{ shopHealthSummary.verdictTitle }}
+      </h3>
+      <p class="text-sm text-slate-600 leading-relaxed max-w-4xl font-normal">
+        {{ shopHealthSummary.verdictMessage }}
+      </p>
+    </div>
+
+    <!-- 3 Điểm tóm tắt quan trọng -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+      <div *ngFor="let item of shopHealthSummary.takeaways" class="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-start gap-2.5 text-xs text-slate-700">
+        <span class="w-1.5 h-1.5 rounded-full bg-slate-400 mt-1.5 shrink-0"></span>
+        <span class="font-medium leading-relaxed">{{ item }}</span>
+      </div>
+    </div>
+  </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <!-- 3. SPLIT SECTION (CHIA 2 CỘT TRÁI PHẢI — OVERFLOW VISIBLE FOR TOOLTIP)-->
+  <!-- 4. LƯỚI 5 CHỈ SỐ SỨC KHỎE KHO HÀNG                                 -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div class="space-y-3">
+    <div class="flex items-center justify-between">
+      <h3 class="font-bold text-sm text-slate-800 uppercase tracking-wider">
+        5 chỉ số sức khỏe chính
+      </h3>
+      <span class="text-xs text-slate-400 font-medium">Cập nhật theo dữ liệu thực tế</span>
+    </div>
+
+    <!-- 5 KPI Cards Grid (Consistent Clean White Style) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+
+      <!-- Chỉ số 1: Sản phẩm đang theo dõi -->
+      <div (click)="onNavigateToStage('slow-moving-risk')" title="Xem danh sách sản phẩm theo dõi"
+        class="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs space-y-2 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group">
+        <div class="text-xs text-slate-500 font-semibold">
+          Sản phẩm đang theo dõi
+        </div>
+        <div class="font-bold text-2xl text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
+          {{ kpiGrid.monitoredSkus }}
+        </div>
+        <div class="text-[11px] text-slate-400 font-medium flex items-center justify-between pt-1">
+          <span>Trong danh mục</span>
+          <span class="text-indigo-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">&rarr;</span>
+        </div>
+      </div>
+
+      <!-- Chỉ số 2: Sản phẩm rủi ro cao -->
+      <div (click)="onNavigateToStage('slow-moving-risk')" title="Xem sản phẩm rủi ro cao"
+        class="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs space-y-2 hover:border-rose-300 hover:shadow-md transition-all cursor-pointer group">
+        <div class="text-xs text-rose-600 font-semibold">
+          Sản phẩm rủi ro cao
+        </div>
+        <div class="font-bold text-2xl text-rose-600 tracking-tight">
+          {{ kpiGrid.highRiskSkus }}
+        </div>
+        <div class="text-[11px] text-slate-400 font-medium flex items-center justify-between pt-1">
+          <span>Cần can thiệp sớm</span>
+          <span class="text-rose-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">&rarr;</span>
+        </div>
+      </div>
+
+      <!-- Chỉ số 3: Ước tính tổng vốn đọng -->
+      <div (click)="onNavigateToStage('capital-exposure')" title="Xem đánh giá tổng vốn đọng"
+        class="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs space-y-2 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group">
+        <div class="text-xs text-slate-600 font-semibold">
+          Ước tính tổng vốn đọng
+        </div>
+        <div class="font-bold text-2xl text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
+          {{ kpiGrid.totalCapitalExposure }}
+        </div>
+        <div class="text-[11px] text-slate-400 font-medium flex items-center justify-between pt-1">
+          <span>Tổng giá trị tồn kho</span>
+          <span class="text-indigo-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">&rarr;</span>
+        </div>
+      </div>
+
+      <!-- Chỉ số 4: Vốn đang gặp rủi ro -->
+      <div (click)="onNavigateToStage('capital-exposure')" title="Xem vốn gặp rủi ro"
+        class="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs space-y-2 hover:border-amber-300 hover:shadow-md transition-all cursor-pointer group">
+        <div class="text-xs text-amber-700 font-semibold">
+          Vốn đang gặp rủi ro
+        </div>
+        <div class="font-bold text-2xl text-amber-600 tracking-tight">
+          {{ kpiGrid.atRiskCapital }}
+        </div>
+        <div class="text-[11px] text-slate-400 font-medium flex items-center justify-between pt-1">
+          <span>Kẹt ở sản phẩm bán chậm</span>
+          <span class="text-amber-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">&rarr;</span>
+        </div>
+      </div>
+
+      <!-- Chỉ số 5: Vốn đọng lâu ngày (>90 ngày) -->
+      <div (click)="onNavigateToStage('capital-exposure')" title="Xem vốn đọng lâu ngày"
+        class="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs space-y-2 hover:border-rose-300 hover:shadow-md transition-all cursor-pointer group">
+        <div class="text-xs text-rose-700 font-semibold">
+          Vốn đọng lâu (>90 ngày)
+        </div>
+        <div class="font-bold text-2xl text-rose-600 tracking-tight">
+          {{ kpiGrid.agedCapital }}
+        </div>
+        <div class="text-[11px] text-slate-400 font-medium flex items-center justify-between pt-1">
+          <span>Nguy cơ mất giá cao</span>
+          <span class="text-rose-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">&rarr;</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- 5. TỶ LỆ PHÂN BỔ KHO HÀNG & NỔI BẬT CẦN CHÚ Ý                        -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-visible">
 
-    <!-- CỘT TRÁI: TÌNH HÌNH RỦI RO (Donut Chart + List) -->
-    <div class="bg-white border border-slate-200/80 p-7 rounded-3xl shadow-xs space-y-5 overflow-visible">
-      <div class="flex items-center justify-between border-b border-slate-100 pb-4">
-        <h3 class="font-sans font-extrabold text-base sm:text-lg text-slate-900 uppercase tracking-wider">
-          TÌNH HÌNH KHO HÀNG
+    <!-- CỘT TRÁI: TỶ LỆ PHÂN BỔ KHO HÀNG -->
+    <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-xs space-y-4 overflow-visible">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="font-bold text-sm text-slate-900 uppercase tracking-wider">
+          Tỷ lệ phân bổ kho hàng
         </h3>
-        <span class="text-xs font-mono text-slate-400 font-semibold">Tỷ lệ phân bổ</span>
+        <span class="text-xs text-slate-400 font-medium">Tỷ lệ phần trăm</span>
       </div>
 
       <div class="flex flex-col sm:flex-row items-center justify-between gap-6 overflow-visible">
         <!-- List Text Metrics -->
-        <div class="space-y-3.5 font-sans text-sm w-full sm:w-1/2">
-          <div class="flex items-center justify-between p-3 bg-emerald-50/70 rounded-xl border border-emerald-100">
-            <span class="font-bold text-emerald-800 flex items-center gap-2">
-              <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+        <div class="space-y-3 text-xs w-full sm:w-1/2">
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+            <span class="font-semibold text-slate-700 flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
               An toàn
             </span>
-            <span class="font-black text-emerald-700 font-mono text-base">{{ riskBreakdown[0]?.pct || '0%' }}</span>
+            <span class="font-bold text-slate-900 font-mono text-sm">{{ riskBreakdown[0]?.pct || '0%' }}</span>
           </div>
 
-          <div class="flex items-center justify-between p-3 bg-amber-50/70 rounded-xl border border-amber-100">
-            <span class="font-bold text-amber-800 flex items-center gap-2">
-              <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+            <span class="font-semibold text-slate-700 flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
               Cần theo dõi
             </span>
-            <span class="font-black text-amber-700 font-mono text-base">{{ riskBreakdown[1]?.pct || '0%' }}</span>
+            <span class="font-bold text-slate-900 font-mono text-sm">{{ riskBreakdown[1]?.pct || '0%' }}</span>
           </div>
 
-          <div class="flex items-center justify-between p-3 bg-rose-50/70 rounded-xl border border-rose-100">
-            <span class="font-bold text-rose-800 flex items-center gap-2">
-              <span class="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></span>
+          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+            <span class="font-semibold text-slate-700 flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
               Rủi ro cao
             </span>
-            <span class="font-black text-rose-700 font-mono text-base">{{ riskBreakdown[2]?.pct || '0%' }}</span>
+            <span class="font-bold text-rose-600 font-mono text-sm">{{ riskBreakdown[2]?.pct || '0%' }}</span>
           </div>
         </div>
 
-        <!-- Donut Chart Canvas Container (Overflow visible + padding to prevent tooltip clipping) -->
-        <div class="w-full sm:w-1/2 flex justify-center overflow-visible relative p-2">
-          <div #donutChartRef class="w-full h-52 min-h-[210px] overflow-visible"></div>
+        <!-- Donut Chart Container -->
+        <div class="w-full sm:w-1/2 flex justify-center overflow-visible relative p-1">
+          <div #donutChartRef class="w-full h-48 min-h-[190px] overflow-visible"></div>
         </div>
       </div>
     </div>
 
-    <!-- CỘT PHẢI: ĐIỂM ĐÁNG CHÚ Ý (SVG Icons, Larger Text, No Currency Symbol) -->
-    <div class="bg-white border border-slate-200/80 p-7 rounded-3xl shadow-xs flex flex-col justify-between space-y-5">
+    <!-- CỘT PHẢI: ĐIỂM NỔI BẬT CẦN CHÚ Ý -->
+    <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-xs flex flex-col justify-between space-y-4">
       <div>
-        <div class="flex items-center justify-between border-b border-slate-100 pb-4">
-          <h3 class="font-sans font-extrabold text-base sm:text-lg text-slate-900 uppercase tracking-wider">
-            CẦN CHÚ Ý
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h3 class="font-bold text-sm text-slate-900 uppercase tracking-wider">
+            Điểm nổi bật cần chú ý
           </h3>
-          <span class="text-xs font-mono text-slate-400 font-semibold">Điểm nổi bật</span>
+          <span class="text-xs text-slate-400 font-medium">Tóm tắt rủi ro</span>
         </div>
 
-        <ul class="mt-4 space-y-3.5 font-sans text-sm">
-          <!-- Item 1 -->
-          <li
-            class="flex items-center gap-3.5 text-slate-700 font-bold p-3 bg-slate-50/70 rounded-xl border border-slate-100">
-            <span><strong class="text-slate-900 text-base">{{ attentionNotice.highRiskCountText }}</strong> cần được xem xét</span>
+        <ul class="mt-4 space-y-3 text-xs">
+          <li class="flex items-center gap-3 text-slate-700 font-medium p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+            <span class="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+            <span><strong class="text-slate-900 font-bold">{{ attentionNotice.highRiskCountText }}</strong> cần được xem xét xử lý ngay</span>
           </li>
 
-          <!-- Item 2 -->
-          <li
-            class="flex items-center gap-3.5 text-slate-700 font-bold p-3 bg-slate-50/70 rounded-xl border border-slate-100">
-            <span><strong class="text-slate-900 text-base">{{ attentionNotice.slowCountText }}</strong> nằm kho 61–90 ngày</span>
+          <li class="flex items-center gap-3 text-slate-700 font-medium p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+            <span><strong class="text-slate-900 font-bold">{{ attentionNotice.slowCountText }}</strong> đang tồn kho từ 61–90 ngày</span>
           </li>
 
-          <!-- Item 3 -->
-          <li
-            class="flex items-center gap-3.5 text-slate-700 font-bold p-3 bg-slate-50/70 rounded-xl border border-slate-100">
-            <span><strong class="text-slate-900 text-base">{{ attentionNotice.deadCountText }}</strong> nằm kho trên 90 ngày</span>
+          <li class="flex items-center gap-3 text-slate-700 font-medium p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+            <span class="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+            <span><strong class="text-slate-900 font-bold">{{ attentionNotice.deadCountText }}</strong> đã tồn kho lâu ngày (trên 90 ngày)</span>
           </li>
         </ul>
       </div>
 
-      <!-- Ghost Link CTA -->
-      <div class="pt-4 border-t border-slate-100">
+      <div class="pt-3 border-t border-slate-100">
         <button (click)="onViewRiskAnalysisClick()"
-          class="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer group">
-          <span>Xem chi tiết</span>
-          <span class="transition-transform group-hover:translate-x-1.5">&rarr;</span>
+          class="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer group">
+          <span>Xem chi tiết màn hình phân tích rủi ro</span>
+          <span class="transition-transform group-hover:translate-x-1">&rarr;</span>
         </button>
       </div>
     </div>
 
   </div>
 
-
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <!-- 4. DANH SÁCH RỦI RO TOP ĐẦU (3 ƯU TIÊN HÔM NAY — LARGER FONT SIZES) -->
+  <!-- 6. SẢN PHẨM ƯU TIÊN XỬ LÝ HÔM NAY                                  -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="bg-white border border-slate-200/80 p-6 sm:p-8 rounded-3xl shadow-xs space-y-5">
-    <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+  <div class="bg-white border border-slate-200 p-6 sm:p-7 rounded-2xl shadow-xs space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
       <div>
-        <h3 class="font-sans font-extrabold text-base sm:text-lg text-slate-900 uppercase tracking-wider">
-          CẦN XỬ LÝ SỚM
+        <h3 class="font-bold text-sm text-slate-900 uppercase tracking-wider">
+          Sản phẩm ưu tiên xử lý hôm nay
         </h3>
-        <p class="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">3 sản phẩm chiếm vốn nhiều nhất</p>
+        <p class="text-slate-500 text-xs mt-0.5 font-normal">3 mặt hàng có lượng vốn bị giam đọng lớn nhất trong kho</p>
       </div>
     </div>
 
     <!-- Mini Priority Table -->
-    <div class="overflow-x-auto rounded-2xl border border-slate-100">
-      <table class="w-full text-left text-sm border-collapse">
+    <div class="overflow-x-auto rounded-xl border border-slate-200/80">
+      <table class="w-full text-left text-xs border-collapse">
         <thead>
-          <tr class="bg-slate-50 text-slate-600 text-xs uppercase border-b border-slate-100">
-            <th class="py-3.5 px-5 font-bold">Mã sản phẩm</th>
-            <th class="py-3.5 px-5 font-bold text-right">Vốn kẹt</th>
-            <th class="py-3.5 px-5 font-bold text-center">Tình trạng</th>
+          <tr class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200/80">
+            <th class="py-3 px-4">Mã sản phẩm</th>
+            <th class="py-3 px-4 text-right">Giá trị vốn kẹt</th>
+            <th class="py-3 px-4 text-center">Trạng thái</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 bg-white">
-          <tr *ngFor="let item of topPriorities" (click)="onSelectSku(item.sku)" title="Nhấp để xem phân tích rủi ro sản phẩm"
-            class="hover:bg-indigo-50/50 transition-colors cursor-pointer group">
-            <td class="py-4 px-5 font-sans font-bold text-slate-900 text-sm">
+          <tr *ngFor="let item of topPriorities" (click)="onSelectSku(item.sku)" title="Nhấp để xem chi tiết rủi ro mặt hàng"
+            class="hover:bg-slate-50 transition-colors cursor-pointer group">
+            <td class="py-3.5 px-4 font-bold text-slate-900">
               {{ item.sku }}
             </td>
-            <td class="py-4 px-5 font-sans font-black text-rose-600 text-right text-base">
+            <td class="py-3.5 px-4 font-bold text-rose-600 text-right text-sm">
               {{ item.capitalExposure }}
             </td>
-            <td class="py-4 px-5 text-center">
-              <span class="px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5"
-                [ngClass]="item.badgeClass">
-                <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                Cần xả sớm
+            <td class="py-3.5 px-4 text-center">
+              <span class="px-2.5 py-1 rounded-md text-[11px] font-bold inline-block bg-rose-50 text-rose-700 border border-rose-200">
+                Cần xả kho sớm
               </span>
             </td>
           </tr>
@@ -280,12 +342,12 @@
       </table>
     </div>
 
-    <!-- Bottom Right Text Link -->
-    <div class="flex justify-end pt-2">
+    <!-- Bottom Link -->
+    <div class="flex justify-end pt-1">
       <button (click)="onViewAllClick()"
-        class="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer group">
-        <span>Xem tất cả</span>
-        <span class="transition-transform group-hover:translate-x-1.5">&rarr;</span>
+        class="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer group">
+        <span>Xem tất cả danh sách sản phẩm</span>
+        <span class="transition-transform group-hover:translate-x-1">&rarr;</span>
       </button>
     </div>
   </div>

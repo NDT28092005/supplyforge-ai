@@ -5,6 +5,8 @@ export interface UserProfile {
   name: string;
   email: string;
   avatar?: string;
+  role?: string;
+  permissions?: { [key: string]: boolean };
 }
 
 @Injectable({
@@ -27,7 +29,7 @@ export class AuthService {
       expires = '; expires=' + date.toUTCString();
     }
     const secureFlag = window.location.protocol === 'https:' ? '; Secure' : '';
-    document.cookie = name + '=' + (value || '') + expires + `; path=/; domain=localhost; SameSite=Lax${secureFlag}`;
+    document.cookie = name + '=' + (value || '') + expires + `; path=/; SameSite=Lax${secureFlag}`;
   }
 
   private getCookie(name: string): string | null {
@@ -42,16 +44,18 @@ export class AuthService {
   }
 
   private eraseCookie(name: string): void {
-    document.cookie = name + '=; Path=/; domain=localhost; Expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax;';
+    document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax;';
   }
 
   getToken(): string | null {
-    return this.getCookie(this.tokenKey) || sessionStorage.getItem(this.tokenKey);
+    return localStorage.getItem(this.tokenKey) || sessionStorage.getItem(this.tokenKey) || this.getCookie(this.tokenKey);
   }
 
   setToken(token: string): void {
-    this.setCookie(this.tokenKey, token, 1);
+    if (!token) return;
+    localStorage.setItem(this.tokenKey, token);
     sessionStorage.setItem(this.tokenKey, token);
+    this.setCookie(this.tokenKey, token, 1);
     this.loadUserFromToken();
   }
 
@@ -59,6 +63,8 @@ export class AuthService {
     this.eraseCookie(this.tokenKey);
     sessionStorage.removeItem(this.tokenKey);
     localStorage.removeItem(this.tokenKey);
+    sessionStorage.removeItem('sf_user_profile');
+    localStorage.removeItem('sf_user_profile');
     this.currentUserSubject.next(null);
   }
 
@@ -70,7 +76,40 @@ export class AuthService {
     return this.currentUserSubject.getValue();
   }
 
+  getUserRole(): string {
+    const user = this.getCurrentUser();
+    return user?.role || 'OWNER';
+  }
+
+  hasPermission(permission: string): boolean {
+    const user = this.getCurrentUser();
+    if (!user) return false;
+    const role = (user.role || 'OWNER').toUpperCase();
+
+    if (user.permissions && typeof user.permissions[permission] === 'boolean') {
+      return user.permissions[permission];
+    }
+
+    const rolePerms: { [key: string]: string[] } = {
+      OWNER: ['upload_data', 'delete_dataset', 'run_simulation', 'execute_action', 'view_financial'],
+      ADMIN: ['upload_data', 'delete_dataset', 'run_simulation', 'execute_action', 'view_financial'],
+      ANALYST: ['run_simulation', 'view_financial'],
+      OPERATOR: ['upload_data', 'execute_action'],
+      VIEWER: []
+    };
+
+    const allowed = rolePerms[role] || [];
+    return allowed.includes(permission);
+  }
+
   setCurrentUser(user: UserProfile | null): void {
+    if (user) {
+      localStorage.setItem('sf_user_profile', JSON.stringify(user));
+      sessionStorage.setItem('sf_user_profile', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('sf_user_profile');
+      sessionStorage.removeItem('sf_user_profile');
+    }
     this.currentUserSubject.next(user);
   }
 
@@ -106,14 +145,23 @@ export class AuthService {
   loadUserFromToken(): void {
     const token = this.getToken();
     if (token) {
+      const savedUserStr = localStorage.getItem('sf_user_profile') || sessionStorage.getItem('sf_user_profile');
+      if (savedUserStr) {
+        try {
+          const userObj = JSON.parse(savedUserStr);
+          this.currentUserSubject.next(userObj);
+          return;
+        } catch (e) {}
+      }
+
       const payload = this.parseJwt(token);
       if (payload) {
         this.currentUserSubject.next({
-          name: payload.name || payload.email?.split('@')[0] || 'User',
-          email: payload.email || 'user@supplyforge.ai'
+          name: payload.name || payload.display_name || payload.sub?.split('@')[0] || payload.email?.split('@')[0] || 'User',
+          email: payload.email || payload.sub || 'user@supplyforge.ai'
         });
       } else {
-        this.currentUserSubject.next({ name: 'Demo Admin', email: 'admin@supplyforge.ai' });
+        this.currentUserSubject.next({ name: 'Chủ cửa hàng', email: 'user@supplyforge.ai' });
       }
     } else {
       this.currentUserSubject.next(null);

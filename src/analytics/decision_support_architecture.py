@@ -33,6 +33,7 @@ class StrategyType(str, Enum):
     BUNDLE = "BUNDLE"
     DISCOUNT = "DISCOUNT"
     CLEARANCE = "CLEARANCE"
+    REPOSITION = "REPOSITION"
     STOP_REPLENISHMENT = "STOP_REPLENISHMENT"
 
 
@@ -136,8 +137,10 @@ class DecisionContextBuilder:
         cap_rec = capital_record or {}
         cap_exp = cap_rec.get("capital_exposure") if "capital_exposure" in cap_rec else cap_rec.get("inventory_value")
         rwce = cap_rec.get("risk_weighted_exposure")
+        if rwce is None and cap_exp is not None:
+            rwce = cap_exp * risk_ctx["risk_probability"]
         
-        if cap_exp is None or rwce is None:
+        if cap_exp is None:
             is_missing_mandatory = True
             warnings.append("Missing mandatory Capital Exposure outputs from Module 05.")
 

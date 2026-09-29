@@ -2,6 +2,7 @@
 # Re-export commonly used services
 
 from .dss_service import MerchantDSSWebService
+from .rate_limiter import RegistrationRateLimiter
 
 try:
     from .normalizer import VietnameseNormalizer, Levenshtein
@@ -18,4 +19,4 @@ try:
 except ImportError:
     pass
 
-__all__ = ['MerchantDSSWebService']
+__all__ = ['MerchantDSSWebService', 'RegistrationRateLimiter']

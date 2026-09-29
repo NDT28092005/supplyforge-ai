@@ -75,8 +75,8 @@ class DemandPatternClassifier:
         pattern_summary_stats = []
         distribution_rows = []
 
-        for p in ['SMOOTH', 'ERRATIC', 'INTERMITTENT', 'LUMPY']:
-            p_df = df[df['demand_pattern'] == p]
+        for p in ['Smooth', 'Erratic', 'Intermittent', 'Lumpy']:
+            p_df = df[df['demand_pattern'].astype(str).str.upper() == p.upper()]
             count = int(len(p_df))
             pct = round((count / float(total_skus) * 100.0), 2) if total_skus > 0 else 0.0
 
@@ -84,10 +84,10 @@ class DemandPatternClassifier:
                 'pattern': p,
                 'skuCount': count,
                 'percentage': pct,
-                'meanAdi': round(float(p_df['adi'].mean()), 4) if count > 0 else 0.0,
-                'medianAdi': round(float(p_df['adi'].median()), 4) if count > 0 else 0.0,
-                'meanCv2': round(float(p_df['cv2'].mean()), 4) if count > 0 else 0.0,
-                'medianCv2': round(float(p_df['cv2'].median()), 4) if count > 0 else 0.0,
+                'meanAdi': round(float(p_df['adi'].mean()), 4) if count > 0 and 'adi' in p_df else 0.0,
+                'medianAdi': round(float(p_df['adi'].median()), 4) if count > 0 and 'adi' in p_df else 0.0,
+                'meanCv2': round(float(p_df['cv2'].mean()), 4) if count > 0 and 'cv2' in p_df else 0.0,
+                'medianCv2': round(float(p_df['cv2'].median()), 4) if count > 0 and 'cv2' in p_df else 0.0,
                 'meanZeroRate': round(float(p_df['zero_rate_90d'].mean() if 'zero_rate_90d' in p_df else p_df.get('zero_rate_30d', pd.Series([0])).mean()), 4) if count > 0 else 0.0,
                 'meanSalesVelocity': round(float(p_df['sales_velocity_90d'].mean() if 'sales_velocity_90d' in p_df else p_df.get('sales_velocity_30d', pd.Series([0])).mean()), 4) if count > 0 else 0.0,
             }
@@ -109,18 +109,18 @@ class DemandPatternClassifier:
         dist_csv_path = os.path.join(output_dir, 'demand_pattern_distribution.csv')
         dist_df.to_csv(dist_csv_path, index=False)
 
-        # Academic Boundary Notice
+        # Academic Boundary Notice (DEM-001 Requirement)
         academic_notice = (
-            "Academic Boundary Notice: Demand Pattern Classification (SMOOTH/ERRATIC/INTERMITTENT/LUMPY) "
-            "represents descriptive demand behavior evidence based on observed transaction interval (ADI) and volatility (CV²). "
-            "It DOES NOT constitute Slow-Moving Risk Classification (CRITICAL/HIGH/MEDIUM/LOW RISK), which is evaluated downstream "
-            "in M2-03/M2-04 by combining demand patterns with sales velocity, DSLS, and zero-sales rate."
+            "Quan trọng: Đây là demand-pattern classification (phân loại hình thái nhu cầu: Smooth, Erratic, Intermittent, Lumpy), "
+            "không phải ground truth slow-moving risk."
         )
 
         summary_payload = {
             'sessionId': sess_id,
             'classifiedAt': datetime.now().isoformat(),
             'totalSkusClassified': total_skus,
+            'classificationType': 'DEMAND_PATTERN_CLASSIFICATION',
+            'isGroundTruthSlowMovingRisk': False,
             'thresholds': {
                 'adiThreshold': 1.32,
                 'cv2Threshold': 0.49,
@@ -166,25 +166,25 @@ class DemandPatternClassifier:
         """Classify single SKU based on ADI (1.32) and CV² (0.49)."""
         if adi <= 1.32 and cv2 <= 0.49:
             return (
-                'SMOOTH',
+                'Smooth',
                 ['SMOOTH_DEMAND'],
                 'Nhu cầu xuất hiện tương đối thường xuyên và ổn định.'
             )
         elif adi <= 1.32 and cv2 > 0.49:
             return (
-                'ERRATIC',
+                'Erratic',
                 ['ERRATIC_DEMAND'],
                 'Nhu cầu xuất hiện thường xuyên nhưng biến động mạnh về số lượng.'
             )
         elif adi > 1.32 and cv2 <= 0.49:
             return (
-                'INTERMITTENT',
+                'Intermittent',
                 ['INTERMITTENT_DEMAND'],
                 'Nhu cầu không xuất hiện liên tục nhưng mức cầu khi phát sinh tương đối ổn định.'
             )
         else:
             return (
-                'LUMPY',
+                'Lumpy',
                 ['LUMPY_DEMAND'],
                 'Nhu cầu xuất hiện không thường xuyên và có mức biến động cao.'
             )

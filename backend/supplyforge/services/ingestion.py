@@ -886,35 +886,8 @@ class DynamicFileImportService:
                 }
             )
 
-        # Delete all products, orders, and order items unconditionally
-        OrderItem.objects.all().delete()
-        Order.objects.all().delete()
-        Product.objects.all().delete()
-
-        # Clear all derived risk assessments, exposure, decision records & sessions
-        try:
-            from supplyforge.models import (
-                SlowMovingRiskAssessment, CapitalExposureAnalysisRecord,
-                CapitalExposureItemRecord, DecisionRecord, RiskExplanationRecord,
-                RiskMonitoringRun, IngestionSession, Sku, InventoryRecord
-            )
-            from supplyforge.models.decision import (
-                DecisionExplanationRecord, DecisionEvidenceRecord, DecisionAuditEventRecord
-            )
-            SlowMovingRiskAssessment.objects.all().delete()
-            CapitalExposureItemRecord.objects.all().delete()
-            CapitalExposureAnalysisRecord.objects.all().delete()
-            DecisionExplanationRecord.objects.all().delete()
-            DecisionEvidenceRecord.objects.all().delete()
-            DecisionAuditEventRecord.objects.all().delete()
-            DecisionRecord.objects.all().delete()
-            RiskExplanationRecord.objects.all().delete()
-            RiskMonitoringRun.objects.all().delete()
-            IngestionSession.objects.all().delete()
-            Sku.objects.all().delete()
-            InventoryRecord.objects.all().delete()
-        except Exception as exc:
-            print(f"[Clear Data] Warning clearing derived models: {exc}")
+        from supplyforge.services.tenant_data_deletion import TenantDataDeletionService
+        TenantDataDeletionService.purge_tenant_data(workspace_id=1, user_id=user_id)
 
     @staticmethod
     def read_csv_in_chunks(file_path_or_stream, chunk_size=50000):

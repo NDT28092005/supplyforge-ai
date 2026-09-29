@@ -163,3 +163,74 @@ class DecisionExplanationView(APIView):
                 {"success": False, "error": {"code": "DECISION_NOT_FOUND", "message": str(e)}},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+
+class DecisionSimulationView(APIView):
+    """
+    POST /api/v1/decisions/simulate/: SIM-001 & SIM-002 Simulation Engine Endpoint.
+    
+    Merchant Inputs:
+    - discount_rate (default 0.15)
+    - duration_days (default 14)
+    - discount_rates (default [0.10, 0.15, 0.20])
+    - decision_context or decision_id
+    """
+
+    def post(self, request, *args, **kwargs):
+        from src.analytics.discount_simulation_engine import DiscountSimulationEngine
+
+        payload = request.data or {}
+        discount_rate = float(payload.get("discount_rate", 0.15))
+        duration_days = int(payload.get("duration_days", 14))
+        custom_rates = payload.get("discount_rates", [0.10, 0.15, 0.20])
+
+        decision_ctx = payload.get("decision_context") or {}
+        decision_id = payload.get("decision_id")
+
+        if not decision_ctx and decision_id:
+            try:
+                decision_rec = DecisionPersistenceService.get_decision(decision_id)
+                decision_ctx = {
+                    "sku": decision_rec.sku,
+                    "unit_price": float(decision_rec.financial_impact.get("unit_price", 100000.0)),
+                    "unit_cost": float(decision_rec.financial_impact.get("unit_cost", 70000.0)),
+                    "stock_on_hand": float(decision_rec.financial_impact.get("stock_on_hand", 100)),
+                    "capital_context": {
+                        "capital_exposure": float(decision_rec.financial_impact.get("capital_exposure", 7000000.0))
+                    }
+                }
+            except Exception:
+                pass
+
+        if not decision_ctx:
+            sku = payload.get("sku", "DEFAULT_SKU")
+            cap_exp = float(payload.get("capital_exposure", 50000000.0))
+            decision_ctx = {
+                "sku": sku,
+                "unit_price": float(payload.get("unit_price", 100000.0)),
+                "unit_cost": float(payload.get("unit_cost", 70000.0)),
+                "stock_on_hand": float(payload.get("stock_on_hand", cap_exp / 70000.0)),
+                "capital_context": {
+                    "capital_exposure": cap_exp
+                }
+            }
+
+        sim_engine = DiscountSimulationEngine()
+        sim_001 = sim_engine.simulate_single_scenario(
+            decision_context=decision_ctx,
+            discount_rate=discount_rate,
+            duration_days=duration_days
+        )
+        sim_002 = sim_engine.compare_scenarios(
+            decision_context=decision_ctx,
+            discount_rates=custom_rates,
+            duration_days=duration_days
+        )
+
+        return Response({
+            "success": True,
+            "sku": decision_ctx.get("sku"),
+            "sim_001": sim_001,
+            "sim_002": sim_002
+        }, status=status.HTTP_200_OK)
+

@@ -114,21 +114,28 @@ class DataFreshnessTracker:
             coverage_report=coverage_report
         )
 
+        is_stale = data_status in ('STALE', 'OUTDATED')
         status_result = {
             'sessionId': self.session_id,
             'timestamp': datetime.now().isoformat(),
             'currentDate': curr_dt.strftime('%Y-%m-%d'),
+            'lastUpdated': upload_dt.strftime('%Y-%m-%d %H:%M'),  # DATASET-004 Last updated
+            'dataThrough': data_max_dt.strftime('%Y-%m-%d'),       # DATASET-004 Data through
             'lastUploadAt': upload_dt.isoformat(),
             'uploadFreshnessStatus': upload_status,
             'dataMinDate': data_min_dt.strftime('%Y-%m-%d'),
             'dataMaxDate': data_max_dt.strftime('%Y-%m-%d'),
             'freshnessDays': freshness_days,
             'freshnessStatus': data_status,
+            'isStaleData': is_stale,                               # DATASET-004 STALE DATA flag
+            'staleLabel': 'STALE DATA' if is_stale else 'FRESH DATA',
             'freshnessMismatch': freshness_mismatch,
             'thresholdsUsed': thresholds,
             'decisionGuard': {
                 'canRunCurrentAnalysis': can_run_analysis,
                 'guardReason': guard_reason,
+                'preventStalePrediction': is_stale,
+                'staleWarning': 'STALE DATA — Predictions penalized/blocked due to stale dataset.' if is_stale else None
             },
             'alerts': alerts,
             'coverageReport': coverage_report,

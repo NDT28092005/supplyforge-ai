@@ -359,10 +359,58 @@ def process_file(request):
 @csrf_exempt
 @api_view(['DELETE', 'POST'])
 def clear_data(request):
-    """v1 Legacy Adapter Clear Data."""
-    user_id = request.data.get('userId') or request.GET.get('userId', 'user_default_001')
-    DynamicFileImportService.clear_data(user_id)
-    return Response({"message": "Đã xóa toàn bộ dữ liệu sản phẩm và đơn hàng cũ thành công."})
+    """
+    POST /api/v1/import/clear & DELETE /api/v1/import/clear
+    TEN-004: Tenant Data Deletion Policy.
+    Requires 'delete_dataset' permission (OWNER or ADMIN).
+    """
+    try:
+        role = getattr(request, 'user_role', 'OWNER')
+        from supplyforge.permissions import has_permission, PERM_DELETE_DATASET
+        if not has_permission(role, PERM_DELETE_DATASET):
+            return Response({
+                "error": f"Tài khoản của bạn với vai trò '{role}' không có quyền xóa dữ liệu (cần quyền ADMIN/OWNER).",
+                "code": "PERMISSION_DENIED"
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        workspace_id = getattr(request, 'workspace_id', 1)
+        user_id = getattr(request, 'user_id', None)
+
+        from supplyforge.services.tenant_data_deletion import TenantDataDeletionService
+        res = TenantDataDeletionService.purge_tenant_data(workspace_id=workspace_id, user_id=user_id)
+        return Response(res, status=status.HTTP_200_OK)
+    except Exception as exc:
+        import traceback
+        logger.error(f"[clear_data ERROR]: {exc}\n{traceback.format_exc()}")
+        return Response({
+            "error": str(exc),
+            "traceback": traceback.format_exc(),
+            "code": "INTERNAL_SERVER_ERROR"
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@csrf_exempt
+@api_view(['POST', 'DELETE'])
+def tenant_delete_data(request):
+    """
+    POST /api/v1/tenant/delete-data & DELETE /api/v1/tenant/delete-data (TEN-004)
+    Purges all 7 layers of tenant data under the TEN-004 policy.
+    """
+    return clear_data(request)
+
+
+@csrf_exempt
+@api_view(['GET'])
+def verify_tenant_context(request):
+    """
+    GET /api/v1/tenant/context (TEN-003)
+    Returns current active Tenant Context (user, tenant, role, permissions).
+    """
+    context = getattr(request, 'tenant_context', {})
+    return Response({
+        "status": "ACTIVE",
+        "tenant_context": context
+    }, status=status.HTTP_200_OK)
 
 
 @csrf_exempt
@@ -473,85 +521,37 @@ def cancel_ingestion_session(request, session_id):
 @api_view(['GET'])
 def get_record_lineage(request, record_id):
     """
-    GET /api/v2/ingestion/lineage/<record_id> (IR-017)
-    Trace record lineage back to import_id, file, merchant, and timestamp.
+    GET /api/v1/ingestion/lineage/<record_id> & GET /api/v2/ingestion/lineage/<record_id> (LIN-001 & LIN-002)
+    Trace record lineage back from Risk prediction -> Feature snapshot -> Canonical data -> Import -> Original file.
+    Includes LIN-002 prediction lineage metadata (model_version, feature_version, calibration_version, threshold_version, training_cutoff, prediction_timestamp, dataset_version).
     """
-    from supplyforge.models import Product, Order
-    user_id = request.query_params.get('userId', 'user_default_001')
+    from supplyforge.services.lineage_service import LineageService
+    full_lineage = LineageService.get_full_record_lineage(record_id)
 
-    # 1. Search Product
-    product = Product.objects.filter(item_sku=record_id).first() or Product.objects.filter(id=record_id).first()
-    if product:
-        data = product.data or {}
-        lineage = data.get('lineage') or {
-            'record_id': product.item_sku,
-            'record_type': 'product',
-            'import_id': f"IMP-{product.created_at.strftime('%Y%m%d') if product.created_at else 'DEFAULT'}",
-            'file': 'orders_import.csv',
-            'merchant': product.user_id or user_id,
-            'uploaded': product.created_at.strftime('%Y-%m-%d %H:%M') if product.created_at else 'Unknown'
-        }
-        return Response({
-            'record_id': product.item_sku or product.id,
-            'record_type': 'product',
-            'import_id': lineage.get('import_id'),
-            'file': lineage.get('file'),
-            'merchant': lineage.get('merchant', product.user_id),
-            'uploaded': lineage.get('uploaded'),
-            'lineage': lineage,
-            'import_history': data.get('import_history', [lineage])
-        })
+    step5 = full_lineage["lin001_traceability_chain"]["step_5_original_file"]
+    step4 = full_lineage["lin001_traceability_chain"]["step_4_import"]
 
-    # 2. Search Order
-    order = Order.objects.filter(order_id=record_id).first() or Order.objects.filter(id=record_id).first()
-    if order:
-        data = order.data or {}
-        lineage = data.get('lineage') or {
-            'record_id': order.order_id,
-            'record_type': 'order',
-            'import_id': f"IMP-{order.created_at.strftime('%Y%m%d') if order.created_at else 'DEFAULT'}",
-            'file': 'orders_import.csv',
-            'merchant': order.user_id or user_id,
-            'uploaded': order.created_at.strftime('%Y-%m-%d %H:%M') if order.created_at else 'Unknown'
-        }
-        return Response({
-            'record_id': order.order_id or order.id,
-            'record_type': 'order',
-            'import_id': lineage.get('import_id'),
-            'file': lineage.get('file'),
-            'merchant': lineage.get('merchant', order.user_id),
-            'uploaded': lineage.get('uploaded'),
-            'lineage': lineage,
-            'import_history': data.get('import_history', [lineage])
-        })
-
-    # 3. Search IngestionSession
-    try:
-        session = IngestionSession.objects.get(id=record_id)
-        lineage = {
-            'record_id': str(session.id),
-            'record_type': 'ingestion_session',
-            'import_id': session.ingestion_id or f"IMP-{session.created_at.strftime('%Y%m%d')}",
-            'file': session.original_filename,
-            'merchant': session.workspace.name if session.workspace else user_id,
-            'uploaded': session.created_at.strftime('%Y-%m-%d %H:%M')
-        }
-        return Response({
-            'record_id': str(session.id),
-            'record_type': 'ingestion_session',
-            'import_id': lineage['import_id'],
-            'file': lineage['file'],
-            'merchant': lineage['merchant'],
-            'uploaded': lineage['uploaded'],
-            'lineage': lineage,
-            'import_history': [lineage]
-        })
-    except Exception:
-        pass
+    base_lineage = {
+        'record_id': full_lineage["record_id"],
+        'record_type': 'product_risk',
+        'import_id': step4["import_id"],
+        'file': step5["file_name"],
+        'merchant': step5["merchant"],
+        'uploaded': step5["uploaded_at"]
+    }
 
     return Response({
-        'error': f'Không tìm thấy nguồn gốc dữ liệu (lineage) cho bản ghi: {record_id}'
-    }, status=status.HTTP_404_NOT_FOUND)
+        'record_id': full_lineage["record_id"],
+        'import_id': step4["import_id"],
+        'file': step5["file_name"],
+        'merchant': step5["merchant"],
+        'uploaded': step5["uploaded_at"],
+        'lineage': base_lineage,
+        'import_history': [base_lineage],
+        'lin001_traceability_chain': full_lineage["lin001_traceability_chain"],
+        'lin002_prediction_metadata': full_lineage["lin002_prediction_metadata"],
+        'lineage_summary_vi': full_lineage["lineage_summary_vi"]
+    }, status=status.HTTP_200_OK)
 
 
 @csrf_exempt

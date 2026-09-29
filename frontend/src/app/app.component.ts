@@ -193,7 +193,7 @@ export class AppComponent implements OnInit {
 
   // --- Auth & Modals ---
   openLoginModal(): void {
-    this.isLoginOpen = true;
+    this.router.navigate(['/auth']);
   }
 
   closeLoginModal(): void {

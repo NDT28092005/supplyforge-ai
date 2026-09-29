@@ -170,6 +170,18 @@ export class ApiService {
     });
   }
 
+  getNotifications(workspaceId: number = 1, unreadOnly: boolean = false): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/notifications/?workspace_id=${workspaceId}&unread_only=${unreadOnly}`);
+  }
+
+  markNotificationRead(id?: number, markAll: boolean = false, workspaceId: number = 1): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/notifications/mark-read/`, {
+      id,
+      mark_all: markAll,
+      workspace_id: workspaceId
+    });
+  }
+
   undoMerge(workspaceId: number, parentId: string, childId: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/api/v1/workspaces/${workspaceId}/sku-merge/undo`, {
       parentSkuId: parentId,
@@ -194,14 +206,14 @@ export class ApiService {
   }
 
   loginUser(email: string, password: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}/api/auth/login`, {
+    return this.http.post(`${this.apiUrl}/api/v1/auth/login`, {
       email,
       password
     });
   }
 
   registerUser(email: string, password: string, shopName: string, phone = ''): Observable<any> {
-    return this.http.post(`${this.apiUrl}/api/auth/register`, {
+    return this.http.post(`${this.apiUrl}/api/v1/auth/register`, {
       email,
       password,
       shopName,
@@ -209,8 +221,47 @@ export class ApiService {
     });
   }
 
+  verifyEmail(email: string, code: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/auth/verify-email`, {
+      email,
+      code
+    });
+  }
+
+  resendVerification(email: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/auth/resend-verification`, {
+      email
+    });
+  }
+
+  forgotPassword(email: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/auth/forgot-password`, {
+      email
+    });
+  }
+
+  resetPassword(email: string, code: string, newPassword: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/auth/reset-password`, {
+      email,
+      code,
+      new_password: newPassword
+    });
+  }
+
+  refreshToken(refreshToken: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/auth/refresh`, {
+      refresh_token: refreshToken
+    });
+  }
+
+  logoutUser(refreshToken = ''): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/auth/logout`, {
+      refresh_token: refreshToken
+    });
+  }
+
   completeGoogleLogin(credential: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}/api/auth/google/callback`, {
+    return this.http.post(`${this.apiUrl}/api/v1/auth/google/callback`, {
       credential
     });
   }
@@ -596,6 +647,29 @@ export class ApiService {
 
   persistDecision(recommendation: any, explanation: any = null, datasetVersion: string = 'v1.0'): Observable<any> {
     return this.http.post(`${this.apiUrl}/api/v1/decisions/`, { recommendation, explanation, dataset_version: datasetVersion });
+  }
+
+  simulateDecision(payload: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/decisions/simulate/`, payload);
+  }
+
+  // ── Module 06 ACT-001 & ACT-002 Action Plan & Status Management APIs ──
+  getActionPlans(sku?: string): Observable<any> {
+    let params = new HttpParams();
+    if (sku) params = params.set('sku', sku);
+    return this.http.get(`${this.apiUrl}/api/v1/action-plans/`, { params });
+  }
+
+  createActionPlan(payload: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/action-plans/`, payload);
+  }
+
+  updateActionPlanStatus(planId: string, status: string, notes: string = ''): Observable<any> {
+    return this.http.patch(`${this.apiUrl}/api/v1/action-plans/${planId}/status/`, { status, notes });
+  }
+
+  recordActionPlanOutcome(planId: string, outcome: { actual_recovery_value?: number, actual_units_sold?: number, expected_recovery_value?: number, expected_units_sold?: number }): Observable<any> {
+    return this.http.patch(`${this.apiUrl}/api/v1/action-plans/${planId}/outcome/`, outcome);
   }
 }
 

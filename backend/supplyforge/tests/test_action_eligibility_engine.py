@@ -18,7 +18,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(o
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from src.analytics.decision_support_architecture import DecisionContextBuilder, DecisionStatus
+from src.analytics.decision_support_architecture import DecisionContextBuilder, DecisionStatus, StrategyType
 from src.analytics.action_eligibility_engine import ActionEligibilityEngine, ActionStatus, ActionEligibilityError
 
 
@@ -121,7 +121,7 @@ class TestActionEligibilityEngine(TestCase):
 
         self.assertEqual(res["evaluation_status"], "BLOCKED_BY_CONTEXT")
         self.assertEqual(res["eligible_actions"], [])
-        self.assertEqual(len(res["blocked_actions"]), 7)
+        self.assertEqual(len(res["blocked_actions"]), len(StrategyType))
 
     def test_ac11_ac15_portfolio_and_artifacts(self):
         """AC-11, AC-15: Portfolio evaluation & artifact deliverable generation."""

@@ -7,11 +7,14 @@ import { ApiService } from '../api.service';
 export interface CapitalSkuItem {
   sku: string;
   name: string;
+  category?: string;
   riskClass: 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK';
   probabilityPct: string;
   dslsDays: number;
+  capitalExposureVal?: number;
   capitalExposure: string;
   capitalPriority: string;
+  opportunityCostVal?: number;
   opportunityCost: string;
   agingBucket: string;
   sales30d: number;
@@ -45,6 +48,10 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
 
   selectedRiskFilter: string = '';
   searchTerm: string = '';
+  capitalFilter: string = '';
+  agingFilter: string = '';
+  sortField: string = 'capitalExposureVal';
+  sortDirection: 'desc' | 'asc' = 'desc';
   selectedPeriod: string = '30 ngày qua';
 
   drawerOpen: boolean = false;
@@ -231,21 +238,75 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
   }
 
   get filteredSkuItems(): CapitalSkuItem[] {
-    let result = [...this.skuItems];
-
-    if (this.selectedRiskFilter) {
-      result = result.filter(i => i.riskClass === this.selectedRiskFilter);
-    }
-
-    if (this.searchTerm.trim()) {
+    let result = this.skuItems.filter(i => {
+      const matchRisk = !this.selectedRiskFilter || i.riskClass === this.selectedRiskFilter;
       const term = this.searchTerm.toLowerCase().trim();
-      result = result.filter(i =>
+      const matchSearch = !term ||
         i.sku.toLowerCase().includes(term) ||
-        i.name.toLowerCase().includes(term)
-      );
-    }
+        i.name.toLowerCase().includes(term) ||
+        (i.category && i.category.toLowerCase().includes(term));
+
+      let matchCapital = true;
+      const capVal = i.capitalExposureVal || 0;
+      if (this.capitalFilter === 'LOW') matchCapital = capVal < 10000000;
+      else if (this.capitalFilter === 'MID') matchCapital = capVal >= 10000000 && capVal <= 50000000;
+      else if (this.capitalFilter === 'HIGH') matchCapital = capVal > 50000000;
+
+      let matchAging = true;
+      const dsls = i.dslsDays || 0;
+      if (this.agingFilter === 'FRESH') matchAging = dsls <= 30;
+      else if (this.agingFilter === 'AGING') matchAging = dsls > 30 && dsls <= 60;
+      else if (this.agingFilter === 'AT_RISK') matchAging = dsls > 60 && dsls <= 90;
+      else if (this.agingFilter === 'CRITICAL') matchAging = dsls > 90;
+
+      return matchRisk && matchSearch && matchCapital && matchAging;
+    });
+
+    result.sort((a, b) => {
+      let valA: number = 0;
+      let valB: number = 0;
+
+      if (this.sortField === 'capitalExposureVal') {
+        valA = a.capitalExposureVal || 0;
+        valB = b.capitalExposureVal || 0;
+      } else if (this.sortField === 'opportunityCostVal') {
+        valA = a.opportunityCostVal || 0;
+        valB = b.opportunityCostVal || 0;
+      } else if (this.sortField === 'dslsDays') {
+        valA = a.dslsDays || 0;
+        valB = b.dslsDays || 0;
+      }
+
+      if (valA < valB) return this.sortDirection === 'desc' ? 1 : -1;
+      if (valA > valB) return this.sortDirection === 'desc' ? -1 : 1;
+      return 0;
+    });
 
     return result;
+  }
+
+  exportReport(format: 'csv' | 'excel' = 'csv'): void {
+    const headers = ['Mã sản phẩm', 'Tên sản phẩm', 'Danh mục', 'Phân nhóm rủi ro', 'Số ngày đọng vốn', 'Tổng vốn tồn đọng (VND)', 'Chi phí cơ hội ước tính (VND)', 'Phân loại thời gian tồn kho'];
+    const rows = this.filteredSkuItems.map(item => [
+      item.sku,
+      `"${item.name.replace(/"/g, '""')}"`,
+      `"${(item.category || 'Thiết bị & Phụ kiện').replace(/"/g, '""')}"`,
+      item.riskClass === 'HIGH_RISK' ? 'Rủi ro cao' : (item.riskClass === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'An toàn'),
+      item.dslsDays,
+      item.capitalExposureVal || 0,
+      item.opportunityCostVal || 0,
+      `"${item.agingBucket}"`
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const fileName = `bao_cao_von_dong_nguy_co_${new Date().toISOString().split('T')[0]}.${format === 'excel' ? 'csv' : 'csv'}`;
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   setFilter(filter: string): void {

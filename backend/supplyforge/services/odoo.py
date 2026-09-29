@@ -40,10 +40,16 @@ class OdooIntegrationService:
 
         try:
             import socket
-            socket.setdefaulttimeout(15)
+            # Set short non-blocking timeout for Odoo RPC so auth calls stay fast
+            class TimeoutTransport(xmlrpc.client.Transport):
+                timeout = 2.0
+                def make_connection(self, host):
+                    conn = super().make_connection(host)
+                    conn.timeout = self.timeout
+                    return conn
 
-            # 1. Authenticate with Odoo common service
-            common = xmlrpc.client.ServerProxy(common_url)
+            transport = TimeoutTransport()
+            common = xmlrpc.client.ServerProxy(common_url, transport=transport)
             uid = common.authenticate(db, username, password, {})
             
             if not uid:

@@ -94,11 +94,11 @@ class SlowMovingFeatureEngineer:
             nonzero_df = sku_df[sku_df[qty_col] > 0]
             last_sale_date = nonzero_df[date_col].max() if not nonzero_df.empty else None
 
-            # 5.1 Sales Velocity
-            sum_7d = sku_df[sku_df[date_col] >= (t0 - timedelta(days=7))][qty_col].sum()
-            sum_30d = sku_df[sku_df[date_col] >= (t0 - timedelta(days=30))][qty_col].sum()
-            sum_60d = sku_df[sku_df[date_col] >= (t0 - timedelta(days=60))][qty_col].sum()
-            sum_90d = sku_df[sku_df[date_col] >= (t0 - timedelta(days=90))][qty_col].sum()
+            # 5.1 Sales Velocity (Exact N-day inclusive windows ending at t0)
+            sum_7d = sku_df[sku_df[date_col] >= (t0 - timedelta(days=6))][qty_col].sum()
+            sum_30d = sku_df[sku_df[date_col] >= (t0 - timedelta(days=29))][qty_col].sum()
+            sum_60d = sku_df[sku_df[date_col] >= (t0 - timedelta(days=59))][qty_col].sum()
+            sum_90d = sku_df[sku_df[date_col] >= (t0 - timedelta(days=89))][qty_col].sum()
             sum_full = sku_df[qty_col].sum()
 
             vel_7d = round(float(sum_7d) / 7.0, 4)

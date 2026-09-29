@@ -1,7 +1,7 @@
 # supplyforge/models package
 # Re-export all models for convenient importing
 
-from .user import User, Workspace, WorkspaceMember
+from .user import User, RefreshToken, Workspace, WorkspaceMember
 from .product import Sku, InventoryRecord, Product, SkuMergeHistory, IgnoredSkuPair
 from .order import Order, OrderItem
 from .data_source import DataSource
@@ -24,10 +24,12 @@ from .copilot_models import (
     CopilotConversation, CopilotMessage,
     CopilotToolCall, CopilotAuditLog,
 )
+from .action_plan import ActionPlanRecord
 from .archived_dataset import ArchivedDataSet
+from .notification import NotificationRecord
 
 __all__ = [
-    'User', 'Workspace', 'WorkspaceMember',
+    'User', 'RefreshToken', 'Workspace', 'WorkspaceMember',
     'Sku', 'InventoryRecord', 'Product', 'SkuMergeHistory', 'IgnoredSkuPair',
     'Order', 'OrderItem',
     'DataSource',
@@ -44,6 +46,8 @@ __all__ = [
     'DecisionEvidenceRecord', 'DecisionAuditEventRecord',
     'CopilotConversation', 'CopilotMessage',
     'CopilotToolCall', 'CopilotAuditLog',
+    'ActionPlanRecord',
+    'NotificationRecord',
 ]
 
 

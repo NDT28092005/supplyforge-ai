@@ -83,7 +83,9 @@ class DataQualityValidator:
             duplicates=duplicates,
             invalid_values=invalid_values,
             temporal=temporal,
-            numerical_consistency=numerical_consistency
+            numerical_consistency=numerical_consistency,
+            freshness_days=1,
+            is_schema_valid=bool(mapping_result and mapping_result.get('mappings'))
         )
         overall_score = scores['overallScore']
 
@@ -611,7 +613,7 @@ class DataQualityValidator:
 
         return pd.DataFrame(records)
 
-    # ── 10. Deterministic Quality Score ───────────────────────────────
+    # ── 10. Deterministic Quality Score (DQ-001: 6 Dimensions) ──────────
 
     def _calculate_deterministic_score(
         self,
@@ -619,29 +621,55 @@ class DataQualityValidator:
         duplicates: Dict[str, Any],
         invalid_values: Dict[str, Any],
         temporal: Dict[str, Any],
-        numerical_consistency: Dict[str, Any]
-    ) -> Dict[str, float]:
+        numerical_consistency: Dict[str, Any],
+        freshness_days: int = 1,
+        is_schema_valid: bool = True
+    ) -> Dict[str, Any]:
         comp_score = float(completeness.get('completenessPct', 100.0))
         uniq_score = float(duplicates.get('uniquenessPct', 100.0))
         val_score = float(invalid_values.get('validityPct', 100.0))
         temp_score = float(temporal.get('temporalIntegrityPct', 100.0))
         cons_score = float(numerical_consistency.get('consistencyPct', 100.0))
 
+        # Freshness dimension (100 if <=3d, 85 if <=7d, 50 if <=30d, 20 if >30d)
+        if freshness_days <= 3:
+            freshness_score = 100.0
+        elif freshness_days <= 7:
+            freshness_score = 85.0
+        elif freshness_days <= 30:
+            freshness_score = 50.0
+        else:
+            freshness_score = 20.0
+
+        schema_score = 100.0 if is_schema_valid else 60.0
+
         overall = (
-            (comp_score * 0.25) +
-            (uniq_score * 0.20) +
+            (comp_score * 0.20) +
             (val_score * 0.20) +
-            (temp_score * 0.20) +
-            (cons_score * 0.15)
+            (cons_score * 0.15) +
+            (uniq_score * 0.15) +
+            (freshness_score * 0.15) +
+            (schema_score * 0.15)
         )
+        final_score = int(round(overall))
 
         return {
-            'completenessScore': round(comp_score, 2),
-            'uniquenessScore': round(uniq_score, 2),
-            'validityScore': round(val_score, 2),
-            'temporalIntegrityScore': round(temp_score, 2),
-            'consistencyScore': round(cons_score, 2),
-            'overallScore': round(overall, 2),
+            'completenessScore': round(comp_score, 1),
+            'validityScore': round(val_score, 1),
+            'consistencyScore': round(cons_score, 1),
+            'uniquenessScore': round(uniq_score, 1),
+            'freshnessScore': round(freshness_score, 1),
+            'schemaCompatibilityScore': round(schema_score, 1),
+            'overallScore': final_score,
+            'dataHealthScoreDisplay': f"{final_score} / 100",
+            'dq001_dimensions': {
+                'completeness': {'score': round(comp_score, 1), 'display': f"{int(comp_score)}/100"},
+                'validity': {'score': round(val_score, 1), 'display': f"{int(val_score)}/100"},
+                'consistency': {'score': round(cons_score, 1), 'display': f"{int(cons_score)}/100"},
+                'uniqueness': {'score': round(uniq_score, 1), 'display': f"{int(uniq_score)}/100"},
+                'freshness': {'score': round(freshness_score, 1), 'display': f"{int(freshness_score)}/100"},
+                'schema_compatibility': {'score': round(schema_score, 1), 'display': f"{int(schema_score)}/100"}
+            }
         }
 
     # ── Exporter: Write Reports ───────────────────────────────────────

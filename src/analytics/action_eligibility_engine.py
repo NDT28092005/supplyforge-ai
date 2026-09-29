@@ -221,15 +221,48 @@ class ActionEligibilityEngine:
                 return ActionStatus.INELIGIBLE, reasons
 
         elif strat_id == "CLEARANCE":
-            if risk_class == "CRITICAL" and aging_bucket in ["STALE", "SEVERELY_STALE", "EXTREMELY_STALE"] and cap_exp >= 5000000.0:
-                reasons.append({"signal": "risk_class", "value": risk_class, "rule": "CRITICAL_CLEARANCE", "message": "Rủi ro cực kỳ nghiêm trọng, cần xả hàng thanh lý."})
-                reasons.append({"signal": "aging_days", "value": aging_days, "rule": "HIGH_AGING", "message": "Tuổi tồn kho tích tụ trễ kéo dài."})
+            # DEC-001 Eligibility Requirements:
+            # 1. Risk = HIGH / CRITICAL
+            # 2. Capital Exposure available (cap_exp >= 5,000,000)
+            # 3. Enough historical demand (obs_days >= 30 or not no_observed_sales)
+            # 4. No active campaign (active_campaign == False)
+            # 5. Data confidence sufficient (data_confidence != 'INSUFFICIENT' and data_health_score >= 40)
+            has_high_risk = risk_class in ["HIGH_RISK", "CRITICAL"]
+            has_capital = cap_exp >= 5000000.0
+            has_demand_history = decision_context.get("has_enough_demand", True) and (aging_days >= 30 or decision_context.get("observation_period_days", 90) >= 30 or not decision_context.get("no_observed_sales_history", False))
+            no_campaign = not decision_context.get("active_campaign", decision_context.get("has_active_campaign", False))
+            data_sufficient = decision_context.get("data_confidence", "SUFFICIENT") not in ["INSUFFICIENT", "LOW_QUALITY"] and decision_context.get("data_health_score", 100) >= 40
+
+            if has_high_risk and has_capital and has_demand_history and no_campaign and data_sufficient:
+                reasons.append({"signal": "risk_class", "value": risk_class, "rule": "CRITICAL_CLEARANCE", "message": "Rủi ro cao/nghiêm trọng, đạt điều kiện xả hàng clearance."})
+                reasons.append({"signal": "capital_exposure", "value": cap_exp, "rule": "HIGH_CAPITAL", "message": "Mức vốn phơi nhiễm đủ ngưỡng thanh lý."})
+                reasons.append({"signal": "historical_demand", "value": "SUFFICIENT", "rule": "ENOUGH_DEMAND", "message": "Đủ lịch sử giao dịch và nhu cầu."})
+                reasons.append({"signal": "active_campaign", "value": False, "rule": "NO_ACTIVE_CAMPAIGN", "message": "Không có chiến dịch hoạt động trùng lặp."})
+                reasons.append({"signal": "data_confidence", "value": "SUFFICIENT", "rule": "DATA_CONFIDENCE_OK", "message": "Độ tin cậy dữ liệu đạt tiêu chuẩn."})
+
                 if cap_exp >= 20000000.0:
                     reasons.append({"signal": "capital_exposure", "value": cap_exp, "rule": "REQUIRES_EXECUTIVE_REVIEW", "message": "Vốn bị khóa > 20M VND cần duyệt cấp quản lý."})
                     return ActionStatus.REQUIRES_REVIEW, reasons
                 return ActionStatus.ELIGIBLE, reasons
             else:
-                reasons.append({"signal": "risk_class", "value": risk_class, "rule": "CLEARANCE_INELIGIBLE", "message": "Chưa đạt ngưỡng xả hàng clearance."})
+                if not has_high_risk:
+                    reasons.append({"signal": "risk_class", "value": risk_class, "rule": "CLEARANCE_INELIGIBLE_RISK", "message": "Rủi ro chưa ở mức HIGH_RISK hoặc CRITICAL."})
+                if not has_capital:
+                    reasons.append({"signal": "capital_exposure", "value": cap_exp, "rule": "CLEARANCE_INELIGIBLE_CAPITAL", "message": "Vốn phơi nhiễm chưa đạt ngưỡng xả hàng."})
+                if not has_demand_history:
+                    reasons.append({"signal": "historical_demand", "value": "INSUFFICIENT", "rule": "CLEARANCE_INELIGIBLE_DEMAND", "message": "Chưa đủ lịch sử dữ liệu nhu cầu."})
+                if not no_campaign:
+                    reasons.append({"signal": "active_campaign", "value": True, "rule": "CLEARANCE_INELIGIBLE_CAMPAIGN", "message": "SKU đang trong chiến dịch marketing/promotion khác."})
+                if not data_sufficient:
+                    reasons.append({"signal": "data_confidence", "value": "INSUFFICIENT", "rule": "CLEARANCE_INELIGIBLE_CONFIDENCE", "message": "Độ tin cậy dữ liệu không đạt ngưỡng yêu cầu."})
+                return ActionStatus.INELIGIBLE, reasons
+
+        elif strat_id == "REPOSITION":
+            if risk_class in ["MEDIUM_RISK", "HIGH_RISK"] and aging_bucket in ["RECENT", "AGING", "STALE"]:
+                reasons.append({"signal": "risk_class", "value": risk_class, "rule": "REPOSITION_RISK_MATCH", "message": "Phù hợp tái định vị sản phẩm hoặc chuyển đổi kênh bán."})
+                return ActionStatus.ELIGIBLE, reasons
+            else:
+                reasons.append({"signal": "risk_class", "value": risk_class, "rule": "REPOSITION_INELIGIBLE", "message": "Không đạt điều kiện tái định vị vị trí/kênh bán."})
                 return ActionStatus.INELIGIBLE, reasons
 
         elif strat_id == "STOP_REPLENISHMENT":

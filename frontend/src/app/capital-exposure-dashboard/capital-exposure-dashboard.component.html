@@ -1,202 +1,134 @@
-<div class="space-y-8 animate-fade-in pb-16 max-w-7xl mx-auto">
+<div class="space-y-6 max-w-7xl mx-auto pb-16 font-sans">
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <!-- 1. HEADER PAGE CARD                                                -->
+  <!-- 1. TIÊU ĐỀ TRANG                                                   -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div
-    class="bg-white border border-slate-200/80 p-7 sm:p-9 rounded-3xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-    <div class="space-y-2">
-      <h1 class="font-sans font-black text-3xl sm:text-4xl lg:text-5xl text-slate-900 tracking-tight">
-        ĐÁNH GIÁ VỐN TỒN ĐỌNG
+  <div class="bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div class="space-y-1">
+      <h1 class="font-bold text-2xl sm:text-3xl text-slate-900 tracking-tight">
+        Đánh Giá Vốn Tồn Đọng Trong Kho
       </h1>
-      <p class="text-slate-600 text-sm sm:text-base font-sans font-medium">
-        Đo lường lượng tiền vốn đang bị chôn trong kho, phân rã mức độ rủi ro và xác định ưu tiên giải phóng dòng tiền
+      <p class="text-slate-500 text-sm font-normal">
+        Đo lường tổng số tiền vốn bị chôn kẹt trong kho, phân rã mức độ rủi ro và xác định thứ tự ưu tiên giải phóng dòng tiền.
       </p>
     </div>
   </div>
 
-  <!-- Empty State when skuItems.length === 0 -->
-  <div *ngIf="skuItems.length === 0" class="bg-amber-50 border border-amber-200 rounded-3xl p-8 text-center space-y-4 shadow-xs">
-    <div class="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto font-bold">
-      <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-      </svg>
-    </div>
-    <div class="space-y-1">
-      <h3 class="text-lg font-bold text-slate-900">Chưa có dữ liệu đánh giá vốn đọng trong kho</h3>
-      <p class="text-xs sm:text-sm text-slate-600 font-medium max-w-lg mx-auto">
-        Hiện tại chưa có bản ghi sản phẩm nào. Vui lòng nạp tệp CSV bán hàng mới để hệ thống tính toán giá trị vốn tồn đọng.
-      </p>
-    </div>
-    <button (click)="navigateTo.emit('csv-upload')" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all cursor-pointer shadow-xs inline-flex items-center gap-2">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
-      </svg>
-      <span>Tải tệp CSV mới ngay</span>
+  <!-- Thông báo khi chưa có dữ liệu -->
+  <div *ngIf="skuItems.length === 0"
+    class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
+    <h3 class="text-base font-bold text-slate-900">Chưa có dữ liệu đánh giá vốn đọng</h3>
+    <p class="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
+      Hiện tại chưa có bản ghi sản phẩm nào. Vui lòng nạp tệp CSV bán hàng mới để hệ thống tính toán giá trị vốn tồn đọng.
+    </p>
+    <button (click)="navigateTo.emit('csv-upload')"
+      class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition-all cursor-pointer inline-block">
+      Tải tệp CSV mới ngay
     </button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <!-- 2. KPI SUMMARY GRID (4 CARDS)                                      -->
+  <!-- 2. TỔNG QUAN CHỈ SỐ VỐN TỒN (KPI METRICS GRID)                     -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
-    <!-- KPI 1: Tổng Vốn Tồn Đọng -->
-    <div class="bg-white border border-slate-200/80 p-6 rounded-3xl shadow-xs space-y-3">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tổng Vốn Tồn Đọng</span>
-        <div class="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-            <line x1="2" y1="10" x2="22" y2="10"></line>
-          </svg>
-        </div>
+    <!-- KPI 1: Tổng vốn tồn đọng -->
+    <div class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2">
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Tổng vốn tồn đọng</span>
+      <div class="text-2xl sm:text-3xl font-bold text-slate-900 font-mono">
+        {{ summaryGrid.totalExposure }}
       </div>
-      <div>
-        <div class="font-sans font-black text-3xl sm:text-4xl text-slate-900 tracking-tight font-mono">
-          {{ summaryGrid.totalExposure }}
-        </div>
-        <div class="text-xs text-slate-500 font-medium mt-1">
-          Tổng vốn lưu kho trên tất cả mẫu hàng
-        </div>
-      </div>
+      <p class="text-xs text-slate-500">Tổng giá trị tiền vốn đọng trên tất cả sản phẩm</p>
     </div>
 
-    <!-- KPI 2: Vốn Ưu Tiên Giải Phóng -->
-    <div (click)="setFilter('HIGH_RISK')" title="Lọc danh sách vốn rủi ro cao"
-      class="bg-rose-50/50 border border-rose-200/80 p-6 rounded-3xl shadow-xs space-y-3 hover:border-rose-400 hover:shadow-md transition-all cursor-pointer group">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-bold text-rose-800 uppercase tracking-wider">Vốn Ưu Tiên Giải Phóng</span>
-        <div class="w-8 h-8 rounded-xl bg-rose-100 flex items-center justify-center text-rose-700">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
-            </path>
-          </svg>
-        </div>
+    <!-- KPI 2: Vốn ưu tiên giải phóng gấp -->
+    <div (click)="setFilter('HIGH_RISK')"
+      class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2 hover:border-slate-400 transition-all cursor-pointer">
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Vốn ưu tiên giải phóng</span>
+      <div class="text-2xl sm:text-3xl font-bold text-red-700 font-mono">
+        {{ summaryGrid.highRiskExposure }}
       </div>
-      <div>
-        <div class="font-sans font-black text-3xl sm:text-4xl text-rose-700 tracking-tight font-mono">
-          {{ summaryGrid.highRiskExposure }}
-        </div>
-        <div class="text-xs text-rose-800/80 font-medium mt-1 flex items-center justify-between">
-          <span>Vốn chôn ở {{ highRiskCount }} SKU thuộc nhóm rủi ro cao</span>
-          <span class="text-rose-700 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
-        </div>
-      </div>
+      <p class="text-xs text-slate-500">Vốn bị chôn ở {{ highRiskCount }} sản phẩm thuộc nhóm rủi ro cao</p>
     </div>
 
-    <!-- KPI 3: Chi Phí Gánh Vốn Ước Tính -->
-    <div class="bg-amber-50/50 border border-amber-200/80 p-6 rounded-3xl shadow-xs space-y-3">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-bold text-amber-800 uppercase tracking-wider">Chi Phí Gánh Vốn</span>
-        <div class="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-          </svg>
-        </div>
+    <!-- KPI 3: Chi phí gánh vốn ước tính -->
+    <div class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2">
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Chi phí gánh vốn ước tính</span>
+      <div class="text-2xl sm:text-3xl font-bold text-amber-700 font-mono">
+        {{ summaryGrid.opportunityCost }}
       </div>
-      <div>
-        <div class="font-sans font-black text-3xl sm:text-4xl text-amber-700 tracking-tight font-mono">
-          {{ summaryGrid.opportunityCost }}
-        </div>
-        <div class="text-xs text-amber-800/80 font-medium mt-1">
-          Chi phí cơ hội đọng vốn tính theo thời gian
-        </div>
-      </div>
+      <p class="text-xs text-slate-500">Chi phí cơ hội bị mất do chôn vốn kéo dài</p>
     </div>
 
-    <!-- KPI 4: Số SKU Đang Chôn Vốn -->
-    <div (click)="setFilter('HIGH_RISK')" title="Lọc danh sách các SKU cần xử lý"
-      class="bg-white border border-slate-200/80 p-6 rounded-3xl shadow-xs space-y-3 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">SKU Cần Xử Lý Vốn</span>
-        <div class="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-          </svg>
-        </div>
+    <!-- KPI 4: Số sản phẩm đang bị chôn vốn -->
+    <div (click)="setFilter('HIGH_RISK')"
+      class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2 hover:border-slate-400 transition-all cursor-pointer">
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Sản phẩm bị chôn vốn</span>
+      <div class="text-2xl sm:text-3xl font-bold text-slate-900 font-mono">
+        {{ summaryGrid.affectedSkus }} <span class="text-xs font-sans font-normal text-slate-500">mã</span>
       </div>
-      <div>
-        <div class="font-sans font-black text-3xl sm:text-4xl text-slate-900 tracking-tight font-mono">
-          {{ summaryGrid.affectedSkus }}
-        </div>
-        <div class="text-xs text-slate-500 font-medium mt-1 flex items-center justify-between">
-          <span>Các SKU có nguy cơ bán chậm & tồn trên 30 ngày</span>
-          <span class="text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold">&rarr;</span>
-        </div>
-      </div>
+      <p class="text-xs text-slate-500">Sản phẩm bán chậm nằm kho hơn 30 ngày chưa có đơn mới</p>
     </div>
 
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <!-- 3. PHÂN RÃ VỐN TỒN ĐỌNG (2-COLUMN GRID)                            -->
+  <!-- 3. PHÂN RÃ VỐN TỒN ĐỌNG (SIDE-BY-SIDE CARDS)                       -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-    <!-- Column 1: Phân rã vốn theo mức rủi ro -->
-    <div class="bg-white border border-slate-200/80 p-6 sm:p-8 rounded-3xl shadow-xs space-y-6">
-      <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+    <!-- Khối 1: Phân rã vốn theo mức rủi ro -->
+    <div class="bg-white border border-slate-200 p-6 rounded-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div>
-          <h3 class="font-sans font-bold text-lg text-slate-900">Phân Phối Vốn Theo Mức Rủi Ro</h3>
-          <p class="text-xs text-slate-500">Tỷ trọng tiền vốn đọng tương ứng với nguy cơ bán chậm</p>
+          <h3 class="font-bold text-base text-slate-900">Phân bố vốn theo mức rủi ro</h3>
+          <p class="text-xs text-slate-500">Tỷ trọng tiền vốn đọng tương ứng với từng nhóm rủi ro bán chậm</p>
         </div>
-        <span
-          class="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
-          {{ totalCount }} SKU
+        <span class="text-xs font-mono font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
+          {{ totalCount }} Mã
         </span>
       </div>
 
-      <div class="space-y-5">
-        <div *ngFor="let item of riskDistribution" class="space-y-2">
-          <div class="flex items-center justify-between text-sm">
+      <div class="space-y-4">
+        <div *ngFor="let item of riskDistribution" class="space-y-1.5">
+          <div class="flex items-center justify-between text-xs">
             <div class="flex items-center gap-2">
-              <span class="px-2.5 py-1 rounded-xl text-xs font-bold border" [ngClass]="item.badgeClass">
-                {{ item.label }}
-              </span>
-              <span class="text-xs text-slate-500 font-medium font-mono">({{ item.count }} SKU)</span>
+              <span class="font-bold text-slate-800">{{ item.label }}</span>
+              <span class="text-slate-500">({{ item.count }} SP)</span>
             </div>
-            <div class="flex items-center gap-2 font-mono">
-              <span class="font-black text-slate-900">{{ item.exposure }}</span>
-              <span class="text-xs font-bold text-slate-500">({{ item.sharePct }}%)</span>
+            <div class="font-mono font-bold text-slate-900">
+              {{ item.exposure }} <span class="text-slate-500 font-normal">({{ item.sharePct }}%)</span>
             </div>
           </div>
-          <div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-            <div class="h-full rounded-full transition-all duration-500" [ngClass]="item.color"
-              [style.width.%]="item.sharePct"></div>
+          <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+            <div class="h-full bg-slate-800 rounded-full transition-all duration-300" [style.width.%]="item.sharePct"></div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Column 2: Phân rã vốn theo thời gian nằm kho (Aging) -->
-    <div class="bg-white border border-slate-200/80 p-6 sm:p-8 rounded-3xl shadow-xs space-y-6">
-      <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+    <!-- Khối 2: Phân rã vốn theo thời gian nằm kho -->
+    <div class="bg-white border border-slate-200 p-6 rounded-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div>
-          <h3 class="font-sans font-bold text-lg text-slate-900">Phân Phối Vốn Theo Thời Gian Nằm Kho</h3>
-          <p class="text-xs text-slate-500">Đo lường mức độ chôn vốn dài ngày trong kho</p>
+          <h3 class="font-bold text-base text-slate-900">Phân bố vốn theo thời gian nằm kho</h3>
+          <p class="text-xs text-slate-500">Mức độ đọng vốn theo số ngày liên tục trong kho chưa bán được</p>
         </div>
       </div>
 
       <div class="space-y-4">
         <div *ngFor="let item of agingDistribution" class="space-y-1.5">
-          <div class="flex items-center justify-between text-sm">
+          <div class="flex items-center justify-between text-xs">
             <div>
-              <span class="font-bold text-slate-800 text-xs sm:text-sm">{{ item.label }}</span>
-              <span class="text-[11px] text-slate-400 block font-normal">{{ item.desc }}</span>
+              <span class="font-bold text-slate-800">{{ item.label }}</span>
+              <span class="text-slate-400 block text-[11px] font-normal">{{ item.desc }}</span>
             </div>
-            <div class="flex items-center gap-2 font-mono text-right">
-              <div>
-                <span class="font-black text-slate-900 block">{{ item.exposure }}</span>
-                <span class="text-xs text-slate-500 block">({{ item.sharePct }}%)</span>
-              </div>
+            <div class="font-mono font-bold text-slate-900 text-right">
+              {{ item.exposure }} <span class="text-slate-500 font-normal">({{ item.sharePct }}%)</span>
             </div>
           </div>
-          <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-            <div class="h-full rounded-full transition-all duration-500" [ngClass]="item.color"
-              [style.width.%]="item.sharePct"></div>
+          <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+            <div class="h-full bg-slate-800 rounded-full transition-all duration-300" [style.width.%]="item.sharePct"></div>
           </div>
         </div>
       </div>
@@ -205,161 +137,143 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <!-- 4. TOP SKU CAPITAL RANKING TABLE & FILTERS                         -->
+  <!-- 4. BẢNG CHI TIẾT VỐN TỒN THEO TỪNG SẢN PHẨM                          -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="bg-white border border-slate-200/80 p-6 sm:p-8 rounded-3xl shadow-xs space-y-6">
+  <div class="bg-white border border-slate-200 p-6 rounded-2xl space-y-5">
 
-    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+    <!-- Thanh lọc & Công cụ nâng cao (SEARCH-001, FILTER-001, SORT-001, EXPORT-001) -->
+    <div class="space-y-4 border-b border-slate-100 pb-4">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+          <button (click)="setFilter('')"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer"
+            [ngClass]="selectedRiskFilter === '' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'">
+            Tất cả ({{ totalCount }})
+          </button>
 
-      <!-- Filter Chips -->
-      <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-        <!-- Chip 1: Tất cả -->
-        <button (click)="setFilter('')"
-          class="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer"
-          [ngClass]="selectedRiskFilter === '' ? 'bg-slate-900 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'">
-          <span>Tất cả</span>
-          <span class="px-2 py-0.5 rounded-full text-xs font-mono"
-            [ngClass]="selectedRiskFilter === '' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-800'">
-            {{ totalCount }}
-          </span>
-        </button>
+          <button (click)="setFilter('HIGH_RISK')"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer border"
+            [ngClass]="selectedRiskFilter === 'HIGH_RISK' ? 'bg-red-700 text-white border-red-700' : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'">
+            Vốn rủi ro cao ({{ highRiskCount }})
+          </button>
 
-        <!-- Chip 2: Rủi ro cao -->
-        <button (click)="setFilter('HIGH_RISK')"
-          class="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer"
-          [ngClass]="selectedRiskFilter === 'HIGH_RISK' ? 'bg-rose-600 text-white shadow-xs' : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200/60'">
-          <span class="w-2.5 h-2.5 rounded-full bg-rose-500"
-            [ngClass]="{'bg-white': selectedRiskFilter === 'HIGH_RISK'}"></span>
-          <span>Vốn rủi ro cao</span>
-          <span class="px-2 py-0.5 rounded-full text-xs font-mono"
-            [ngClass]="selectedRiskFilter === 'HIGH_RISK' ? 'bg-rose-800 text-white' : 'bg-rose-200 text-rose-900'">
-            {{ highRiskCount }}
-          </span>
-        </button>
+          <button (click)="setFilter('MEDIUM_RISK')"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer border"
+            [ngClass]="selectedRiskFilter === 'MEDIUM_RISK' ? 'bg-amber-700 text-white border-amber-700' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'">
+            Vốn cần theo dõi ({{ watchCount }})
+          </button>
 
-        <!-- Chip 3: Cần theo dõi -->
-        <button (click)="setFilter('MEDIUM_RISK')"
-          class="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer"
-          [ngClass]="selectedRiskFilter === 'MEDIUM_RISK' ? 'bg-amber-500 text-slate-950 shadow-xs' : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/60'">
-          <span class="w-2.5 h-2.5 rounded-full bg-amber-500"
-            [ngClass]="{'bg-slate-950': selectedRiskFilter === 'MEDIUM_RISK'}"></span>
-          <span>Vốn cần theo dõi</span>
-          <span class="px-2 py-0.5 rounded-full text-xs font-mono"
-            [ngClass]="selectedRiskFilter === 'MEDIUM_RISK' ? 'bg-amber-600 text-white' : 'bg-amber-200 text-amber-900'">
-            {{ watchCount }}
-          </span>
-        </button>
+          <button (click)="setFilter('LOW_RISK')"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer border"
+            [ngClass]="selectedRiskFilter === 'LOW_RISK' ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'">
+            Vốn an toàn ({{ safeCount }})
+          </button>
+        </div>
 
-        <!-- Chip 4: An toàn -->
-        <button (click)="setFilter('LOW_RISK')"
-          class="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer"
-          [ngClass]="selectedRiskFilter === 'LOW_RISK' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/60'">
-          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"
-            [ngClass]="{'bg-white': selectedRiskFilter === 'LOW_RISK'}"></span>
-          <span>Vốn an toàn</span>
-          <span class="px-2 py-0.5 rounded-full text-xs font-mono"
-            [ngClass]="selectedRiskFilter === 'LOW_RISK' ? 'bg-emerald-800 text-white' : 'bg-emerald-200 text-emerald-900'">
-            {{ safeCount }}
-          </span>
-        </button>
+        <!-- EXPORT-001 Export Buttons -->
+        <div class="flex items-center gap-2 shrink-0">
+          <button (click)="exportReport('csv')"
+            class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
+            <span>Xuất file CSV</span>
+          </button>
+          <button (click)="exportReport('excel')"
+            class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
+            <span>Xuất file Excel</span>
+          </button>
+        </div>
       </div>
 
-      <!-- Search SKU Input -->
-      <div class="relative w-full lg:w-80">
-        <input type="text" [(ngModel)]="searchTerm" placeholder="Tìm kiếm mã SKU, tên sản phẩm..."
-          class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium rounded-2xl pl-10 pr-4 py-2.5 outline-none focus:border-indigo-500 focus:bg-white transition-all shadow-xs" />
-        <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" viewBox="0 0 24 24"
-          fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
-      </div>
+      <!-- Search & Filters -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+        <div class="col-span-1 sm:col-span-2">
+          <input type="text" [(ngModel)]="searchTerm" placeholder="Tìm theo Mã sản phẩm, Tên hoặc Danh mục..."
+            class="w-full bg-white border border-slate-200 text-slate-900 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400" />
+        </div>
 
+        <div>
+          <select [(ngModel)]="capitalFilter"
+            class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400">
+            <option value="">Vốn đọng: Tất cả</option>
+            <option value="LOW">Dưới 10 triệu VND</option>
+            <option value="MID">10 – 50 triệu VND</option>
+            <option value="HIGH">Trên 50 triệu VND</option>
+          </select>
+        </div>
+
+        <div>
+          <select [(ngModel)]="sortField"
+            class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400">
+            <option value="capitalExposureVal">Sắp xếp: Vốn đọng (VND)</option>
+            <option value="opportunityCostVal">Sắp xếp: Chi phí cơ hội</option>
+            <option value="dslsDays">Sắp xếp: Số ngày tồn (DSLS)</option>
+          </select>
+        </div>
+      </div>
     </div>
 
-    <!-- Data Table -->
-    <div class="overflow-x-auto rounded-2xl border border-slate-200/80">
-      <table class="w-full text-left text-sm border-collapse table-fixed min-w-[980px]">
+    <!-- Bảng danh sách vốn tồn -->
+    <div class="overflow-x-auto rounded-xl border border-slate-200">
+      <table class="w-full text-left text-xs border-collapse min-w-[900px]">
         <thead>
-          <tr
-            class="bg-slate-50 text-slate-700 font-sans font-bold text-xs uppercase border-b border-slate-200/80 tracking-wider whitespace-nowrap">
-            <th class="py-4 px-3.5 whitespace-nowrap w-[22%]">SKU (Tên & Mã)</th>
-            <th class="py-4 px-3 text-center whitespace-nowrap w-[13%]">Mức Rủi Ro</th>
-            <th class="py-4 px-3 text-right whitespace-nowrap w-[13%]">Vốn Tồn Đọng</th>
-            <th class="py-4 px-3 text-right whitespace-nowrap w-[16%]">Vốn Ưu Tiên Giải Phóng</th>
-            <th class="py-4 px-3 text-right whitespace-nowrap w-[12%]">Chi Phí Gánh Vốn</th>
-            <th class="py-4 px-3 text-center whitespace-nowrap w-[12%]">Thời Gian Nằm Kho</th>
-            <th class="py-4 px-3 text-center whitespace-nowrap w-[12%]">Đánh Giá Vốn</th>
+          <tr class="bg-slate-50 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200">
+            <th class="py-3.5 px-4 whitespace-nowrap">Sản phẩm</th>
+            <th class="py-3.5 px-4 text-center whitespace-nowrap">Mức rủi ro</th>
+            <th class="py-3.5 px-4 text-right whitespace-nowrap">Vốn đang đọng</th>
+            <th class="py-3.5 px-4 text-right whitespace-nowrap">Vốn ưu tiên giải phóng</th>
+            <th class="py-3.5 px-4 text-right whitespace-nowrap">Chi phí gánh vốn</th>
+            <th class="py-3.5 px-4 text-center whitespace-nowrap">Thời gian nằm kho</th>
+            <th class="py-3.5 px-4 text-center whitespace-nowrap">Thao tác</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 bg-white">
           <tr *ngFor="let item of filteredSkuItems" (click)="openSkuDetail(item)"
-            class="hover:bg-indigo-50/40 transition-colors cursor-pointer group">
+            class="hover:bg-slate-50 transition-colors cursor-pointer">
 
-            <!-- SKU Name & Code -->
-            <td class="py-4 px-4 whitespace-nowrap">
-              <div class="font-bold text-indigo-700 font-mono text-base group-hover:text-indigo-900 transition-colors">
-                {{ item.sku }}
-              </div>
-              <div class="text-slate-600 font-medium text-xs sm:text-sm mt-0.5 truncate max-w-[200px] sm:max-w-xs">
-                {{ item.name }}
-              </div>
+            <td class="py-3.5 px-4 whitespace-nowrap">
+              <div class="font-mono font-bold text-slate-900 text-sm">{{ item.sku }}</div>
+              <div class="text-slate-500 font-medium text-xs mt-0.5 truncate max-w-xs">{{ item.name }}</div>
             </td>
 
-            <!-- Risk Status Badge -->
-            <td class="py-4 px-4 text-center whitespace-nowrap">
-              <span
-                class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border whitespace-nowrap"
+            <td class="py-3.5 px-4 text-center whitespace-nowrap">
+              <span class="inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold border"
                 [ngClass]="{
-                  'bg-rose-50 text-rose-800 border-rose-200': item.riskClass === 'HIGH_RISK',
-                  'bg-amber-50 text-amber-800 border-amber-200': item.riskClass === 'MEDIUM_RISK',
-                  'bg-emerald-50 text-emerald-800 border-emerald-200': item.riskClass === 'LOW_RISK'
+                  'bg-red-50 text-red-700 border-red-200': item.riskClass === 'HIGH_RISK',
+                  'bg-amber-50 text-amber-700 border-amber-200': item.riskClass === 'MEDIUM_RISK',
+                  'bg-emerald-50 text-emerald-700 border-emerald-200': item.riskClass === 'LOW_RISK'
                 }">
-                <span class="w-2 h-2 rounded-full shrink-0" [ngClass]="{
-                    'bg-rose-500': item.riskClass === 'HIGH_RISK',
-                    'bg-amber-500': item.riskClass === 'MEDIUM_RISK',
-                    'bg-emerald-500': item.riskClass === 'LOW_RISK'
-                  }"></span>
-                {{ item.riskClass === 'HIGH_RISK' ? 'Rủi ro cao' : item.riskClass === 'MEDIUM_RISK' ? 'Cần theo dõi' :
-                'An toàn' }}
+                {{ item.riskClass === 'HIGH_RISK' ? 'Rủi ro cao' : item.riskClass === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'An toàn' }}
               </span>
             </td>
 
-            <!-- Capital Exposure -->
-            <td class="py-4 px-4 text-right font-mono font-black text-slate-900 text-base whitespace-nowrap">
+            <td class="py-3.5 px-4 text-right font-mono font-bold text-slate-900 text-sm whitespace-nowrap">
               {{ item.capitalExposure }}
             </td>
 
-            <!-- Priority Release Capital -->
-            <td class="py-4 px-4 text-right font-mono font-bold text-rose-600 text-sm whitespace-nowrap">
+            <td class="py-3.5 px-4 text-right font-mono font-bold text-red-700 text-sm whitespace-nowrap">
               {{ item.capitalPriority }}
             </td>
 
-            <!-- Opportunity Cost -->
-            <td class="py-4 px-4 text-right font-mono font-semibold text-amber-600 text-sm whitespace-nowrap">
+            <td class="py-3.5 px-4 text-right font-mono font-semibold text-slate-700 text-sm whitespace-nowrap">
               {{ item.opportunityCost }}
             </td>
 
-            <!-- Aging Days & Bucket -->
-            <td class="py-4 px-4 text-center font-mono whitespace-nowrap">
-              <div class="font-bold text-slate-800 text-sm">{{ item.dslsDays }} ngày</div>
-              <div class="text-xs text-slate-400 font-sans font-medium">{{ item.agingBucket }}</div>
+            <td class="py-3.5 px-4 text-center font-mono whitespace-nowrap">
+              <div class="font-bold text-slate-900 text-xs">{{ item.dslsDays }} ngày</div>
+              <div class="text-[10px] text-slate-400 font-sans">{{ item.agingBucket }}</div>
             </td>
 
-            <!-- Action Button -->
-            <td class="py-4 px-4 text-center whitespace-nowrap">
+            <td class="py-3.5 px-4 text-center whitespace-nowrap">
               <button (click)="$event.stopPropagation(); openSkuDetail(item)"
-                class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 transition-all cursor-pointer">
+                class="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 transition-all cursor-pointer">
                 Xem đánh giá
               </button>
             </td>
 
           </tr>
 
-          <!-- Empty State -->
           <tr *ngIf="filteredSkuItems.length === 0">
-            <td colspan="7" class="py-12 text-center text-slate-500 font-medium">
-              Không tìm thấy sản phẩm nào phù hợp với từ khóa hoặc bộ lọc đã chọn.
+            <td colspan="7" class="py-8 text-center text-slate-500">
+              Không tìm thấy sản phẩm nào phù hợp với bộ lọc đã chọn.
             </td>
           </tr>
         </tbody>
@@ -369,129 +283,77 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <!-- 5. CENTERED CAPITAL DETAIL MODAL POPUP                              -->
+  <!-- 5. MODAL CHI TIẾT TÁC ĐỘNG DÒNG VỐN                                -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <div *ngIf="drawerOpen && selectedSkuItem" (click)="closeSkuDetail()"
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
 
     <div (click)="$event.stopPropagation()"
-      class="bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden max-w-2xl w-full max-h-[90vh] flex flex-col animate-scale-up">
+      class="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden max-w-2xl w-full max-h-[85vh] flex flex-col text-xs">
 
       <!-- Modal Header -->
-      <div class="p-6 border-b border-slate-100 flex items-start justify-between gap-4 bg-slate-50/50 shrink-0">
+      <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/50 shrink-0">
         <div>
-          <div class="flex items-center gap-2">
-            <span
-              class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
-              Đánh giá tác động dòng vốn
-            </span>
-            <span class="text-xs font-mono font-bold text-slate-500">{{ selectedSkuItem.sku }}</span>
-          </div>
-          <h2 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1">
-            {{ selectedSkuItem.name }}
+          <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Chi tiết tác động vốn đọng</span>
+          <h2 class="text-base font-bold text-slate-900 font-mono mt-0.5">
+            {{ selectedSkuItem.sku }} - {{ selectedSkuItem.name }}
           </h2>
         </div>
 
         <button (click)="closeSkuDetail()"
-          class="w-9 h-9 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer shrink-0">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
+          class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer shrink-0">
+          Đóng
         </button>
       </div>
 
-      <!-- Modal Content (Scrollable) -->
-      <div class="p-6 overflow-y-auto space-y-6 flex-1 custom-scrollbar">
+      <!-- Modal Body -->
+      <div class="p-5 overflow-y-auto space-y-4 flex-1 custom-scrollbar">
 
-        <!-- Metrics Summary Grid (Human-Crafted Financial Style) -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-
-          <!-- Tile 1: Vốn Tồn Đọng -->
-          <div class="bg-slate-50 border border-slate-200/90 p-4 rounded-2xl flex flex-col justify-between space-y-2">
-            <div class="text-xs font-semibold text-slate-500">Vốn tồn đọng</div>
-            <div class="font-sans font-black text-2xl sm:text-3xl text-slate-900 tracking-tight">
-              {{ selectedSkuItem.capitalExposure }}
-            </div>
-            <div class="text-[11px] font-medium text-slate-400">Tổng vốn lưu kho</div>
+        <!-- 4 Ô chỉ số tài chính cơ bản -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+            <span class="text-[10px] text-slate-500 font-medium block">Vốn tồn đọng</span>
+            <span class="font-mono font-bold text-slate-900 text-sm block">{{ selectedSkuItem.capitalExposure }}</span>
           </div>
 
-          <!-- Tile 2: Vốn Cần Giải Phóng -->
-          <div class="bg-rose-50/60 border border-rose-200/80 p-4 rounded-2xl flex flex-col justify-between space-y-2">
-            <div class="text-xs font-semibold text-rose-800">Vốn cần giải phóng</div>
-            <div class="font-sans font-black text-2xl sm:text-3xl text-rose-700 tracking-tight">
-              {{ selectedSkuItem.capitalPriority }}
-            </div>
-            <div class="text-[11px] font-medium text-rose-600/80">Ưu tiên thu hồi gấp</div>
+          <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+            <span class="text-[10px] text-slate-500 font-medium block">Vốn cần giải phóng</span>
+            <span class="font-mono font-bold text-red-700 text-sm block">{{ selectedSkuItem.capitalPriority }}</span>
           </div>
 
-          <!-- Tile 3: Chi Phí Gánh Vốn -->
-          <div
-            class="bg-amber-50/60 border border-amber-200/80 p-4 rounded-2xl flex flex-col justify-between space-y-2">
-            <div class="text-xs font-semibold text-amber-800">Chi phí gánh vốn</div>
-            <div class="font-sans font-black text-2xl sm:text-3xl text-amber-700 tracking-tight">
-              {{ selectedSkuItem.opportunityCost }}
-            </div>
-            <div class="text-[11px] font-medium text-amber-700/80">Phí cơ hội chôn vốn</div>
+          <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+            <span class="text-[10px] text-slate-500 font-medium block">Chi phí gánh vốn</span>
+            <span class="font-mono font-bold text-slate-900 text-sm block">{{ selectedSkuItem.opportunityCost }}</span>
           </div>
 
-          <!-- Tile 4: Số Ngày Đọng Kẹt -->
-          <div
-            class="bg-indigo-50/60 border border-indigo-200/80 p-4 rounded-2xl flex flex-col justify-between space-y-2">
-            <div class="text-xs font-semibold text-indigo-800">Thời gian đọng kẹt</div>
-            <div class="font-sans font-black text-2xl sm:text-3xl text-indigo-900 tracking-tight">
-              {{ selectedSkuItem.dslsDays }}<span class="text-sm font-bold text-indigo-600 ml-1">ngày</span>
-            </div>
-            <div class="text-[11px] font-medium text-indigo-600/80">Chưa bán đơn mới</div>
+          <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+            <span class="text-[10px] text-slate-500 font-medium block">Thời gian đọng</span>
+            <span class="font-mono font-bold text-slate-900 text-sm block">{{ selectedSkuItem.dslsDays }} ngày</span>
           </div>
-
         </div>
 
-        <!-- Risk Conclusion Box -->
-        <div class="p-4 rounded-2xl border" [ngClass]="{
-            'bg-rose-50 border-rose-200 text-rose-900': selectedSkuItem.riskClass === 'HIGH_RISK',
-            'bg-amber-50 border-amber-200 text-amber-900': selectedSkuItem.riskClass === 'MEDIUM_RISK',
-            'bg-emerald-50 border-emerald-200 text-emerald-900': selectedSkuItem.riskClass === 'LOW_RISK'
-          }">
-          <div class="flex items-center gap-2 font-bold text-xs uppercase tracking-wider mb-1">
-            <span class="w-2.5 h-2.5 rounded-full" [ngClass]="{
-                'bg-rose-500': selectedSkuItem.riskClass === 'HIGH_RISK',
-                'bg-amber-500': selectedSkuItem.riskClass === 'MEDIUM_RISK',
-                'bg-emerald-500': selectedSkuItem.riskClass === 'LOW_RISK'
-              }"></span>
-            <span>Đánh Giá Tác Động Vốn & Khuyến Nghị:</span>
-          </div>
-          <p class="text-sm font-medium">
-            {{ selectedSkuItem.conclusion }}
-          </p>
+        <!-- Nhận xét tác động dòng vốn -->
+        <div class="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-1">
+          <h4 class="font-bold text-slate-900 text-xs">Đánh giá tác động dòng vốn & Khuyến nghị:</h4>
+          <p class="text-slate-600 leading-relaxed">{{ selectedSkuItem.conclusion }}</p>
         </div>
 
-        <!-- Section 1: Phân Tích Tài Chính & Chi Phí Gánh Vốn -->
-        <div class="space-y-3">
-          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h4 class="font-sans font-bold text-sm text-slate-900 uppercase tracking-wider">
-              Phân Tích Tài Chính & Chi Phí Gánh Vốn
-            </h4>
-            <span class="text-xs text-indigo-600 font-semibold font-mono">Quản lý dòng tiền</span>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
-              <div class="text-xs font-bold text-slate-500 uppercase">Phí Gánh Vốn Hàng Tháng</div>
-              <div class="text-base font-black text-slate-900 font-mono">
+        <!-- Phân tích chi tiết -->
+        <div class="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+          <h4 class="font-bold text-slate-900 text-xs">Chi phí gánh vốn theo thời gian</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+              <span class="text-slate-500 font-semibold block">Chi phí lưu kho & Lãi suất chôn vốn / tháng</span>
+              <span class="font-mono font-bold text-slate-900 text-sm block">
                 {{ getMonthlyHoldingCost(selectedSkuItem.capitalExposure) }}
-              </div>
-              <p class="text-[11px] text-slate-500 font-medium">Chi phí lưu kho & lãi suất chôn vốn ước tính mỗi tháng
-              </p>
+              </span>
             </div>
 
-            <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1">
-              <div class="text-xs font-bold text-slate-500 uppercase">Phí Cơ Hội Tái Đầu Tư</div>
-              <div class="text-base font-black text-rose-600 font-mono">
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+              <span class="text-slate-500 font-semibold block">Phí cơ hội mất đi</span>
+              <span class="font-mono font-bold text-red-700 text-sm block">
                 {{ selectedSkuItem.opportunityCost }}
-              </div>
-              <p class="text-[11px] text-slate-500 font-medium">Lợi nhuận bị mất đi do không thể xoay vòng vốn sang SKU
-                hot</p>
+              </span>
             </div>
           </div>
         </div>
@@ -499,17 +361,17 @@
       </div>
 
       <!-- Modal Footer -->
-      <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-3 shrink-0">
+      <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-2 shrink-0">
         <button (click)="navigateToDecisions()"
-          class="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-xs cursor-pointer">
-          Lập Phương Án Giải Phóng Vốn
+          class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer">
+          Lập phương án giải phóng vốn
         </button>
         <button (click)="navigateToRisk()"
-          class="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/70 transition-all cursor-pointer">
-          Xem Nguyên Nhân Rủi Ro
+          class="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-all cursor-pointer">
+          Xem nguyên nhân rủi ro
         </button>
         <button (click)="closeSkuDetail()"
-          class="px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 transition-all cursor-pointer">
+          class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700 transition-all cursor-pointer">
           Đóng
         </button>
       </div>

@@ -17,12 +17,16 @@ export interface ShapFactorItem {
 export interface SkuRiskItem {
   sku: string;
   name: string;
+  category?: string;
   riskClass: 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK';
   probabilityPct: string;
   probabilityValue: number;
   velocity: number;
   dslsDays: number;
   capitalExposure: string;
+  capitalExposureVal?: number;
+  rwceVal?: number;
+  priorityScore?: number;
 
   sales30d: number;
   sales90d: number;
@@ -50,6 +54,13 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   selectedRiskFilter: string = '';
   searchTerm: string = '';
 
+  categoryFilter: string = '';
+  capitalFilter: string = ''; // ALL, LOW (<10M), MID (10M-50M), HIGH (>50M)
+  agingFilter: string = '';   // ALL, FRESH (<=30d), AGING (31-60d), AT_RISK (61-90d), CRITICAL (>90d)
+  demandPatternFilter: string = ''; // ALL, Smooth, Intermittent, Erratic, Lumpy
+  sortField: string = 'probabilityValue'; // probabilityValue, capitalExposureVal, rwceVal, dslsDays, priorityScore
+  sortDirection: 'desc' | 'asc' = 'desc';
+
   drawerOpen: boolean = false;
   selectedSku: SkuRiskItem | null = null;
   showShapCalcModal: boolean = false;
@@ -67,8 +78,8 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
     const routeSku = this.route.snapshot.queryParamMap.get('sku');
     if (routeSku) {
       this.skuId = routeSku;
-    } else if (!this.skuId) {
-      this.skuId = this.dashboardState.state.selectedSkuId;
+    } else {
+      this.skuId = null;
     }
 
     this.loadRealAssessments();
@@ -266,27 +277,107 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
       riskClass: riskClass,
       probabilityPct: probPct,
       probabilityValue: probVal,
+      category: a.category || a.product_category || 'Thiết bị & Phụ kiện',
       velocity: velocity,
       dslsDays: dslsDays,
       capitalExposure: formatCap(capVal),
+      capitalExposureVal: capVal,
+      rwceVal: capVal * probVal,
+      priorityScore: Math.round(probVal * 100),
       sales30d: sales30d,
       sales90d: sales90d,
       zeroRatePct: zeroRatePct,
       demandProb: probVal,
-      demandPattern: a.demand_pattern || (dslsDays > 60 ? 'Lumpy' : 'Smooth'),
+      demandPattern: a.demand_pattern || (dslsDays > 90 ? 'Lumpy' : (dslsDays > 30 ? 'Intermittent' : 'Smooth')),
       shapFactors: shapFactors,
       conclusion: conclusion
     };
   }
 
   get filteredItems(): SkuRiskItem[] {
-    return this.items.filter(item => {
-      const matchFilter = !this.selectedRiskFilter || item.riskClass === this.selectedRiskFilter;
-      const matchSearch = !this.searchTerm ||
-        item.sku.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-        item.name.toLowerCase().includes(this.searchTerm.toLowerCase());
-      return matchFilter && matchSearch;
+    let result = this.items.filter(item => {
+      const matchRisk = !this.selectedRiskFilter || item.riskClass === this.selectedRiskFilter;
+      const term = this.searchTerm.toLowerCase().trim();
+      const matchSearch = !term ||
+        item.sku.toLowerCase().includes(term) ||
+        item.name.toLowerCase().includes(term) ||
+        (item.category && item.category.toLowerCase().includes(term));
+
+      const matchCategory = !this.categoryFilter || (item.category || '').toLowerCase().includes(this.categoryFilter.toLowerCase());
+
+      let matchCapital = true;
+      const capVal = item.capitalExposureVal || 0;
+      if (this.capitalFilter === 'LOW') matchCapital = capVal < 10000000;
+      else if (this.capitalFilter === 'MID') matchCapital = capVal >= 10000000 && capVal <= 50000000;
+      else if (this.capitalFilter === 'HIGH') matchCapital = capVal > 50000000;
+
+      let matchAging = true;
+      const dsls = item.dslsDays || 0;
+      if (this.agingFilter === 'FRESH') matchAging = dsls <= 30;
+      else if (this.agingFilter === 'AGING') matchAging = dsls > 30 && dsls <= 60;
+      else if (this.agingFilter === 'AT_RISK') matchAging = dsls > 60 && dsls <= 90;
+      else if (this.agingFilter === 'CRITICAL') matchAging = dsls > 90;
+
+      let matchDemand = true;
+      if (this.demandPatternFilter) {
+        matchDemand = (item.demandPattern || '').toLowerCase().includes(this.demandPatternFilter.toLowerCase());
+      }
+
+      return matchRisk && matchSearch && matchCategory && matchCapital && matchAging && matchDemand;
     });
+
+    result.sort((a, b) => {
+      let valA: number = 0;
+      let valB: number = 0;
+
+      if (this.sortField === 'probabilityValue') {
+        valA = a.probabilityValue || 0;
+        valB = b.probabilityValue || 0;
+      } else if (this.sortField === 'capitalExposureVal') {
+        valA = a.capitalExposureVal || 0;
+        valB = b.capitalExposureVal || 0;
+      } else if (this.sortField === 'rwceVal') {
+        valA = a.rwceVal || 0;
+        valB = b.rwceVal || 0;
+      } else if (this.sortField === 'dslsDays') {
+        valA = a.dslsDays || 0;
+        valB = b.dslsDays || 0;
+      } else if (this.sortField === 'priorityScore') {
+        valA = a.priorityScore || 0;
+        valB = b.priorityScore || 0;
+      }
+
+      if (valA < valB) return this.sortDirection === 'desc' ? 1 : -1;
+      if (valA > valB) return this.sortDirection === 'desc' ? -1 : 1;
+      return 0;
+    });
+
+    return result;
+  }
+
+  exportReport(format: 'csv' | 'excel' = 'csv'): void {
+    const headers = ['Mã sản phẩm', 'Tên sản phẩm', 'Danh mục', 'Mức rủi ro', 'Xác suất rủi ro (%)', 'Số ngày tồn kho (DSLS)', 'Giá trị vốn kẹt (VND)', 'Mô hình sức mua', 'Đánh giá AI'];
+    const rows = this.filteredItems.map(item => [
+      item.sku,
+      `"${item.name.replace(/"/g, '""')}"`,
+      `"${(item.category || 'Thiết bị & Phụ kiện').replace(/"/g, '""')}"`,
+      item.riskClass === 'HIGH_RISK' ? 'Rủi ro cao' : (item.riskClass === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'An toàn'),
+      item.probabilityPct,
+      item.dslsDays,
+      item.capitalExposureVal || 0,
+      this.getPatternLabel(item.demandPattern),
+      `"${item.conclusion.replace(/"/g, '""')}"`
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const fileName = `bao_cao_rui_ro_ton_kho_${new Date().toISOString().split('T')[0]}.${format === 'excel' ? 'csv' : 'csv'}`;
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   get totalCount(): number {
@@ -333,10 +424,14 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
     this.router.navigate(['/app/capital']);
   }
 
-  navigateToDecisions(): void {
+  navigateToDecisions(sku?: string): void {
+    const targetSku = sku || this.selectedSku?.sku;
+    if (targetSku) {
+      this.dashboardState.setSelectedSkuId(targetSku);
+    }
     this.closeDrawer();
-    this.navigateTo.emit('decision-support');
-    this.router.navigate(['/app/decisions']);
+    this.navigateTo.emit(targetSku ? `decision-support?sku=${targetSku}` : 'decision-support');
+    this.router.navigate(['/app/decisions'], { queryParams: targetSku ? { sku: targetSku } : {} });
   }
 
   openDrawer(item: SkuRiskItem): void {

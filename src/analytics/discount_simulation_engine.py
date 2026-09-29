@@ -201,6 +201,144 @@ class DiscountSimulationEngine:
             "evaluated_at": datetime.now(timezone.utc).isoformat()
         }
 
+    def simulate_single_scenario(
+        self,
+        decision_context: Dict[str, Any],
+        discount_rate: float = 0.15,
+        duration_days: int = 14
+    ) -> Dict[str, Any]:
+        """
+        SIM-001: Simulates financial outcomes for a specific merchant-input discount rate and duration.
+        
+        Merchant Inputs:
+        - Discount (e.g. 0.15 = 15%)
+        - Duration (e.g. 14 days)
+        
+        Backend Computes:
+        - expected_units_sold
+        - expected_revenue
+        - estimated_recovery
+        - discount_cost
+        - remaining_exposure
+        """
+        sku = decision_context.get("sku", "UNKNOWN_SKU")
+        c_ctx = decision_context.get("capital_context", {})
+        r_ctx = decision_context.get("risk_context", {})
+        d_ctx = decision_context.get("demand_context", {})
+
+        cap_exp = float(c_ctx.get("capital_exposure", 0.0))
+        raw_price = decision_context.get("unit_price") or decision_context.get("price") or r_ctx.get("unit_price") or r_ctx.get("price")
+        raw_cost = decision_context.get("unit_cost") or decision_context.get("cost") or c_ctx.get("unit_cost") or r_ctx.get("unit_cost")
+        raw_qty = decision_context.get("stock_on_hand") or decision_context.get("quantity") or r_ctx.get("stock_on_hand")
+
+        stock_qty = float(raw_qty) if raw_qty is not None else max(1.0, cap_exp / max(1.0, float(raw_cost or 70000.0)))
+        unit_price = float(raw_price) if raw_price is not None else (cap_exp / max(1.0, stock_qty))
+        unit_cost = float(raw_cost) if raw_cost is not None else (unit_price * 0.70)
+        if cap_exp == 0.0:
+            cap_exp = stock_qty * unit_cost
+
+        # Determine daily velocity
+        v_30d = float(d_ctx.get("sales_velocity_30d", 0.0) or r_ctx.get("sales_velocity_30d", 0.0) or decision_context.get("sales_velocity_30d", 0.0))
+        v_7d = float(d_ctx.get("sales_velocity_7d", 0.0) or r_ctx.get("sales_velocity_7d", 0.0) or decision_context.get("sales_velocity_7d", 0.0))
+        if v_30d > 0:
+            daily_vel = v_30d / 30.0
+        elif v_7d > 0:
+            daily_vel = v_7d / 7.0
+        else:
+            daily_vel = max(0.1, stock_qty / 90.0)
+
+        # Elasticity multiplier
+        elasticity = self.policy.get("demand_elasticity_assumptions", {})
+        rate_key = f"{discount_rate:.2f}"
+        demand_mult = float(elasticity.get(rate_key, 1.0 + (discount_rate * 1.5)))
+
+        sim_price = round(unit_price * (1.0 - discount_rate), 2)
+        expected_daily_sales = daily_vel * demand_mult
+        expected_units_sold = round(min(stock_qty, expected_daily_sales * max(1, duration_days)), 2)
+
+        expected_revenue = round(sim_price * expected_units_sold, 2)
+        estimated_recovery = round(min(expected_revenue, cap_exp), 2)
+        discount_cost = round((unit_price - sim_price) * expected_units_sold, 2)
+        remaining_exposure = max(0.0, round(cap_exp - estimated_recovery, 2))
+
+        sim_margin = round(sim_price - unit_cost, 2)
+        sim_margin_rate = round(sim_margin / sim_price, 4) if sim_price > 0 else 0.0
+        baseline_margin_rate = round((unit_price - unit_cost) / unit_price, 4) if unit_price > 0 else 0.0
+        margin_impact_pct = round((sim_margin_rate - baseline_margin_rate) * 100, 1)
+
+        return {
+            "sku": sku,
+            "discount_rate": discount_rate,
+            "discount_percent": f"{int(discount_rate * 100)}%",
+            "duration_days": duration_days,
+            "expected_units_sold": expected_units_sold,
+            "expected_revenue": expected_revenue,
+            "estimated_recovery": estimated_recovery,
+            "discount_cost": discount_cost,
+            "remaining_exposure": remaining_exposure,
+            "simulated_price": sim_price,
+            "unit_cost": round(unit_cost, 2),
+            "simulated_margin_rate": sim_margin_rate,
+            "margin_impact_pct": margin_impact_pct,
+            "stock_quantity": round(stock_qty, 2),
+            "capital_exposure": round(cap_exp, 2)
+        }
+
+    def compare_scenarios(
+        self,
+        decision_context: Dict[str, Any],
+        discount_rates: Optional[List[float]] = None,
+        duration_days: int = 14
+    ) -> Dict[str, Any]:
+        """
+        SIM-002: Scenario Comparison table for multiple discount rates (e.g. 10%, 15%, 20%).
+        
+        Returns side-by-side comparison for:
+        - Expected sales
+        - Recovery
+        - Remaining capital
+        - Margin impact
+        """
+        if discount_rates is None:
+            discount_rates = [0.10, 0.15, 0.20]
+
+        scenarios_res = []
+        headers = []
+
+        exp_sales_row = []
+        recovery_row = []
+        rem_cap_row = []
+        margin_impact_row = []
+
+        for rate in discount_rates:
+            sim = self.simulate_single_scenario(decision_context, discount_rate=rate, duration_days=duration_days)
+            scenarios_res.append(sim)
+
+            rate_pct_str = f"{int(rate * 100)}%"
+            headers.append(rate_pct_str)
+
+            exp_sales_row.append(sim["expected_units_sold"])
+            recovery_row.append(sim["estimated_recovery"])
+            rem_cap_row.append(sim["remaining_exposure"])
+            margin_impact_row.append(f"{sim['margin_impact_pct']:+.1f}%")
+
+        return {
+            "sku": decision_context.get("sku", "UNKNOWN_SKU"),
+            "duration_days": duration_days,
+            "scenarios": scenarios_res,
+            "comparison_table": {
+                "headers": headers,
+                "discount_rates": discount_rates,
+                "metrics": {
+                    "expected_sales": exp_sales_row,
+                    "recovery": recovery_row,
+                    "remaining_capital": rem_cap_row,
+                    "margin_impact": margin_impact_row
+                }
+            }
+        }
+
+
     def simulate_portfolio_discounts(
         self,
         decision_contexts: List[Dict[str, Any]],
