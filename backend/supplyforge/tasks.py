@@ -30,9 +30,18 @@ def health_check_task(self, worker_type: str = "data_worker") -> dict:
     Task 1.3: Celery Health Check Task.
     Verifies worker execution for Data Worker, ML Worker, or Decision Worker.
     """
+    t_start = time.monotonic()
     timestamp = timezone.now().isoformat()
     logger.info(
         f"[CeleryHealthCheck] Task ID={self.request.id} executed successfully for worker_type={worker_type} at {timestamp}"
+    )
+    from supplyforge.metrics import record_task
+    record_task(
+        worker_type=worker_type,
+        queue=f"{worker_type}_queue" if not worker_type.endswith("_queue") else worker_type,
+        task_type="health_check_task",
+        status="success",
+        duration=time.monotonic() - t_start
     )
     return {
         "status": "ok",
@@ -286,6 +295,9 @@ def run_import_pipeline(self, job_id: str):
                     job.ingestion_session.status = 'FAILED'
                     job.ingestion_session.error_message = str(exc)
                     job.ingestion_session.save(update_fields=['status', 'error_message', 'updated_at'])
+
+                from supplyforge.metrics import record_task
+                record_task(worker_type='data', queue='data_worker', task_type='run_import_pipeline', status='failed')
                 return {'failed': True, 'stage': stage_name, 'error': str(exc)}
 
     # All stages complete
@@ -293,6 +305,9 @@ def run_import_pipeline(self, job_id: str):
     job.progress_pct = 100
     job.completed_at = timezone.now()
     job.save(update_fields=['status', 'progress_pct', 'completed_at', 'updated_at'])
+
+    from supplyforge.metrics import record_task
+    record_task(worker_type='data', queue='data_worker', task_type='run_import_pipeline', status='success')
 
     return context
 
