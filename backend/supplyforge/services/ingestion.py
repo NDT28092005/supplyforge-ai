@@ -152,6 +152,39 @@ class DynamicFileImportService:
     @staticmethod
     @transaction.atomic
     def process_batch_import(file_obj, mapping_rule, user_id, session_type='INITIAL', force_reset=False, session_id=None):
+        """Execute IR-003, IR-004, IR-007 & IR-008 Import pipeline with Prometheus Telemetry instrumentation."""
+        import time
+        start_time = time.monotonic()
+        try:
+            res = DynamicFileImportService._process_batch_import_impl(
+                file_obj=file_obj,
+                mapping_rule=mapping_rule,
+                user_id=user_id,
+                session_type=session_type,
+                force_reset=force_reset,
+                session_id=session_id
+            )
+            duration = time.monotonic() - start_time
+            record_ingestion(
+                pipeline="medallion",
+                source_type="csv",
+                status="success",
+                duration=duration,
+                rows=res.get("rows_received", 0) if isinstance(res, dict) else 0
+            )
+            return res
+        except Exception as exc:
+            duration = time.monotonic() - start_time
+            record_ingestion(
+                pipeline="medallion",
+                source_type="csv",
+                status="failed",
+                duration=duration
+            )
+            raise exc
+
+    @staticmethod
+    def _process_batch_import_impl(file_obj, mapping_rule, user_id, session_type='INITIAL', force_reset=False, session_id=None):
         """Execute IR-003, IR-004, IR-007 & IR-008 Import pipeline:
         Upload → Validate → Schema Mapping → Data Cleaning → Deduplication / Data Correction Upsert → Persist → DATA_READY
         """

@@ -153,27 +153,26 @@ class HybridModelPipeline:
     def predict_risk(sku_id, workspace_id=1):
         """
         3-Tier Risk Prediction.
-
-        Returns dict with:
-          - risk_probability: float
-          - risk_level: str (CRITICAL/HIGH_RISK/MEDIUM_RISK/LOW_RISK)
-          - decision_confidence: None (computed later by explanation layer)
-          - prediction: {engine, model_version, status, fallback_reason?, calibrated}
-          - features: dict (raw operational features from Django ORM)
-          - feature_vector: np.ndarray or None (canonical 25-feature vector)
-          - feature_completeness: float
-          - base_value: float (for SHAP baseline)
-          - data_provenance: {source, snapshot_date, is_offline_snapshot}
-
-        Returns None if SKU not found at all.
         """
-        # ---- Tier 0: Extract operational features from Django ORM ----
-        features = HybridModelPipeline.extract_features(sku_id, workspace_id)
-        if not features:
-            return None
+        import time
+        t_pred_start = time.monotonic()
+        inference_duration = None
 
-        # Fetch product metadata for shop maturity check
-        product = Product.objects.get(id=sku_id)
+        # ---- Tier 0: Extract operational features from Django ORM ----
+        try:
+            features = HybridModelPipeline.extract_features(sku_id, workspace_id)
+            if not features:
+                return None
+            product = Product.objects.get(id=sku_id)
+        except Exception as e:
+            record_prediction(
+                model="xgboost",
+                model_version="v1",
+                status="failed",
+                duration=time.monotonic() - t_pred_start,
+                error_type=getattr(e, 'failure_type', 'ML_ERROR')
+            )
+            raise
 
         # ---- Tier 1: Feature Store Lookup + Validation ----
         feature_store_result = None
@@ -198,6 +197,13 @@ class HybridModelPipeline:
                     sku_id, e.failure_type, e.message
                 )
             else:
+                record_prediction(
+                    model="xgboost",
+                    model_version="v1",
+                    status="failed",
+                    duration=time.monotonic() - t_pred_start,
+                    error_type=getattr(e, 'failure_type', 'ML_ERROR')
+                )
                 raise  # SYSTEM_ERROR — propagate
 
         # ---- Tier 2: Prediction ----
@@ -213,8 +219,12 @@ class HybridModelPipeline:
                 le = ModelLoaderService.get_label_encoder()
                 manifest = ModelLoaderService.get_manifest()
 
-                # Predict probabilities
+                # Pure Model Inference timing
+                t_inf_start = time.monotonic()
                 probs = model.predict_proba(feature_vector)
+                pred_enc = model.predict(feature_vector)
+                inference_duration = time.monotonic() - t_inf_start
+
                 classes = list(model.classes_)
                 critical_idx = classes.index(le.transform(["CRITICAL"])[0])
                 high_idx = classes.index(le.transform(["HIGH_RISK"])[0])
@@ -237,7 +247,6 @@ class HybridModelPipeline:
                 risk_probability = max(0.0, min(1.0, risk_probability))
 
                 # Risk level from classifier
-                pred_enc = model.predict(feature_vector)
                 risk_level = str(le.inverse_transform(pred_enc)[0])
 
                 # Base value for SHAP (average predicted probability across training data)
@@ -264,20 +273,31 @@ class HybridModelPipeline:
                         "Primary prediction failed for SKU %s [%s]: %s — falling back to baseline",
                         sku_id, e.failure_type, e.message
                     )
-                    # Fall through to baseline below
                     risk_probability = None
                 else:
-                    # SYSTEM_ERROR — do NOT silently fallback
                     logger.error(
                         "Non-recoverable ML error for SKU %s [%s]: %s",
                         sku_id, e.failure_type, e.message
                     )
+                    record_prediction(
+                        model="xgboost",
+                        model_version="v1",
+                        status="failed",
+                        duration=time.monotonic() - t_pred_start,
+                        error_type=getattr(e, 'failure_type', 'ML_ERROR')
+                    )
                     raise
             except Exception as e:
-                # Unexpected error — NEVER silently fallback
                 logger.critical(
                     "Unexpected error in primary prediction for SKU %s: %s",
                     sku_id, e, exc_info=True
+                )
+                record_prediction(
+                    model="xgboost",
+                    model_version="v1",
+                    status="failed",
+                    duration=time.monotonic() - t_pred_start,
+                    error_type="UNEXPECTED_ERROR"
                 )
                 raise
 
@@ -288,10 +308,7 @@ class HybridModelPipeline:
 
             # Determine fallback reason
             if feature_vector is None:
-                if feature_store_result is None:
-                    fallback_reason = FailureType.FEATURE_INVALID
-                else:
-                    fallback_reason = FailureType.FEATURE_INVALID
+                fallback_reason = FailureType.FEATURE_INVALID
             elif ModelLoaderService.get_load_error():
                 fallback_reason = ModelLoaderService.get_load_error().failure_type
             else:
@@ -310,10 +327,13 @@ class HybridModelPipeline:
                 sku_id, risk_probability, risk_level, fallback_reason
             )
 
+        total_duration = time.monotonic() - t_pred_start
         record_prediction(
             model=prediction_meta.get("engine", "xgboost").lower(),
             model_version=prediction_meta.get("model_version", "v1"),
-            status=prediction_meta.get("status", "PRIMARY").lower()
+            status=prediction_meta.get("status", "PRIMARY").lower(),
+            duration=total_duration,
+            inference_duration=inference_duration
         )
 
         return {
