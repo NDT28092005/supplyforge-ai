@@ -121,6 +121,9 @@ class DecisionPersistenceService:
                     interpretation=ev_item.get("interpretation", "")
                 )
 
+        from supplyforge.metrics import record_decision
+        record_decision(decision_type=decision.action_type, action='generated', status='success')
+
         return decision
 
     @staticmethod
@@ -212,6 +215,12 @@ class DecisionStatusService:
             notes=notes or f"Status changed to {new_status} by {actor}.",
             metadata=metadata or {}
         )
+
+        from supplyforge.metrics import record_decision
+        if new_status in ('ACCEPTED', 'REVIEWED', 'EXECUTED', 'COMPLETED'):
+            record_decision(decision_type=decision.action_type, action='approved', status='success')
+        elif new_status in ('REJECTED', 'CANCELLED'):
+            record_decision(decision_type=decision.action_type, action='rejected', status='success')
 
         return decision
 

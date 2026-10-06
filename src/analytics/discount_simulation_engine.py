@@ -188,6 +188,12 @@ class DiscountSimulationEngine:
 
             scenarios.append(scenario_obj)
 
+        try:
+            from supplyforge.metrics import record_decision
+            record_decision(decision_type="DISCOUNT_SIMULATION", action="simulation", status="success")
+        except Exception:
+            pass
+
         return {
             "sku": sku,
             "evaluation_status": "READY",

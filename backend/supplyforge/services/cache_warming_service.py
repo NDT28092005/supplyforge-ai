@@ -27,5 +27,7 @@ class CacheWarmingService:
         try:
             summary, status = DashboardQueryService.get_executive_summary(workspace_id, force_refresh=True)
             logger.info(f"[CacheWarming] Workspace {workspace_id} warmed v{new_version} ({status}) successfully.")
+            from supplyforge.metrics import record_cache
+            record_cache(cache_area='dashboard', operation='warm', result='warm')
         except Exception as e:
             logger.error(f"[CacheWarming] Failed to warm cache for workspace {workspace_id}: {e}")
