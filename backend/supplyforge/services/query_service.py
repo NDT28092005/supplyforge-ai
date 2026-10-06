@@ -9,6 +9,7 @@ import logging
 from django.core.cache import cache
 from supplyforge.models import SlowMovingRiskAssessment
 from supplyforge.services.cache_policy import CachePolicy
+from supplyforge.metrics import record_cache
 
 logger = logging.getLogger(__name__)
 
@@ -53,20 +54,25 @@ class DashboardQueryService:
             summary = cls._calculate_executive_summary(workspace_id)
             try:
                 cache.set(cache_key, summary, CachePolicy.TTL_DASHBOARD_SUMMARY)
+                record_cache(cache_area='dashboard', operation='set', result='refresh')
             except Exception as e:
                 logger.warning(f"Redis set failed: {e}")
+                record_cache(cache_area='dashboard', operation='set', result='error')
             return summary, 'REFRESHED'
 
         # 1. Try reading from Cache
         try:
             val = cache.get(cache_key)
             if val is not None:
+                record_cache(cache_area='dashboard', operation='get', result='hit')
                 return val, 'HIT'
         except Exception as e:
             logger.warning(f"Redis read failure, falling back to MySQL direct: {e}")
+            record_cache(cache_area='dashboard', operation='get', result='error')
             return cls._calculate_executive_summary(workspace_id), 'FAILOVER_MYSQL'
 
         # 2. Cache MISS: Acquire Stampede Protection Lock
+        record_cache(cache_area='dashboard', operation='get', result='miss')
         lock_acquired = _acquire_redis_lock(lock_key, ttl=CachePolicy.STAMPEDE_LOCK_TTL)
         if not lock_acquired:
             # Another request is computing -> Wait & spin lock up to 1 second

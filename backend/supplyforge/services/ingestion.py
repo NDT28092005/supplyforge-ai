@@ -9,6 +9,7 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import Min, Max
 from supplyforge.models import Product, Order, OrderItem, ArchivedDataSet
+from supplyforge.metrics import record_ingestion
 
 
 class GeminiColumnMappingService:
@@ -836,6 +837,13 @@ class DynamicFileImportService:
             "overlap_start": overlap_start.strftime("%Y-%m-%d") if overlap_start else None,
             "overlap_end": overlap_end.strftime("%Y-%m-%d") if overlap_end else None,
         }
+
+        record_ingestion(
+            pipeline="medallion",
+            source_type="csv",
+            status="success",
+            rows=rows_received
+        )
 
         return {
             "status": "DATA_READY",

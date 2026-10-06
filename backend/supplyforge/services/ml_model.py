@@ -31,6 +31,7 @@ from supplyforge.services.model_loader import (
     ModelLoaderService, FeatureStoreLoader,
     MLServiceError, FailureType,
 )
+from supplyforge.metrics import record_prediction
 
 logger = logging.getLogger(__name__)
 
@@ -308,6 +309,12 @@ class HybridModelPipeline:
                 "Baseline prediction for SKU %s: risk=%.4f, level=%s, reason=%s",
                 sku_id, risk_probability, risk_level, fallback_reason
             )
+
+        record_prediction(
+            model=prediction_meta.get("engine", "xgboost").lower(),
+            model_version=prediction_meta.get("model_version", "v1"),
+            status=prediction_meta.get("status", "PRIMARY").lower()
+        )
 
         return {
             "risk_probability": round(risk_probability, 4),

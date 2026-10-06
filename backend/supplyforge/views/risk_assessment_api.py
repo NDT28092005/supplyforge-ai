@@ -9,6 +9,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from supplyforge.models import IngestionSession, SlowMovingRiskAssessment
+from supplyforge.metrics import record_risk_assessment, update_high_risk_sku_gauge
 from src.analytics.risk_assessment_assembler import RiskAssessmentAssembler
 
 logger = logging.getLogger(__name__)
@@ -646,6 +647,13 @@ def get_global_risk_summary(request):
     total_skus = qs.count()
     counts = qs.values('risk_class').annotate(total=Count('id'))
     counts_map = {item['risk_class'].upper(): item['total'] for item in counts}
+
+    update_high_risk_sku_gauge(
+        critical_count=counts_map.get('CRITICAL', 0),
+        high_count=counts_map.get('HIGH_RISK', 0),
+        medium_count=counts_map.get('MEDIUM_RISK', 0),
+        low_count=counts_map.get('LOW_RISK', 0)
+    )
 
     return Response({
         'total_skus': total_skus,
