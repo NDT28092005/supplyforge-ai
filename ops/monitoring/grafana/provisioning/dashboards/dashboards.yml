@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: 'SupplyForge Standard Dashboards'
+    orgId: 1
+    folder: 'SupplyForge Ops'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
