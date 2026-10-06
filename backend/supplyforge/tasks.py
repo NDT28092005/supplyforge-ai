@@ -18,6 +18,7 @@ from django.utils import timezone
 from supplyforge.models import BackgroundJob, IngestionSession, NotificationRecord
 from supplyforge.services.csv_profiler import StreamingCSVProfiler
 from supplyforge.services.ingestion import DynamicFileImportService, GeminiColumnMappingService
+import supplyforge.celery_telemetry
 
 logger = logging.getLogger(__name__)
 
