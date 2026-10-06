@@ -56,6 +56,56 @@ services:
       - monitoring
       - supplyforge_net
 
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: supplyforge_node_exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+    networks:
+      - monitoring
+      - supplyforge_net
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: supplyforge_cadvisor
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - monitoring
+      - supplyforge_net
+
+  mysqld-exporter:
+    image: prom/mysqld-exporter:v0.15.1
+    container_name: supplyforge_mysql_exporter
+    restart: unless-stopped
+    environment:
+      - DATA_SOURCE_NAME=${MYSQL_USER:-supplyforge}:${MYSQL_PASSWORD}@(mysql:3306)/${MYSQL_DATABASE:-supplyforge}
+    networks:
+      - monitoring
+      - supplyforge_net
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    container_name: supplyforge_redis_exporter
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=redis:6379
+    networks:
+      - monitoring
+      - supplyforge_net
+
 networks:
   monitoring:
     driver: bridge
