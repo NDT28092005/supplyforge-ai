@@ -1,0 +1,53 @@
+groups:
+  - name: supplyforge-business-recording
+    interval: 30s
+    rules:
+      # Ingestion
+      - record: supplyforge:business:ingestion_rate
+        expr: sum by (pipeline, source_type) (rate(supplyforge_ingestion_total[5m]))
+
+      - record: supplyforge:business:ingestion_failure_rate
+        expr: sum by (pipeline, source_type) (rate(supplyforge_ingestion_failed_total[5m])) / sum by (pipeline, source_type) (rate(supplyforge_ingestion_total[5m]))
+
+      - record: supplyforge:business:ingestion_duration:p95
+        expr: histogram_quantile(0.95, sum by (le, pipeline, source_type) (rate(supplyforge_ingestion_duration_seconds_bucket[5m])))
+
+      # ML Prediction
+      - record: supplyforge:business:prediction_rate
+        expr: sum by (model, model_version) (rate(supplyforge_prediction_total[5m]))
+
+      - record: supplyforge:business:prediction_failure_rate
+        expr: sum by (model, model_version) (rate(supplyforge_prediction_failed_total[5m])) / sum by (model, model_version) (rate(supplyforge_prediction_total[5m]))
+
+      - record: supplyforge:business:model_inference_duration:p95
+        expr: histogram_quantile(0.95, sum by (le, model, model_version) (rate(supplyforge_model_inference_duration_seconds_bucket[5m])))
+
+      # Risk Assessment
+      - record: supplyforge:business:risk_assessment_rate
+        expr: sum by (model_version, risk_level) (rate(supplyforge_risk_assessment_total[5m]))
+
+      - record: supplyforge:business:risk_assessment_failure_rate
+        expr: sum by (model_version) (rate(supplyforge_risk_assessment_failed_total[5m])) / sum by (model_version) (rate(supplyforge_risk_assessment_total[5m]))
+
+      # Decision Engine
+      - record: supplyforge:business:decision_generation_rate
+        expr: sum by (decision_type) (rate(supplyforge_decision_generated_total[5m]))
+
+      - record: supplyforge:business:decision_approval_rate
+        expr: sum by (decision_type) (rate(supplyforge_decision_approved_total[5m]))
+
+      - record: supplyforge:business:decision_rejection_rate
+        expr: sum by (decision_type) (rate(supplyforge_decision_rejected_total[5m]))
+
+      - record: supplyforge:business:simulation_rate
+        expr: sum by (simulation_type) (rate(supplyforge_simulation_total[5m]))
+
+      # Cache
+      - record: supplyforge:business:cache_hit_rate
+        expr: sum by (cache_area) (rate(supplyforge_cache_hit_total[5m])) / (sum by (cache_area) (rate(supplyforge_cache_hit_total[5m])) + sum by (cache_area) (rate(supplyforge_cache_miss_total[5m])))
+
+      - record: supplyforge:business:cache_miss_rate
+        expr: sum by (cache_area) (rate(supplyforge_cache_miss_total[5m])) / (sum by (cache_area) (rate(supplyforge_cache_hit_total[5m])) + sum by (cache_area) (rate(supplyforge_cache_miss_total[5m])))
+
+      - record: supplyforge:business:cache_error_rate
+        expr: sum by (cache_area) (rate(supplyforge_cache_error_total[5m]))

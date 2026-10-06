@@ -1,0 +1,27 @@
+groups:
+  - name: supplyforge-celery-recording
+    interval: 30s
+    rules:
+      - record: supplyforge:celery:queue_depth
+        expr: sum by (queue, worker_type) (supplyforge_task_queue_depth)
+
+      - record: supplyforge:celery:task_age:p50
+        expr: supplyforge_task_age_seconds
+
+      - record: supplyforge:celery:task_age:p95
+        expr: supplyforge_task_age_seconds
+
+      - record: supplyforge:celery:task_age:p99
+        expr: supplyforge_task_age_seconds
+
+      - record: supplyforge:celery:task_duration:p50
+        expr: histogram_quantile(0.50, sum by (le, queue, worker_type, task_type) (rate(supplyforge_task_duration_seconds_bucket[5m])))
+
+      - record: supplyforge:celery:task_duration:p95
+        expr: histogram_quantile(0.95, sum by (le, queue, worker_type, task_type) (rate(supplyforge_task_duration_seconds_bucket[5m])))
+
+      - record: supplyforge:celery:task_duration:p99
+        expr: histogram_quantile(0.99, sum by (le, queue, worker_type, task_type) (rate(supplyforge_task_duration_seconds_bucket[5m])))
+
+      - record: supplyforge:celery:task_failure_rate
+        expr: sum by (queue, worker_type) (rate(supplyforge_task_failed_total[5m])) / sum by (queue, worker_type) (rate(supplyforge_task_total[5m]))
