@@ -12,9 +12,11 @@ urlpatterns = [
     # Health & System Liveness & Readiness Probes (Phase 0 & Phase 1)
     path('health/live', views.health_live, name='health_live_root'),
     path('health/ready', views.health_ready, name='health_ready_root'),
+    path('health/dependencies', views.health_dependencies, name='health_dependencies_root'),
     path('health/celery', views.health_celery, name='health_celery_root'),
     path('api/v1/health/live', views.health_live, name='health_live_v1'),
     path('api/v1/health/ready', views.health_ready, name='health_ready_v1'),
+    path('api/v1/health/dependencies', views.health_dependencies, name='health_dependencies_v1'),
     path('api/v1/health/celery', views.health_celery, name='health_celery_v1'),
     path('api/version', views.get_version_info, name='api_version'),
     path('api/v1/version', views.get_version_info, name='api_v1_version'),

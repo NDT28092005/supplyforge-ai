@@ -2,13 +2,59 @@ import os
 import logging
 from django.conf import settings
 from django.db import connection
-from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from supplyforge.models import Product, SlowMovingRiskAssessment, Order
 
 logger = logging.getLogger(__name__)
+
+
+def _check_mysql():
+    """Lightweight MySQL connectivity check using SELECT 1;"""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1;")
+            row = cursor.fetchone()
+            if row and row[0] == 1:
+                return "healthy"
+        return "unhealthy"
+    except Exception as e:
+        logger.error(f"[HealthCheck] MySQL check failed: {e}")
+        return "unhealthy"
+
+
+def _check_redis():
+    """Lightweight Redis PING check with 1s timeout."""
+    try:
+        import redis
+        redis_url = getattr(settings, 'REDIS_CACHE_URL', None) or getattr(settings, 'CELERY_BROKER_URL', None)
+        if not redis_url or not (redis_url.startswith('redis://') or redis_url.startswith('rediss://')):
+            redis_host = getattr(settings, 'REDIS_HOST', '127.0.0.1')
+            redis_port = getattr(settings, 'REDIS_PORT', '6379')
+            redis_url = f"redis://{redis_host}:{redis_port}/0"
+
+        r = redis.Redis.from_url(redis_url, socket_timeout=1.0)
+        if r.ping():
+            return "healthy"
+        return "unhealthy"
+    except Exception as e:
+        logger.warning(f"[HealthCheck] Redis check failed: {e}")
+        return "unhealthy"
+
+
+def _check_celery():
+    """Lightweight Celery worker availability check."""
+    try:
+        from config.celery import app as celery_app
+        i = celery_app.control.inspect(timeout=1.0)
+        ping_res = i.ping()
+        if ping_res:
+            return "healthy"
+        return "unhealthy"
+    except Exception as e:
+        logger.warning(f"[HealthCheck] Celery check failed: {e}")
+        return "unhealthy"
 
 
 @api_view(['GET'])
@@ -22,8 +68,8 @@ def ping(request):
 @permission_classes([AllowAny])
 def health_live(request):
     """
-    GET /health/live & /api/v1/health/live (Task 1.1 Liveness Probe)
-    Returns status: ok when backend process is running.
+    GET /health/live & /api/v1/health/live (Liveness Probe)
+    Indicates if the Django process is alive. No external dependency checks.
     """
     return Response({
         "status": "ok"
@@ -34,48 +80,51 @@ def health_live(request):
 @permission_classes([AllowAny])
 def health_ready(request):
     """
-    GET /health/ready & /api/v1/health/ready (Task 1.1 Readiness Probe)
-    Validates essential dependencies: Database and Redis cache / broker.
-    Response format:
-    {
-      "status": "ready",
-      "database": "ok",
-      "redis": "ok"
-    }
+    GET /health/ready & /api/v1/health/ready (Readiness Probe)
+    Validates critical dependencies: MySQL and Redis.
+    Returns 200 OK when ready, 503 Service Unavailable when critical dependency fails.
     """
-    db_status = "ok"
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1;")
-            row = cursor.fetchone()
-            if not row or row[0] != 1:
-                db_status = "error"
-    except Exception as e:
-        logger.error(f"[HealthCheck] Database check failed: {e}")
-        db_status = "error"
+    mysql_status = _check_mysql()
+    redis_status = _check_redis()
 
-    redis_status = "ok"
-    try:
-        import redis
-        redis_url = getattr(settings, 'CELERY_BROKER_URL', os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0'))
-        r = redis.Redis.from_url(redis_url, socket_timeout=2.0)
-        r.ping()
-    except Exception as e:
-        logger.warning(f"[HealthCheck] Redis check failed: {e}")
-        # In development without active redis service, fall back gracefully to ok/disabled
-        if getattr(settings, 'APP_ENV', 'development') == 'development' and os.getenv('USE_SQLITE') == '1':
-            redis_status = "ok"
-        else:
-            redis_status = "error"
-
-    is_ready = (db_status == "ok") and (redis_status == "ok")
+    is_ready = (mysql_status == "healthy") and (redis_status == "healthy")
     overall_status = "ready" if is_ready else "not_ready"
     http_code = 200 if is_ready else 503
 
     return Response({
+        "status": overall_status
+    }, status=http_code)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def health_dependencies(request):
+    """
+    GET /health/dependencies & /api/v1/health/dependencies (Dependency Health Check)
+    Detailed diagnostic status breakdown for MySQL, Redis, and Celery.
+    Returns 200 OK when all dependencies are healthy, 503 when any dependency is degraded/unhealthy.
+    """
+    mysql_status = _check_mysql()
+    redis_status = _check_redis()
+    celery_status = _check_celery()
+
+    all_healthy = (mysql_status == "healthy") and (redis_status == "healthy") and (celery_status == "healthy")
+    overall_status = "healthy" if all_healthy else "degraded"
+    http_code = 200 if all_healthy else 503
+
+    return Response({
         "status": overall_status,
-        "database": db_status,
-        "redis": redis_status
+        "dependencies": {
+            "mysql": {
+                "status": mysql_status
+            },
+            "redis": {
+                "status": redis_status
+            },
+            "celery": {
+                "status": celery_status
+            }
+        }
     }, status=http_code)
 
 
@@ -83,8 +132,7 @@ def health_ready(request):
 @permission_classes([AllowAny])
 def health_celery(request):
     """
-    GET/POST /api/v1/health/celery (Task 1.3 Celery Health Check)
-    Dispatches health_check_task and verifies worker readiness.
+    GET/POST /api/v1/health/celery (Legacy Celery Worker Dispatch Check)
     """
     worker_type = request.GET.get('worker_type') or 'data_worker'
     try:
@@ -105,13 +153,11 @@ def health_celery(request):
         return Response({
             "status": "error",
             "celery_broker": "disconnected",
-            "error": str(e),
             "architecture": {
                 "flow": "API -> Redis -> Celery",
                 "workers": ["Data Worker", "ML Worker", "Decision Worker"]
             }
         }, status=503)
-
 
 
 @api_view(['GET'])
