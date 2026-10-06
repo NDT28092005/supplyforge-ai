@@ -1,0 +1,30 @@
+groups:
+  - name: supplyforge-database-alerts
+    rules:
+      - alert: SupplyForgeMySQLDown
+        expr: up{job="mysql"} == 0
+        for: 2m
+        labels:
+          severity: P1
+          service: mysql
+          environment: production
+          team: devops
+        annotations:
+          summary: "SupplyForge MySQL Exporter/Server is DOWN"
+          description: "MySQL instance target is unreachable for more than 2 minutes. Operator must check MySQL container/host status."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/mysql-down.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-mysql/mysql-overview"
+
+      - alert: SupplyForgeMySQLConnectionSaturation
+        expr: mysql_global_status_threads_connected / mysql_global_variables_max_connections > 0.85
+        for: 5m
+        labels:
+          severity: P2
+          service: mysql
+          environment: production
+          team: devops
+        annotations:
+          summary: "SupplyForge MySQL connection pool is saturated (>85%)"
+          description: "Active MySQL threads connected count is exceeding 85% of max_connections limit. Check connection leaks or long-running queries."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/mysql-connection-saturation.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-mysql/mysql-overview"

@@ -1,0 +1,30 @@
+groups:
+  - name: supplyforge-ml-alerts
+    rules:
+      - alert: SupplyForgePredictionFailureRateHigh
+        expr: supplyforge:business:prediction_failure_rate > 0.05
+        for: 5m
+        labels:
+          severity: P2
+          service: ml
+          environment: production
+          team: devops
+        annotations:
+          summary: "ML Prediction failure rate is high (>5%)"
+          description: "Model '{{ $labels.model }}' (version {{ $labels.model_version }}) prediction failure rate has crossed 5% over 5 minutes."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/ml-prediction-failure.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-ml/ml-overview"
+
+      - alert: SupplyForgeMLInferenceLatencyHigh
+        expr: supplyforge:business:model_inference_duration:p95 > 2.0
+        for: 5m
+        labels:
+          severity: P2
+          service: ml
+          environment: production
+          team: devops
+        annotations:
+          summary: "ML Model inference P95 duration is high (>2s)"
+          description: "Pure ML model inference P95 duration for model '{{ $labels.model }}' exceeds 2.0 seconds over 5 minutes."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/ml-inference-high-latency.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-ml/ml-overview"

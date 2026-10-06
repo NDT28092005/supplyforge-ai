@@ -1,0 +1,30 @@
+groups:
+  - name: supplyforge-availability-alerts
+    rules:
+      - alert: SupplyForgeBackendDown
+        expr: up{job="django-backend"} == 0
+        for: 2m
+        labels:
+          severity: P1
+          service: backend
+          environment: production
+          team: devops
+        annotations:
+          summary: "SupplyForge Django Backend is DOWN"
+          description: "Prometheus target 'django-backend' (backend:8080) is unreachable for more than 2 minutes. Operator must check Gunicorn process, container health, and application logs."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/backend-down.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-backend/backend-overview"
+
+      - alert: SupplyForgePrometheusDown
+        expr: up{job="prometheus"} == 0
+        for: 2m
+        labels:
+          severity: P1
+          service: monitoring
+          environment: production
+          team: devops
+        annotations:
+          summary: "Prometheus Monitoring Instance is DOWN"
+          description: "Prometheus instance target is reporting unreachable status for more than 2 minutes."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/monitoring-down.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-monitoring/monitoring-overview"

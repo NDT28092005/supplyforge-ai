@@ -1,0 +1,30 @@
+groups:
+  - name: supplyforge-backend-alerts
+    rules:
+      - alert: SupplyForgeAPIHighLatency
+        expr: supplyforge:api:request_duration:p95 > 1.0
+        for: 5m
+        labels:
+          severity: P2
+          service: backend
+          environment: production
+          team: devops
+        annotations:
+          summary: "SupplyForge Backend API P95 latency is high (>1s)"
+          description: "HTTP API 95th percentile response latency has exceeded 1.0s continuously for 5 minutes. Check DB query performance and CPU utilization."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/api-high-latency.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-backend/backend-overview"
+
+      - alert: SupplyForgeAPIHighErrorRate
+        expr: supplyforge:api:error_rate > 0.05
+        for: 5m
+        labels:
+          severity: P2
+          service: backend
+          environment: production
+          team: devops
+        annotations:
+          summary: "SupplyForge Backend API 5xx Error Rate is high (>5%)"
+          description: "HTTP 5xx server error rate has exceeded 5% over the last 5 minutes. Inspect Django application exception logs immediately."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/api-high-error-rate.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-backend/backend-overview"

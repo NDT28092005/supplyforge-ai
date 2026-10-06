@@ -1,0 +1,44 @@
+groups:
+  - name: supplyforge-celery-alerts
+    rules:
+      - alert: SupplyForgeCeleryQueueBacklog
+        expr: supplyforge:celery:queue_depth > 20
+        for: 5m
+        labels:
+          severity: P2
+          service: celery
+          environment: production
+          team: devops
+        annotations:
+          summary: "Celery queue backlog is high (>20 tasks)"
+          description: "Celery queue '{{ $labels.queue }}' has more than 20 tasks waiting in backlog for 5 minutes. Check worker concurrency or scale workers."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/celery-queue-backlog.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-celery/celery-overview"
+
+      - alert: SupplyForgeCeleryTaskAgeHigh
+        expr: supplyforge:celery:task_age:p95 > 60
+        for: 5m
+        labels:
+          severity: P2
+          service: celery
+          environment: production
+          team: devops
+        annotations:
+          summary: "Celery task queue waiting time P95 is high (>60s)"
+          description: "Tasks in queue '{{ $labels.queue }}' are waiting over 60 seconds before worker pickup. Worker capacity saturation suspected."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/celery-task-age-high.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-celery/celery-overview"
+
+      - alert: SupplyForgeCeleryHighFailureRate
+        expr: supplyforge:celery:task_failure_rate > 0.1
+        for: 5m
+        labels:
+          severity: P2
+          service: celery
+          environment: production
+          team: devops
+        annotations:
+          summary: "Celery task failure rate is high (>10%)"
+          description: "Task failure rate for worker '{{ $labels.worker_type }}' on queue '{{ $labels.queue }}' exceeds 10% over 5 minutes."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/celery-high-failure-rate.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-celery/celery-overview"

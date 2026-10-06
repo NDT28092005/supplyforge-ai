@@ -1,0 +1,30 @@
+groups:
+  - name: supplyforge-business-alerts
+    rules:
+      - alert: SupplyForgeIngestionFailureRateHigh
+        expr: supplyforge:business:ingestion_failure_rate > 0.1
+        for: 5m
+        labels:
+          severity: P2
+          service: business
+          environment: production
+          team: devops
+        annotations:
+          summary: "Data Ingestion failure rate is high (>10%)"
+          description: "Data ingestion pipeline '{{ $labels.pipeline }}' for source '{{ $labels.source_type }}' failure rate exceeds 10%."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/ingestion-failure.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-business/business-overview"
+
+      - alert: SupplyForgeCacheErrorRateHigh
+        expr: supplyforge:business:cache_error_rate > 5
+        for: 5m
+        labels:
+          severity: P3
+          service: business
+          environment: production
+          team: devops
+        annotations:
+          summary: "Cache error rate is elevated (>5 errors)"
+          description: "Cache area '{{ $labels.cache_area }}' has recorded more than 5 errors in 5 minutes. Inspect Redis connectivity."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/cache-error.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-business/business-overview"

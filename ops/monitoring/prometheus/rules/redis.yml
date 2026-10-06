@@ -1,0 +1,44 @@
+groups:
+  - name: supplyforge-redis-alerts
+    rules:
+      - alert: SupplyForgeRedisDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: P1
+          service: redis
+          environment: production
+          team: devops
+        annotations:
+          summary: "SupplyForge Redis Exporter/Server is DOWN"
+          description: "Redis instance target is unreachable for more than 2 minutes. Check Redis container health."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/redis-down.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-redis/redis-overview"
+
+      - alert: SupplyForgeRedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: P3
+          service: redis
+          environment: production
+          team: devops
+        annotations:
+          summary: "SupplyForge Redis memory usage is high (>85%)"
+          description: "Redis memory utilization has crossed 85% threshold. Operator should check key eviction policy and TTL management."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/redis-memory-high.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-redis/redis-overview"
+
+      - alert: SupplyForgeRedisEvictionsHigh
+        expr: rate(redis_evicted_keys_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: P3
+          service: redis
+          environment: production
+          team: devops
+        annotations:
+          summary: "SupplyForge Redis key evictions rate is high (>10/s)"
+          description: "Redis key eviction rate is exceeding 10 keys per second. Cache memory limit may be undersized."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/redis-evictions-high.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-redis/redis-overview"
