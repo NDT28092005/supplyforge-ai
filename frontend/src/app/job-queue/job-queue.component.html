@@ -1,0 +1,208 @@
+<div class="job-queue-page fade-in">
+  <!-- Page Header -->
+  <div class="page-header">
+    <div class="header-titles">
+      <h1 class="page-title">Hàng Chờ Xử Lý Ngầm</h1>
+      <p class="page-subtitle">Theo dõi tiến trình nạp dữ liệu và đánh giá rủi ro tồn kho tự động</p>
+    </div>
+    <div class="header-actions">
+      <a routerLink="/app/import" class="btn-primary-action">
+        + Tải tệp CSV mới
+      </a>
+    </div>
+  </div>
+
+  <!-- Summary Statistics KPI Bar -->
+  <div class="kpi-grid">
+    <div class="kpi-card accent-card">
+      <div class="kpi-header">
+        <span class="kpi-label">Đang xử lý ngầm</span>
+        <span class="pulse-indicator" *ngIf="activeJobs.length > 0"></span>
+      </div>
+      <div class="kpi-value text-accent">{{ activeJobs.length }}</div>
+      <div class="kpi-subtext">Công việc đang chạy trong hệ thống</div>
+    </div>
+
+    <div class="kpi-card success-card">
+      <div class="kpi-header">
+        <span class="kpi-label">Đã hoàn thành</span>
+        <span class="dot-success"></span>
+      </div>
+      <div class="kpi-value text-emerald">{{ completedCount }}</div>
+      <div class="kpi-subtext">Dữ liệu đã được nạp & cập nhật cache</div>
+    </div>
+
+    <div class="kpi-card muted-card">
+      <div class="kpi-header">
+        <span class="kpi-label">Đã hủy / Cần xử lý</span>
+        <span class="dot-muted"></span>
+      </div>
+      <div class="kpi-value text-slate">{{ failedCount }}</div>
+      <div class="kpi-subtext">Công việc bị dừng hoặc gặp lỗi</div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="isLoading" class="state-card loading-state">
+    <div class="spinner"></div>
+    <span>Đang đồng bộ trạng thái hàng chờ...</span>
+  </div>
+
+  <!-- Error Alert -->
+  <div *ngIf="errorMessage" class="error-alert">
+    {{ errorMessage }}
+  </div>
+
+  <!-- Section 1: Active Jobs -->
+  <div class="content-section">
+    <div class="section-header">
+      <h2 class="section-heading">
+        Tiến trình đang xử lý ({{ activeJobs.length }})
+      </h2>
+      <span class="live-tag">Trực tiếp</span>
+    </div>
+
+    <!-- Empty State for Active Jobs -->
+    <div *ngIf="activeJobs.length === 0 && !isLoading" class="empty-card">
+      <p class="empty-title">Không có tiến trình nào đang chạy ngầm</p>
+      <p class="empty-description">Các tệp CSV bạn tải lên sẽ tự động chạy ngầm ở đây để không gián đoạn thao tác của bạn.</p>
+    </div>
+
+    <!-- Active Job Cards Stack -->
+    <div *ngFor="let job of activeJobs" class="job-item-card active-job-border">
+      <div class="job-item-header">
+        <div class="file-details">
+          <span class="file-type-badge">CSV</span>
+          <div>
+            <h3 class="job-file-name">{{ job.file?.originalFilename || 'Tệp dữ liệu CSV' }}</h3>
+            <div class="file-meta-text">
+              <span>{{ formatBytes(job.file?.fileSizeBytes || 0) }}</span>
+              <span class="meta-divider">•</span>
+              <span>Tạo lúc {{ job.createdAt | date:'HH:mm:ss dd/MM' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="job-status-pill badge-processing">
+          {{ job.status === 'CANCEL_REQUESTED' ? 'Đang hủy tiến trình...' : 'Đang xử lý ngầm' }}
+        </div>
+      </div>
+
+      <!-- Main Progress Bar -->
+      <div class="progress-section">
+        <div class="progress-labels">
+          <span class="current-stage-title">Giai đoạn: {{ getStageLabel(job.currentStage) }}</span>
+          <span class="percentage-label">{{ job.progressPct }}%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" [style.width.%]="job.progressPct"></div>
+        </div>
+      </div>
+
+      <!-- 6 Granular Pipeline Stages Stepper -->
+      <div class="pipeline-stepper" *ngIf="job.stages">
+        <div class="step-pill" 
+             [class.step-completed]="job.stages['PARSING']?.status === 'COMPLETED'"
+             [class.step-active]="job.currentStage === 'PARSING'">
+          <span class="step-num">1</span> Đọc file
+        </div>
+        <div class="step-pill" 
+             [class.step-completed]="job.stages['PROFILING']?.status === 'COMPLETED'"
+             [class.step-active]="job.currentStage === 'PROFILING'">
+          <span class="step-num">2</span> Phân tích
+        </div>
+        <div class="step-pill" 
+             [class.step-completed]="job.stages['MAPPING']?.status === 'COMPLETED'"
+             [class.step-active]="job.currentStage === 'MAPPING'">
+          <span class="step-num">3</span> Ánh xạ AI
+        </div>
+        <div class="step-pill" 
+             [class.step-completed]="job.stages['IMPORTING']?.status === 'COMPLETED'"
+             [class.step-active]="job.currentStage === 'IMPORTING'">
+          <span class="step-num">4</span> Nhập DB
+        </div>
+        <div class="step-pill" 
+             [class.step-completed]="job.stages['ML_INFERENCE']?.status === 'COMPLETED'"
+             [class.step-active]="job.currentStage === 'ML_INFERENCE'">
+          <span class="step-num">5</span> AI Rủi ro
+        </div>
+        <div class="step-pill" 
+             [class.step-completed]="job.stages['FINALIZING']?.status === 'COMPLETED'"
+             [class.step-active]="job.currentStage === 'FINALIZING'">
+          <span class="step-num">6</span> Hoàn tất
+        </div>
+      </div>
+
+      <!-- Footer Actions -->
+      <div class="job-item-footer">
+        <span class="footer-note">Hệ thống sẽ tự động làm mới bộ nhớ đệm ngay khi xong.</span>
+        <button class="btn-cancel" (click)="onCancelJob(job.jobId)" [disabled]="job.status === 'CANCEL_REQUESTED'">
+          Hủy job
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Completed & History -->
+  <div class="content-section mt-8">
+    <div class="section-header">
+      <h2 class="section-heading">
+        Lịch sử xử lý ngầm ({{ completedJobs.length }})
+      </h2>
+    </div>
+
+    <!-- Empty History State -->
+    <div *ngIf="completedJobs.length === 0 && !isLoading" class="empty-card">
+      <p class="empty-title">Chưa có lịch sử công việc</p>
+      <p class="empty-description">Các công việc đã hoàn thành hoặc dừng lại sẽ được ghi nhận tại đây.</p>
+    </div>
+
+    <!-- History Cards Stack -->
+    <div *ngFor="let job of completedJobs" class="job-item-card history-card"
+         [class.card-completed]="job.status === 'COMPLETED'"
+         [class.card-failed]="job.status === 'FAILED'"
+         [class.card-cancelled]="job.status === 'CANCELLED'">
+      <div class="job-item-header">
+        <div class="file-details">
+          <span class="file-type-badge gray-badge">CSV</span>
+          <div>
+            <h3 class="job-file-name">{{ job.file?.originalFilename || 'Tệp dữ liệu CSV' }}</h3>
+            <div class="file-meta-text">
+              <span>{{ formatBytes(job.file?.fileSizeBytes || 0) }}</span>
+              <span class="meta-divider" *ngIf="job.resultSummary?.rowsValid">•</span>
+              <span *ngIf="job.resultSummary?.rowsValid" class="rows-valid-text">Đã nạp {{ job.resultSummary.rowsValid }} dòng</span>
+              <span class="meta-divider">•</span>
+              <span>Cập nhật {{ (job.completedAt || job.updatedAt) | date:'HH:mm:ss dd/MM' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="history-right-group">
+          <!-- Status Badges -->
+          <span *ngIf="job.status === 'COMPLETED'" class="tag-status tag-success">Hoàn tất</span>
+          <span *ngIf="job.status === 'FAILED'" class="tag-status tag-danger">Thất bại</span>
+          <span *ngIf="job.status === 'CANCELLED'" class="tag-status tag-muted">Đã hủy</span>
+
+          <!-- Actions -->
+          <div class="action-buttons">
+            <a *ngIf="job.status === 'COMPLETED'" routerLink="/app/dashboard" class="btn-action-primary">
+              Xem kết quả
+            </a>
+            <button *ngIf="job.status === 'FAILED' || job.status === 'CANCELLED'" 
+                    class="btn-action-outline" (click)="onRetryJob(job.jobId)">
+              Thử lại
+            </button>
+            <button class="btn-action-delete" (click)="onDeleteJob(job.jobId)" title="Xóa khỏi nhật ký">
+              Xóa
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Failure / Error Banner -->
+      <div *ngIf="job.errorMessage" class="error-notice">
+        <strong>Chi tiết:</strong> {{ job.errorMessage }}
+      </div>
+    </div>
+  </div>
+</div>

@@ -176,7 +176,7 @@ SUPPLYFORGE = {
     },
 }
 
-# Celery Configuration
+# Celery & Redis Configuration
 REDIS_HOST = os.getenv('REDIS_HOST', '127.0.0.1')
 REDIS_PORT = os.getenv('REDIS_PORT', '6379')
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', f'redis://{REDIS_HOST}:{REDIS_PORT}/0')
@@ -186,9 +186,41 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+REDIS_CACHE_URL = os.getenv('REDIS_CACHE_URL', f'redis://{REDIS_HOST}:{REDIS_PORT}/1')
+
+if 'test' in os.sys.argv:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'test-cache',
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_CACHE_URL,
+            'TIMEOUT': 86400,  # 24 hours default TTL
+        }
+    }
+
 if 'test' in os.sys.argv or os.getenv('CELERY_TASK_ALWAYS_EAGER') == 'True':
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
+    CELERY_RESULT_BACKEND = 'cache+memory://'
+    import logging
+    logging.getLogger('django.request').setLevel(logging.CRITICAL)
+
+# Python 3.14 + Django 5 test runner template context copy compatibility fix
+try:
+    from django.template.context import Context
+    def _fixed_context_copy(self):
+        dup = Context()
+        dup.dicts = [d.copy() if hasattr(d, 'copy') else d for d in self.dicts]
+        return dup
+    Context.__copy__ = _fixed_context_copy
+except Exception:
+    pass
 
 
 # Sentry Configuration (Feedback Sensors)

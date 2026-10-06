@@ -817,73 +817,88 @@ def update_user_profile(request, target_user_id: int = None):
         resp["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         return resp
 
-    # 1. Authenticate JWT token
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return JsonResponse({"error": "Thiếu Authorization Bearer token.", "code": "MISSING_TOKEN"}, status=401)
-
-    token = auth_header[7:]
-    payload, err_code = verify_jwt(token, expected_type='access')
-    if not payload:
-        return JsonResponse({"error": "Token hết hạn hoặc không hợp lệ.", "code": err_code or "INVALID_TOKEN"}, status=401)
-
-    auth_user_id = payload.get("user_id")
     try:
-        requester_user = User.objects.get(id=auth_user_id)
-    except User.DoesNotExist:
-        return JsonResponse({"error": "Tài khoản người dùng không tồn tại.", "code": "USER_NOT_FOUND"}, status=404)
+        # 1. Authenticate JWT token
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return JsonResponse({"error": "Thiếu Authorization Bearer token.", "code": "MISSING_TOKEN"}, status=401)
 
-    # 2. SEC-AUTHZ-001: Determine target user and enforce object-level authorization
-    body = json.loads(request.body) if request.body else {}
-    body_user_id = body.get("user_id") or body.get("target_user_id")
+        token = auth_header[7:]
+        payload, err_code = verify_jwt(token, expected_type='access')
+        if not payload:
+            return JsonResponse({"error": "Token hết hạn hoặc không hợp lệ.", "code": err_code or "INVALID_TOKEN"}, status=401)
 
-    # If target_user_id passed in URL or body
-    raw_target_id = target_user_id or body_user_id or auth_user_id
-    if isinstance(raw_target_id, str) and raw_target_id.startswith("u_"):
-        effective_target_id = int(raw_target_id[2:])
-    else:
-        effective_target_id = int(raw_target_id)
+        auth_user_id = payload.get("user_id")
+        try:
+            requester_user = User.objects.get(id=auth_user_id)
+        except User.DoesNotExist:
+            return JsonResponse({"error": "Tài khoản người dùng không tồn tại.", "code": "USER_NOT_FOUND"}, status=404)
 
-    # SEC-AUTHZ-001 Object Permission Check:
-    # Non-admin users CANNOT modify other users' profiles (IDOR prevention)
-    if effective_target_id != requester_user.id and requester_user.role not in [User.ROLE_OWNER, User.ROLE_ADMIN]:
-        return JsonResponse({
-            "error": "Bạn không có quyền chỉnh sửa tài khoản của người dùng khác.",
-            "code": "FORBIDDEN_OBJECT_ACCESS"
-        }, status=403)
+        body = {}
+        if hasattr(request, 'data') and isinstance(request.data, dict) and request.data:
+            body = request.data
+        elif getattr(request, 'POST', None):
+            body = request.POST.dict()
 
-    try:
-        target_user = User.objects.get(id=effective_target_id)
-    except User.DoesNotExist:
-        return JsonResponse({"error": "Không tìm thấy người dùng cần chỉnh sửa.", "code": "TARGET_USER_NOT_FOUND"}, status=404)
+        if not body and request.body:
+            try:
+                body = json.loads(request.body.decode('utf-8'))
+            except Exception:
+                body = {}
 
-    # 3. Privilege Escalation Prevention:
-    # Regular users CANNOT elevate their own role to ADMIN or OWNER
-    requested_role = body.get("role")
-    if requested_role and requested_role != target_user.role:
-        if requester_user.role not in [User.ROLE_OWNER, User.ROLE_ADMIN]:
+        body_user_id = body.get("user_id") or body.get("target_user_id")
+
+        # If target_user_id passed in URL or body
+        raw_target_id = target_user_id or body_user_id or auth_user_id
+        if isinstance(raw_target_id, str) and raw_target_id.startswith("u_"):
+            effective_target_id = int(raw_target_id[2:])
+        else:
+            effective_target_id = int(raw_target_id)
+
+        # SEC-AUTHZ-001 Object Permission Check (Strict IDOR Prevention):
+        is_admin = getattr(requester_user, 'is_superuser', False) or getattr(requester_user, 'role', '') in ['SUPERADMIN', 'ADMIN', User.ROLE_ADMIN]
+        if effective_target_id != requester_user.id and not is_admin:
             return JsonResponse({
-                "error": "Bạn không có quyền thay đổi vai trò hoặc phân quyền tài khoản.",
-                "code": "PRIVILEGE_ESCALATION_DENIED"
+                "error": "Bạn không có quyền chỉnh sửa tài khoản của người dùng khác.",
+                "code": "FORBIDDEN_OBJECT_ACCESS"
             }, status=403)
-        target_user.role = requested_role
 
-    # Update allowed fields
-    if "display_name" in body or "name" in body:
-        target_user.display_name = body.get("display_name") or body.get("name")
-    if "phone" in body:
-        target_user.phone = body.get("phone")
+        try:
+            target_user = User.objects.get(id=effective_target_id)
+        except User.DoesNotExist:
+            return JsonResponse({"error": "Không tìm thấy người dùng cần chỉnh sửa.", "code": "TARGET_USER_NOT_FOUND"}, status=404)
 
-    target_user.save()
+        # 3. Privilege Escalation Prevention:
+        requested_role = body.get("role")
+        if requested_role and requested_role != target_user.role:
+            if requester_user.role not in [User.ROLE_OWNER, User.ROLE_ADMIN]:
+                return JsonResponse({
+                    "error": "Bạn không có quyền thay đổi vai trò hoặc phân quyền tài khoản.",
+                    "code": "PRIVILEGE_ESCALATION_DENIED"
+                }, status=403)
+            target_user.role = requested_role
 
-    return JsonResponse({
-        "message": "Cập nhật thông tin tài khoản thành công.",
-        "user": serialize_user_profile(target_user)
-    })
+        # Update allowed fields
+        if "display_name" in body or "name" in body:
+            target_user.display_name = body.get("display_name") or body.get("name")
+        if "phone" in body:
+            target_user.phone = body.get("phone")
+
+        target_user.save()
+
+        return JsonResponse({
+            "message": "Cập nhật thông tin tài khoản thành công.",
+            "user": serialize_user_profile(target_user)
+        })
+    except Exception as exc:
+        import traceback
+        print(f"UPDATE_USER_PROFILE ERROR: {exc}\n{traceback.format_exc()}")
+        logger.error(f"[update_user_profile Exception]: {exc}")
+        return JsonResponse({"error": str(exc), "code": "INTERNAL_SERVER_ERROR"}, status=500)
 
 
 @csrf_exempt
-@require_http_methods(["PUT", "PATCH", "OPTIONS"])
+@require_http_methods(["POST", "PUT", "PATCH", "OPTIONS"])
 def update_me_profile(request):
     """
     PUT/PATCH /api/v1/auth/me/profile & /api/v1/me/profile

@@ -197,6 +197,19 @@ urlpatterns = [
 
     # ── Module 01 DAT-10 Data Quality Report UI & Readiness Guard ──
     path('api/v1/ingestion/sessions/<uuid:session_id>/generate-quality-report', views.generate_quality_report, name='generate_quality_report_v1'),
+    # ── Background Job Queue (Release 1: Queue v1.0) ──
+    path('api/v2/ingestion/upload', views.enqueue_upload_job, name='enqueue_upload_job'),
+    path('api/v2/jobs', views.list_jobs, name='list_jobs_no_slash'),
+    path('api/v2/jobs/', views.list_jobs, name='list_jobs'),
+    path('api/v2/jobs/<str:job_id>/status', views.get_job_status, name='get_job_status'),
+    path('api/v2/jobs/<str:job_id>/cancel', views.cancel_job, name='cancel_job'),
+    path('api/v2/jobs/<str:job_id>/retry', views.retry_job, name='retry_job'),
+    path('api/v2/jobs/<str:job_id>', views.delete_job, name='delete_job'),
+
+    # ── High-Speed Query & Redis Cache APIs (QUERY Layer) ──
+    path('api/v2/query/dashboard-summary', views.get_cached_dashboard_summary, name='get_cached_dashboard_summary'),
+    path('api/v2/query/cache-refresh', views.refresh_workspace_cache, name='refresh_workspace_cache'),
+
     path('api/v2/ingestion/sessions/<uuid:session_id>/generate-quality-report', views.generate_quality_report, name='generate_quality_report'),
     path('api/v1/ingestion/sessions/<uuid:session_id>/quality-dashboard', views.get_quality_dashboard, name='get_quality_dashboard_v1'),
     path('api/v2/ingestion/sessions/<uuid:session_id>/quality-dashboard', views.get_quality_dashboard, name='get_quality_dashboard'),

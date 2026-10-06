@@ -197,6 +197,21 @@ export class ApiService {
     });
   }
 
+  enqueueUploadJob(file: File, workspaceId: number = 1): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('workspaceId', workspaceId.toString());
+    return this.http.post(`${this.apiUrl}/api/v2/ingestion/upload`, formData);
+  }
+
+  getJobsList(workspaceId: number = 1): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v2/jobs/?workspaceId=${workspaceId}`);
+  }
+
+  getExecutiveDashboardSummaryCached(workspaceId: number = 1): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v2/query/dashboard-summary?workspaceId=${workspaceId}`);
+  }
+
   completeGooglePhone(tempUserId: string, phone: string, picture = ''): Observable<any> {
     return this.http.post(`${this.apiUrl}/api/auth/google/complete-phone`, {
       tempUserId,

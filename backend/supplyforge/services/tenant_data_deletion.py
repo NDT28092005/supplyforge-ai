@@ -61,7 +61,7 @@ class TenantDataDeletionService:
         counts['1_raw_data_files_on_disk'] = file_count
 
         # 2. Processed Data (ArchivedDataSet & DataSource)
-        datasets = ArchivedDataSet.objects.all()
+        datasets = ArchivedDataSet.objects.filter(Q(user_id=ws_str) | Q(user_id=user_str) | Q(user_id=str(workspace_id)))
         dataset_count = datasets.count()
         datasets.delete()
         counts['2_processed_datasets'] = dataset_count

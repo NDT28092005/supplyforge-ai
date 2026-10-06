@@ -3,7 +3,8 @@
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 1. TIÊU ĐỀ TRANG                                                   -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  <div
+    class="bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div class="space-y-1">
       <h1 class="font-bold text-2xl sm:text-3xl text-slate-900 tracking-tight">
         Khuyến Nghị Chiết Khấu & Giải Phóng Vốn Tồn
@@ -14,10 +15,6 @@
     </div>
 
     <div class="flex items-center gap-3 shrink-0">
-      <button (click)="toggleCopilot()"
-        class="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl transition-all cursor-pointer active:scale-95 flex items-center gap-1.5">
-        💬 Trợ Lý AI
-      </button>
       <button (click)="openCreatePlanModal()"
         class="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl transition-all cursor-pointer active:scale-95">
         + Tạo Kế Hoạch Xả Hàng
@@ -115,7 +112,8 @@
       </div>
       <div class="p-3 rounded-xl border border-slate-200 flex justify-between items-center bg-slate-50/50">
         <span class="text-slate-600 font-semibold">Chi phí chiết khấu chấp nhận</span>
-        <span class="font-mono font-bold text-slate-900 text-sm">{{ formatCurrency(totalCapitalExposure - totalExpectedRecovery) }}</span>
+        <span class="font-mono font-bold text-slate-900 text-sm">{{ formatCurrency(totalCapitalExposure -
+          totalExpectedRecovery) }}</span>
       </div>
     </div>
   </div>
@@ -223,13 +221,13 @@
             </td>
 
             <td class="py-3.5 px-4 text-center whitespace-nowrap">
-              <span class="inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold border"
-                [ngClass]="{
+              <span class="inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold border" [ngClass]="{
                   'bg-red-50 text-red-700 border-red-200': item.risk.class === 'HIGH_RISK' || item.risk.class === 'CRITICAL',
                   'bg-amber-50 text-amber-700 border-amber-200': item.risk.class === 'MEDIUM_RISK',
                   'bg-emerald-50 text-emerald-700 border-emerald-200': item.risk.class === 'LOW_RISK'
                 }">
-                {{ item.risk.class === 'HIGH_RISK' || item.risk.class === 'CRITICAL' ? 'Rủi ro cao' : (item.risk.class === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'An toàn') }}
+                {{ item.risk.class === 'HIGH_RISK' || item.risk.class === 'CRITICAL' ? 'Rủi ro cao' : (item.risk.class
+                === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'An toàn') }}
               </span>
             </td>
 
@@ -241,7 +239,8 @@
               <span class="font-medium text-slate-800">
                 {{ translateAction(item.decision.action) }}
                 <ng-container *ngIf="item.decision.discount_rate">
-                  <span class="text-slate-500 font-mono font-semibold">(-{{ (item.decision.discount_rate * 100).toFixed(0) }}%)</span>
+                  <span class="text-slate-500 font-mono font-semibold">(-{{ (item.decision.discount_rate *
+                    100).toFixed(0) }}%)</span>
                 </ng-container>
               </span>
             </td>
@@ -251,7 +250,8 @@
             </td>
 
             <td class="py-3.5 px-4 text-center whitespace-nowrap">
-              <span class="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-slate-200 bg-slate-50 text-slate-700">
+              <span
+                class="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-slate-200 bg-slate-50 text-slate-700">
                 {{ translateStatus(item.decision.status) }}
               </span>
             </td>
@@ -280,7 +280,8 @@
       <div>
         <h3 class="font-bold text-base text-slate-900">Danh Sách Kế Hoạch Xả Hàng & Theo Dõi Hiệu Quả</h3>
         <p class="text-xs text-slate-500">
-          Mọi đề xuất từ AI bắt buộc phải được Chủ cửa hàng xem xét và xác nhận trước khi thực thi. Ghi nhận kết quả thực tế để đánh giá độ chính xác của AI.
+          Mọi đề xuất từ AI bắt buộc phải được Chủ cửa hàng xem xét và xác nhận trước khi thực thi. Ghi nhận kết quả
+          thực tế để đánh giá độ chính xác của AI.
         </p>
       </div>
       <div class="flex items-center gap-2 shrink-0">
@@ -301,7 +302,8 @@
 
     <!-- Thanh Quy Trình Duyệt Bắt Buộc (Strict Confirmation Flow Pipeline) -->
     <div class="bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-2 text-xs">
-      <span class="font-semibold text-slate-700 uppercase text-[11px] tracking-wider block">Quy trình duyệt & thực thi bắt buộc:</span>
+      <span class="font-semibold text-slate-700 uppercase text-[11px] tracking-wider block">Quy trình duyệt & thực thi
+        bắt buộc:</span>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
         <div class="p-2.5 rounded-lg border bg-white border-slate-200 text-slate-800 font-medium">
           <span class="block text-[10px] text-slate-400 uppercase font-mono">Bước 1</span>
@@ -347,7 +349,8 @@
             <!-- Tên Chiến Dịch -->
             <td class="py-3.5 px-4 font-semibold text-slate-900 whitespace-nowrap">
               {{ plan.campaign_name || plan.campaign }}
-              <span class="block text-[10px] font-normal text-slate-500 font-mono">{{ plan.duration_days || plan.duration }} ngày | Từ {{ plan.start_date || plan.start }}</span>
+              <span class="block text-[10px] font-normal text-slate-500 font-mono">{{ plan.duration_days ||
+                plan.duration }} ngày | Từ {{ plan.start_date || plan.start }}</span>
             </td>
 
             <!-- Mã SP -->
@@ -363,13 +366,18 @@
             <!-- Thu Hồi Vốn (Expected vs Actual Recovery) -->
             <td class="py-3.5 px-4 text-right font-mono whitespace-nowrap">
               <div class="font-bold text-slate-900">
-                <span class="text-slate-500 font-normal">Dự kiến:</span> {{ formatCurrency(plan.expected_recovery_value || 12000000) }}
+                <span class="text-slate-500 font-normal">Dự kiến:</span> {{ formatCurrency(plan.expected_recovery_value
+                || 12000000) }}
               </div>
-              <div *ngIf="plan.actual_recovery_value !== null && plan.actual_recovery_value !== undefined" class="text-emerald-700 font-bold">
-                <span class="text-slate-500 font-normal">Thực tế:</span> {{ formatCurrency(plan.actual_recovery_value) }}
-                <span class="text-[10px] font-normal text-emerald-800">({{ plan.recovery_accuracy_pct || 79.2 }}% đạt)</span>
+              <div *ngIf="plan.actual_recovery_value !== null && plan.actual_recovery_value !== undefined"
+                class="text-emerald-700 font-bold">
+                <span class="text-slate-500 font-normal">Thực tế:</span> {{ formatCurrency(plan.actual_recovery_value)
+                }}
+                <span class="text-[10px] font-normal text-emerald-800">({{ plan.recovery_accuracy_pct || 79.2 }}%
+                  đạt)</span>
               </div>
-              <div *ngIf="plan.actual_recovery_value === null || plan.actual_recovery_value === undefined" class="text-slate-400 text-[11px]">
+              <div *ngIf="plan.actual_recovery_value === null || plan.actual_recovery_value === undefined"
+                class="text-slate-400 text-[11px]">
                 Chưa ghi nhận thực tế
               </div>
             </td>
@@ -379,11 +387,14 @@
               <div class="font-bold text-slate-900">
                 <span class="text-slate-500 font-normal">Dự kiến:</span> {{ plan.expected_units_sold || 100 }} SP
               </div>
-              <div *ngIf="plan.actual_units_sold !== null && plan.actual_units_sold !== undefined" class="text-emerald-700 font-bold">
+              <div *ngIf="plan.actual_units_sold !== null && plan.actual_units_sold !== undefined"
+                class="text-emerald-700 font-bold">
                 <span class="text-slate-500 font-normal">Thực tế:</span> {{ plan.actual_units_sold }} SP
-                <span class="text-[10px] font-normal text-emerald-800">({{ plan.units_accuracy_pct || 82.0 }}% đạt)</span>
+                <span class="text-[10px] font-normal text-emerald-800">({{ plan.units_accuracy_pct || 82.0 }}%
+                  đạt)</span>
               </div>
-              <div *ngIf="plan.actual_units_sold === null || plan.actual_units_sold === undefined" class="text-slate-400 text-[11px]">
+              <div *ngIf="plan.actual_units_sold === null || plan.actual_units_sold === undefined"
+                class="text-slate-400 text-[11px]">
                 Chưa ghi nhận
               </div>
             </td>
@@ -416,7 +427,8 @@
               </button>
 
               <!-- Nút ghi nhận kết quả thực tế (ACT-004) -->
-              <button *ngIf="['IN_PROGRESS', 'COMPLETED', 'CONFIRMED'].includes(plan.status)" (click)="openOutcomeModal(plan)"
+              <button *ngIf="['IN_PROGRESS', 'COMPLETED', 'CONFIRMED'].includes(plan.status)"
+                (click)="openOutcomeModal(plan)"
                 class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer">
                 📊 Ghi nhận kết quả
               </button>
@@ -443,7 +455,8 @@
       <!-- Modal Header -->
       <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/50 shrink-0">
         <div>
-          <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Chi tiết phương án giải phóng</span>
+          <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Chi tiết phương án giải
+            phóng</span>
           <h2 class="text-lg font-bold text-slate-900 font-mono mt-0.5">
             Mã sản phẩm: {{ selectedDecision.sku }}
           </h2>
@@ -512,27 +525,32 @@
             <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
               <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
                 <span class="text-[10px] text-slate-500 font-medium block">Sản lượng bán</span>
-                <span class="font-mono font-bold text-slate-900 text-sm block">{{ sim001Result?.expected_units_sold || 0 }} SP</span>
+                <span class="font-mono font-bold text-slate-900 text-sm block">{{ sim001Result?.expected_units_sold || 0
+                  }} SP</span>
               </div>
 
               <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
                 <span class="text-[10px] text-slate-500 font-medium block">Doanh thu</span>
-                <span class="font-mono font-bold text-slate-900 text-sm block">{{ formatCurrency(sim001Result?.expected_revenue || 0) }}</span>
+                <span class="font-mono font-bold text-slate-900 text-sm block">{{
+                  formatCurrency(sim001Result?.expected_revenue || 0) }}</span>
               </div>
 
               <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
                 <span class="text-[10px] text-slate-500 font-medium block">Vốn thu hồi</span>
-                <span class="font-mono font-bold text-emerald-700 text-sm block">{{ formatCurrency(sim001Result?.estimated_recovery || 0) }}</span>
+                <span class="font-mono font-bold text-emerald-700 text-sm block">{{
+                  formatCurrency(sim001Result?.estimated_recovery || 0) }}</span>
               </div>
 
               <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
                 <span class="text-[10px] text-slate-500 font-medium block">Chi phí giảm giá</span>
-                <span class="font-mono font-bold text-slate-900 text-sm block">{{ formatCurrency(sim001Result?.discount_cost || 0) }}</span>
+                <span class="font-mono font-bold text-slate-900 text-sm block">{{
+                  formatCurrency(sim001Result?.discount_cost || 0) }}</span>
               </div>
 
               <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
                 <span class="text-[10px] text-slate-500 font-medium block">Vốn còn đọng</span>
-                <span class="font-mono font-bold text-slate-900 text-sm block">{{ formatCurrency(sim001Result?.remaining_exposure || 0) }}</span>
+                <span class="font-mono font-bold text-slate-900 text-sm block">{{
+                  formatCurrency(sim001Result?.remaining_exposure || 0) }}</span>
               </div>
             </div>
           </div>
@@ -552,7 +570,8 @@
               <thead>
                 <tr class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
                   <th class="py-2.5 px-3">Chỉ số so sánh</th>
-                  <th *ngFor="let header of sim002Result?.comparison_table?.headers" class="py-2.5 px-3 text-center font-bold">
+                  <th *ngFor="let header of sim002Result?.comparison_table?.headers"
+                    class="py-2.5 px-3 text-center font-bold">
                     Giảm {{ header }}
                   </th>
                 </tr>
@@ -560,28 +579,32 @@
               <tbody class="divide-y divide-slate-100 bg-white">
                 <tr>
                   <td class="py-2.5 px-3 text-slate-700 font-medium">Sản lượng bán dự kiến</td>
-                  <td *ngFor="let val of sim002Result?.comparison_table?.metrics?.expected_sales" class="py-2.5 px-3 text-center font-mono font-bold">
+                  <td *ngFor="let val of sim002Result?.comparison_table?.metrics?.expected_sales"
+                    class="py-2.5 px-3 text-center font-mono font-bold">
                     {{ val }} SP
                   </td>
                 </tr>
 
                 <tr>
                   <td class="py-2.5 px-3 text-slate-700 font-medium">Tiền vốn thu hồi dự kiến</td>
-                  <td *ngFor="let val of sim002Result?.comparison_table?.metrics?.recovery" class="py-2.5 px-3 text-center font-mono font-bold text-emerald-700">
+                  <td *ngFor="let val of sim002Result?.comparison_table?.metrics?.recovery"
+                    class="py-2.5 px-3 text-center font-mono font-bold text-emerald-700">
                     {{ formatCurrency(val) }}
                   </td>
                 </tr>
 
                 <tr>
                   <td class="py-2.5 px-3 text-slate-700 font-medium">Vốn đọng còn lại</td>
-                  <td *ngFor="let val of sim002Result?.comparison_table?.metrics?.remaining_capital" class="py-2.5 px-3 text-center font-mono font-bold">
+                  <td *ngFor="let val of sim002Result?.comparison_table?.metrics?.remaining_capital"
+                    class="py-2.5 px-3 text-center font-mono font-bold">
                     {{ formatCurrency(val) }}
                   </td>
                 </tr>
 
                 <tr>
                   <td class="py-2.5 px-3 text-slate-700 font-medium">Ảnh hưởng lợi nhuận</td>
-                  <td *ngFor="let val of sim002Result?.comparison_table?.metrics?.margin_impact" class="py-2.5 px-3 text-center font-mono font-bold">
+                  <td *ngFor="let val of sim002Result?.comparison_table?.metrics?.margin_impact"
+                    class="py-2.5 px-3 text-center font-mono font-bold">
                     {{ val }}
                   </td>
                 </tr>
@@ -751,7 +774,8 @@
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div>
           <h3 class="font-bold text-base text-slate-900">Ghi Nhận Kết Quả Thực Tế Chiến Dịch</h3>
-          <p class="text-xs text-slate-500">Mã kế hoạch: {{ selectedPlanForOutcome?.plan_id }} | Sản phẩm: {{ selectedPlanForOutcome?.sku }}</p>
+          <p class="text-xs text-slate-500">Mã kế hoạch: {{ selectedPlanForOutcome?.plan_id }} | Sản phẩm: {{
+            selectedPlanForOutcome?.sku }}</p>
         </div>
         <button (click)="closeOutcomeModal()" class="text-slate-400 hover:text-slate-600 font-bold">✕</button>
       </div>
@@ -763,7 +787,8 @@
           <div class="grid grid-cols-2 gap-3 items-center">
             <div>
               <span class="text-[11px] text-slate-500 font-medium block">Dự kiến thu hồi:</span>
-              <span class="font-mono font-bold text-slate-900 text-sm">{{ formatCurrency(outcomeExpectedRecovery) }}</span>
+              <span class="font-mono font-bold text-slate-900 text-sm">{{ formatCurrency(outcomeExpectedRecovery)
+                }}</span>
             </div>
             <div>
               <label class="text-[11px] font-semibold text-slate-700 block">Thực tế thu về ví:</label>
@@ -822,96 +847,104 @@
           class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer">
           Hủy bỏ
         </button>
+      </div>
     </div>
-  </div>
 
-  <!-- Modal Trợ Lý AI Phân Tích (COP-001 Context Awareness & COP-002 Grounded Answers) -->
-  <div *ngIf="isCopilotOpen" (click)="toggleCopilot()"
-    class="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/40 backdrop-blur-xs">
-    <div (click)="$event.stopPropagation()"
-      class="bg-white w-full max-w-xl sm:max-w-2xl h-full shadow-2xl flex flex-col border-l border-slate-200">
+    <!-- Modal Trợ Lý AI Phân Tích (COP-001 Context Awareness & COP-002 Grounded Answers) -->
+    <div *ngIf="isCopilotOpen" (click)="toggleCopilot()"
+      class="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/40 backdrop-blur-xs">
+      <div (click)="$event.stopPropagation()"
+        class="bg-white w-full max-w-xl sm:max-w-2xl h-full shadow-2xl flex flex-col border-l border-slate-200">
 
-      <!-- Header Copilot -->
-      <div class="p-5 border-b border-slate-100 bg-slate-900 text-white flex items-center justify-between shrink-0">
-        <div class="space-y-1">
-          <div class="flex items-center gap-2">
-            <h3 class="font-bold text-base tracking-tight">Trợ Lý AI Phân Tích</h3>
-          </div>
-          <!-- COP-001 Context Awareness Badge -->
-          <div class="flex items-center gap-2 text-xs text-slate-300">
-            <span>Ngữ cảnh đang chọn:</span>
-            <span class="font-mono font-bold bg-white/20 px-2.5 py-0.5 rounded-md text-white border border-white/30">
-              {{ activeCopilotSku }}
-            </span>
-          </div>
-        </div>
-
-        <button (click)="toggleCopilot()" class="text-slate-400 hover:text-white font-bold p-1 text-xl cursor-pointer">✕</button>
-      </div>
-
-      <!-- COP-002 Grounded Notice -->
-      <div class="px-5 py-3 bg-slate-50 border-b border-slate-200 text-xs text-slate-600 flex items-center gap-2 shrink-0">
-        <span class="font-bold text-slate-900">5 Chỉ Số Căn Cứ:</span>
-        <span class="text-slate-600 font-medium">Rủi ro • Giải thích • Vốn đọng • Phương án • Mô phỏng</span>
-      </div>
-
-      <!-- Copilot Chat Messages Body -->
-      <div class="flex-1 p-5 overflow-y-auto space-y-4 custom-scrollbar bg-slate-50/50">
-
-        <div *ngFor="let msg of copilotMessages"
-          [ngClass]="msg.sender === 'user' ? 'flex justify-end' : 'flex justify-start'">
-          <div [ngClass]="msg.sender === 'user' ? 'bg-slate-900 text-white rounded-2xl rounded-tr-xs p-4 max-w-[85%] text-sm font-medium leading-relaxed' : 'bg-white border border-slate-200 text-slate-900 rounded-2xl rounded-tl-xs p-5 max-w-[92%] shadow-xs space-y-3 text-sm leading-relaxed'">
-            <div class="whitespace-pre-line leading-relaxed font-normal">
-              {{ msg.text }}
+        <!-- Header Copilot -->
+        <div class="p-5 border-b border-slate-100 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <h3 class="font-bold text-base tracking-tight">Trợ Lý AI Phân Tích</h3>
             </div>
-
-            <!-- Grounded Pillars Tags (COP-002) -->
-            <div *ngIf="msg.sender === 'copilot' && msg.pillars" class="flex flex-wrap gap-1.5 pt-2 border-t border-slate-100">
-              <span *ngFor="let pillar of msg.pillars" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
-                ✓ {{ pillar }}
+            <!-- COP-001 Context Awareness Badge -->
+            <div class="flex items-center gap-2 text-xs text-slate-300">
+              <span>Ngữ cảnh đang chọn:</span>
+              <span class="font-mono font-bold bg-white/20 px-2.5 py-0.5 rounded-md text-white border border-white/30">
+                {{ activeCopilotSku }}
               </span>
             </div>
           </div>
+
+          <button (click)="toggleCopilot()"
+            class="text-slate-400 hover:text-white font-bold p-1 text-xl cursor-pointer">✕</button>
         </div>
 
-        <div *ngIf="isCopilotLoading" class="flex justify-start">
-          <div class="bg-white border border-slate-200 p-4 rounded-2xl text-slate-600 text-xs italic font-medium">
-            Trợ lý AI đang tổng hợp dữ liệu từ 5 chỉ số căn cứ...
+        <!-- COP-002 Grounded Notice -->
+        <div
+          class="px-5 py-3 bg-slate-50 border-b border-slate-200 text-xs text-slate-600 flex items-center gap-2 shrink-0">
+          <span class="font-bold text-slate-900">5 Chỉ Số Căn Cứ:</span>
+          <span class="text-slate-600 font-medium">Rủi ro • Giải thích • Vốn đọng • Phương án • Mô phỏng</span>
+        </div>
+
+        <!-- Copilot Chat Messages Body -->
+        <div class="flex-1 p-5 overflow-y-auto space-y-4 custom-scrollbar bg-slate-50/50">
+
+          <div *ngFor="let msg of copilotMessages"
+            [ngClass]="msg.sender === 'user' ? 'flex justify-end' : 'flex justify-start'">
+            <div
+              [ngClass]="msg.sender === 'user' ? 'bg-slate-900 text-white rounded-2xl rounded-tr-xs p-4 max-w-[85%] text-sm font-medium leading-relaxed' : 'bg-white border border-slate-200 text-slate-900 rounded-2xl rounded-tl-xs p-5 max-w-[92%] shadow-xs space-y-3 text-sm leading-relaxed'">
+              <div class="whitespace-pre-line leading-relaxed font-normal">
+                {{ msg.text }}
+              </div>
+
+              <!-- Grounded Pillars Tags (COP-002) -->
+              <div *ngIf="msg.sender === 'copilot' && msg.pillars"
+                class="flex flex-wrap gap-1.5 pt-2 border-t border-slate-100">
+                <span *ngFor="let pillar of msg.pillars"
+                  class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                  ✓ {{ pillar }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div *ngIf="isCopilotLoading" class="flex justify-start">
+            <div class="bg-white border border-slate-200 p-4 rounded-2xl text-slate-600 text-xs italic font-medium">
+              Trợ lý AI đang tổng hợp dữ liệu từ 5 chỉ số căn cứ...
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Contextual Quick Question Chips (COP-001) -->
+        <div class="p-4 border-t border-slate-100 bg-white space-y-2 shrink-0">
+          <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Gợi ý câu hỏi cho {{
+            activeCopilotSku }}:</span>
+          <div class="flex flex-wrap gap-2">
+            <button
+              (click)="sendQuickCopilotQuestion('Tại sao AI khuyến nghị phương án xả kho cho mã ' + activeCopilotSku + '?')"
+              class="px-3 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 transition-all cursor-pointer">
+              Tại sao AI khuyến nghị xả kho cho {{ activeCopilotSku }}?
+            </button>
+            <button
+              (click)="sendQuickCopilotQuestion('Số vốn đọng & số tiền thu hồi dự kiến của ' + activeCopilotSku + ' là bao nhiêu?')"
+              class="px-3 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 transition-all cursor-pointer">
+              Vốn đọng &amp; tiền thu hồi dự kiến?
+            </button>
+            <button (click)="sendQuickCopilotQuestion('Mô phỏng kịch bản giảm giá khác cho mã ' + activeCopilotSku)"
+              class="px-3 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 transition-all cursor-pointer">
+              Mô phỏng kịch bản giảm giá khác
+            </button>
           </div>
         </div>
 
-      </div>
-
-      <!-- Contextual Quick Question Chips (COP-001) -->
-      <div class="p-4 border-t border-slate-100 bg-white space-y-2 shrink-0">
-        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Gợi ý câu hỏi cho {{ activeCopilotSku }}:</span>
-        <div class="flex flex-wrap gap-2">
-          <button (click)="sendQuickCopilotQuestion('Tại sao AI khuyến nghị phương án xả kho cho mã ' + activeCopilotSku + '?')"
-            class="px-3 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 transition-all cursor-pointer">
-            Tại sao AI khuyến nghị xả kho cho {{ activeCopilotSku }}?
-          </button>
-          <button (click)="sendQuickCopilotQuestion('Số vốn đọng & số tiền thu hồi dự kiến của ' + activeCopilotSku + ' là bao nhiêu?')"
-            class="px-3 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 transition-all cursor-pointer">
-            Vốn đọng &amp; tiền thu hồi dự kiến?
-          </button>
-          <button (click)="sendQuickCopilotQuestion('Mô phỏng kịch bản giảm giá khác cho mã ' + activeCopilotSku)"
-            class="px-3 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 transition-all cursor-pointer">
-            Mô phỏng kịch bản giảm giá khác
+        <!-- Input Box -->
+        <div class="p-4 border-t border-slate-200 bg-white flex items-center gap-2.5 shrink-0">
+          <input type="text" [(ngModel)]="copilotQuery" (keyup.enter)="sendCopilotMessage()"
+            [placeholder]="'Hỏi Trợ lý AI về mã sản phẩm ' + activeCopilotSku + '...'"
+            class="flex-1 bg-slate-50 border border-slate-200 text-slate-900 text-xs font-medium rounded-xl px-4 py-3 outline-none focus:border-slate-400" />
+          <button (click)="sendCopilotMessage()" [disabled]="!copilotQuery || isCopilotLoading"
+            class="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-5 py-3 rounded-xl transition-all cursor-pointer disabled:opacity-40 shrink-0">
+            Gửi
           </button>
         </div>
       </div>
-
-      <!-- Input Box -->
-      <div class="p-4 border-t border-slate-200 bg-white flex items-center gap-2.5 shrink-0">
-        <input type="text" [(ngModel)]="copilotQuery" (keyup.enter)="sendCopilotMessage()"
-          [placeholder]="'Hỏi Trợ lý AI về mã sản phẩm ' + activeCopilotSku + '...'"
-          class="flex-1 bg-slate-50 border border-slate-200 text-slate-900 text-xs font-medium rounded-xl px-4 py-3 outline-none focus:border-slate-400" />
-        <button (click)="sendCopilotMessage()" [disabled]="!copilotQuery || isCopilotLoading"
-          class="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-5 py-3 rounded-xl transition-all cursor-pointer disabled:opacity-40 shrink-0">
-          Gửi
-        </button>
-      </div>
     </div>
-  </div>
 
-</div>
+  </div>

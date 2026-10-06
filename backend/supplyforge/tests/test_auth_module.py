@@ -15,6 +15,8 @@ class AuthModuleTestCase(TestCase):
         self.client = Client()
         self.valid_email = "test.user@supplyforge.ai"
         self.valid_password = "SecurePassword123"
+        from supplyforge.services.rate_limiter import RegistrationRateLimiter
+        RegistrationRateLimiter.reset_all()
 
     # ── AUTH-001: REGISTRATION & VALIDATION TESTS ──────────────────────
 

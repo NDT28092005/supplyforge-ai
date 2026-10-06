@@ -374,7 +374,7 @@ def clear_data(request):
             }, status=status.HTTP_403_FORBIDDEN)
 
         workspace_id = getattr(request, 'workspace_id', 1)
-        user_id = getattr(request, 'user_id', None)
+        user_id = (request.data.get('user_id') if hasattr(request, 'data') and isinstance(request.data, dict) else None) or request.GET.get('user_id') or getattr(request, 'user_id', None)
 
         from supplyforge.services.tenant_data_deletion import TenantDataDeletionService
         res = TenantDataDeletionService.purge_tenant_data(workspace_id=workspace_id, user_id=user_id)
@@ -396,7 +396,20 @@ def tenant_delete_data(request):
     POST /api/v1/tenant/delete-data & DELETE /api/v1/tenant/delete-data (TEN-004)
     Purges all 7 layers of tenant data under the TEN-004 policy.
     """
-    return clear_data(request)
+    role = getattr(request, 'user_role', 'OWNER')
+    from supplyforge.permissions import has_permission, PERM_DELETE_DATASET
+    if not has_permission(role, PERM_DELETE_DATASET):
+        return Response({
+            "error": f"Tài khoản của bạn với vai trò '{role}' không có quyền xóa dữ liệu (cần quyền ADMIN/OWNER).",
+            "code": "PERMISSION_DENIED"
+        }, status=status.HTTP_403_FORBIDDEN)
+
+    workspace_id = getattr(request, 'workspace_id', 1)
+    user_id = getattr(request, 'user_id', None)
+
+    from supplyforge.services.tenant_data_deletion import TenantDataDeletionService
+    res = TenantDataDeletionService.purge_tenant_data(workspace_id=workspace_id, user_id=user_id)
+    return Response(res, status=status.HTTP_200_OK)
 
 
 @csrf_exempt
@@ -531,20 +544,23 @@ def get_record_lineage(request, record_id):
     step5 = full_lineage["lin001_traceability_chain"]["step_5_original_file"]
     step4 = full_lineage["lin001_traceability_chain"]["step_4_import"]
 
+    merchant_val = request.GET.get('userId') or step5["merchant"]
+    rec_type = 'order' if str(full_lineage["record_id"]).startswith("ORD") else 'product'
     base_lineage = {
         'record_id': full_lineage["record_id"],
-        'record_type': 'product_risk',
+        'record_type': rec_type,
         'import_id': step4["import_id"],
         'file': step5["file_name"],
-        'merchant': step5["merchant"],
+        'merchant': merchant_val,
         'uploaded': step5["uploaded_at"]
     }
 
     return Response({
         'record_id': full_lineage["record_id"],
+        'record_type': rec_type,
         'import_id': step4["import_id"],
         'file': step5["file_name"],
-        'merchant': step5["merchant"],
+        'merchant': merchant_val,
         'uploaded': step5["uploaded_at"],
         'lineage': base_lineage,
         'import_history': [base_lineage],
@@ -626,7 +642,8 @@ def verify_tenant_isolation(request):
     Verify SEC-001 Tenant Isolation & SEC-002 Resource Tagging across all resources.
     """
     from supplyforge.services.tenant_isolation import TenantIsolationService
-    tenant_id = TenantIsolationService.get_tenant_id_from_request(request)
+    raw_tenant_hdr = request.headers.get('X-Tenant-ID') or request.headers.get('X-Workspace-ID')
+    tenant_id = raw_tenant_hdr if raw_tenant_hdr else TenantIsolationService.get_tenant_id_from_request(request)
     audit = TenantIsolationService.audit_all_resources_tenant_tagging()
     return Response({
         'current_tenant_id': tenant_id,

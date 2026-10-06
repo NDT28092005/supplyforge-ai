@@ -27,6 +27,8 @@ from .copilot_models import (
 from .action_plan import ActionPlanRecord
 from .archived_dataset import ArchivedDataSet
 from .notification import NotificationRecord
+from .background_job import BackgroundJob
+from .mlops import TenantFeatureSnapshot, ModelVersion
 
 __all__ = [
     'User', 'RefreshToken', 'Workspace', 'WorkspaceMember',
@@ -48,6 +50,9 @@ __all__ = [
     'CopilotToolCall', 'CopilotAuditLog',
     'ActionPlanRecord',
     'NotificationRecord',
+    'BackgroundJob',
+    'TenantFeatureSnapshot',
+    'ModelVersion',
 ]
 
 

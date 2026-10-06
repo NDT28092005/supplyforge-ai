@@ -12,6 +12,7 @@ import { ExecutiveDashboardComponent } from './executive-dashboard/executive-das
 import { SlowMovingRiskDashboardComponent } from './slow-moving-risk-dashboard/slow-moving-risk-dashboard.component';
 import { CapitalExposureDashboardComponent } from './capital-exposure-dashboard/capital-exposure-dashboard.component';
 import { DecisionSupportDashboardComponent } from './decision-support-dashboard/decision-support-dashboard.component';
+import { JobQueueComponent } from './job-queue/job-queue.component';
 import { dataReadyGuard } from './core/guards/data-ready.guard';
 
 export const routes: Routes = [
@@ -27,6 +28,7 @@ export const routes: Routes = [
   { path: 'app/import/processing', component: ProcessingScreenComponent, title: 'Đang xử lý — SupplyForge AI' },
   { path: 'app/import/mapping', component: DataMappingConfirmComponent, title: 'Xác nhận cột — SupplyForge AI' },
   { path: 'app/import/profile/:sessionId', component: DatasetProfileDashboardComponent, title: 'Tổng quan Dataset — SupplyForge AI' },
+  { path: 'app/queue', component: JobQueueComponent, title: 'Hàng chờ xử lý ngầm — SupplyForge AI' },
 
   // ── Dashboard Routes ──
   { path: 'app/dashboard', component: ExecutiveDashboardComponent, canActivate: [dataReadyGuard], title: 'Tổng quan — SupplyForge AI' },

@@ -868,6 +868,9 @@ class DynamicFileImportService:
         active_products = list(Product.objects.filter(user_id=user_id).values())
         active_orders = list(Order.objects.filter(user_id=user_id).values())
 
+        from supplyforge.services.tenant_data_deletion import TenantDataDeletionService
+        TenantDataDeletionService.purge_tenant_data(workspace_id=1, user_id=user_id)
+
         if active_products or active_orders:
             ArchivedDataSet.objects.create(
                 user_id=user_id,
@@ -885,9 +888,6 @@ class DynamicFileImportService:
                     ]
                 }
             )
-
-        from supplyforge.services.tenant_data_deletion import TenantDataDeletionService
-        TenantDataDeletionService.purge_tenant_data(workspace_id=1, user_id=user_id)
 
     @staticmethod
     def read_csv_in_chunks(file_path_or_stream, chunk_size=50000):

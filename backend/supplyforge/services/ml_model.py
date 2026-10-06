@@ -1,15 +1,54 @@
+"""
+SupplyForge AI — Hybrid ML Model Pipeline (3-Tier Architecture)
+
+Tier 1: Feature Validation
+    Feature Store lookup → schema validation → dtype validation
+
+Tier 2: Prediction Engine
+    Primary: XGBClassifier + Isotonic Calibration
+    Fallback: Baseline Logistic Sigmoid (original heuristic)
+
+Architecture:
+    Feature Store (offline snapshot)
+        ↓ lookup SKU
+    Feature Schema Gate
+        ↓ validated feature vector
+    Model Compatibility Gate (in ModelLoaderService)
+        ↓
+    XGBoost → Isotonic Calibrator → Risk Threshold
+        ↓ or fallback
+    Baseline Logistic Sigmoid
+        ↓
+    Prediction Result + engine_status metadata
+"""
+
 import math
+import logging
 from datetime import datetime, date, timedelta
 from django.db import connection
-from django.conf import settings
 from supplyforge.models import Product
+from supplyforge.services.model_loader import (
+    ModelLoaderService, FeatureStoreLoader,
+    MLServiceError, FailureType,
+)
+
+logger = logging.getLogger(__name__)
+
 
 class HybridModelPipeline:
     """
     Hybrid Machine Learning Pipeline for SupplyForge AI 2.0.
-    Handles Phase 3 (Data Engineering), Phase 4 (Feature Engineering),
-    and Phase 6 (Machine Learning Prediction).
+
+    3-Tier Inference Architecture:
+      Tier 1 — Feature Validation (Feature Store lookup + schema gate)
+      Tier 2 — Primary Engine (XGBClassifier + Isotonic Calibration) or Fallback (Baseline Logistic)
+
+    Prediction and Explanation fallback are INDEPENDENT.
     """
+
+    # ================================================================
+    # Tier 1: Feature Extraction (Django ORM — operational data)
+    # ================================================================
 
     @staticmethod
     def extract_features(sku_id, workspace_id=1):
@@ -105,68 +144,230 @@ class HybridModelPipeline:
             "sales_trend": round(sales_trend, 2)
         }
 
+    # ================================================================
+    # Tier 2: Prediction Engine — Primary (XGBoost) or Fallback (Baseline)
+    # ================================================================
+
     @staticmethod
     def predict_risk(sku_id, workspace_id=1):
         """
-        Phase 6: Predict Inventory Risk.
-        Evaluates shop maturity and returns calculated probability & version.
-        
-        Maturity Strategy:
-        - If shop has >= 10 active products -> Mature (Shop-specific Model: v2.0.1-shop-<user_id>)
-        - Otherwise -> Onboarding (Global Model: v1.2.0-global)
+        3-Tier Risk Prediction.
+
+        Returns dict with:
+          - risk_probability: float
+          - risk_level: str (CRITICAL/HIGH_RISK/MEDIUM_RISK/LOW_RISK)
+          - decision_confidence: None (computed later by explanation layer)
+          - prediction: {engine, model_version, status, fallback_reason?, calibrated}
+          - features: dict (raw operational features from Django ORM)
+          - feature_vector: np.ndarray or None (canonical 25-feature vector)
+          - feature_completeness: float
+          - base_value: float (for SHAP baseline)
+          - data_provenance: {source, snapshot_date, is_offline_snapshot}
+
+        Returns None if SKU not found at all.
         """
+        # ---- Tier 0: Extract operational features from Django ORM ----
         features = HybridModelPipeline.extract_features(sku_id, workspace_id)
         if not features:
             return None
 
-        # Fetch product metadata to check user/shop
+        # Fetch product metadata for shop maturity check
         product = Product.objects.get(id=sku_id)
-        user_id = product.user_id
 
-        # Determine shop maturity
-        product_count = Product.objects.filter(user_id=user_id).count()
-        is_mature = product_count >= 10
+        # ---- Tier 1: Feature Store Lookup + Validation ----
+        feature_store_result = None
+        feature_vector = None
+        feature_completeness = 0.0
+        data_provenance = {"source": "django_orm", "snapshot_date": None, "is_offline_snapshot": False}
 
-        if is_mature:
-            model_version = f"v2.0.1-shop-{user_id}"
-        else:
-            model_version = "v1.2.0-global"
+        try:
+            feature_store_result = ModelLoaderService.lookup_sku_features(str(sku_id))
+            if feature_store_result is not None:
+                feature_vector = feature_store_result["feature_vector"]
+                feature_completeness = feature_store_result["feature_completeness"]
+                data_provenance = {
+                    "source": "gold_feature_store",
+                    "snapshot_date": feature_store_result["snapshot_date"],
+                    "is_offline_snapshot": feature_store_result["is_offline_snapshot"],
+                }
+        except MLServiceError as e:
+            if e.is_fallback_eligible:
+                logger.warning(
+                    "Feature Store lookup failed for SKU %s [%s]: %s",
+                    sku_id, e.failure_type, e.message
+                )
+            else:
+                raise  # SYSTEM_ERROR — propagate
 
-        # Math prediction based on a generalized logistic/additive formulation.
-        # This acts as our pre-trained surrogate model.
-        # Base Log-Odds for inventory risk is around -0.62 (probability = 0.35, the baseline risk)
+        # ---- Tier 2: Prediction ----
+        prediction_meta = {}
+        risk_probability = None
+        risk_level = None
+        base_value = None
+
+        # Attempt Primary Engine (XGBoost + Isotonic Calibration)
+        if feature_vector is not None:
+            try:
+                model = ModelLoaderService.get_model()
+                le = ModelLoaderService.get_label_encoder()
+                manifest = ModelLoaderService.get_manifest()
+
+                # Predict probabilities
+                probs = model.predict_proba(feature_vector)
+                classes = list(model.classes_)
+                critical_idx = classes.index(le.transform(["CRITICAL"])[0])
+                high_idx = classes.index(le.transform(["HIGH_RISK"])[0])
+
+                # P(high risk) = P(CRITICAL) + P(HIGH_RISK)
+                raw_risk_prob = float(probs[0][critical_idx] + probs[0][high_idx])
+
+                # Isotonic Calibration
+                calibrator = ModelLoaderService.get_calibrator()
+                calibrated = False
+                if calibrator is not None:
+                    import numpy as np
+                    risk_probability = float(
+                        calibrator.predict(np.array([raw_risk_prob]))[0]
+                    )
+                    calibrated = True
+                else:
+                    risk_probability = raw_risk_prob
+
+                risk_probability = max(0.0, min(1.0, risk_probability))
+
+                # Risk level from classifier
+                pred_enc = model.predict(feature_vector)
+                risk_level = str(le.inverse_transform(pred_enc)[0])
+
+                # Base value for SHAP (average predicted probability across training data)
+                rc_meta = manifest.get("risk_classifier", {})
+                base_value = 0.88  # from training: 88.09% positive rate
+
+                prediction_meta = {
+                    "engine": "XGBOOST",
+                    "model_version": f"risk-xgb-v{rc_meta.get('model_version', 'unknown')}",
+                    "status": "PRIMARY",
+                    "calibrated": calibrated,
+                    "calibration_method": "isotonic" if calibrated else None,
+                    "raw_probability": round(raw_risk_prob, 4),
+                }
+
+                logger.debug(
+                    "Primary prediction for SKU %s: risk=%.4f (raw=%.4f), level=%s",
+                    sku_id, risk_probability, raw_risk_prob, risk_level
+                )
+
+            except MLServiceError as e:
+                if e.is_fallback_eligible:
+                    logger.warning(
+                        "Primary prediction failed for SKU %s [%s]: %s — falling back to baseline",
+                        sku_id, e.failure_type, e.message
+                    )
+                    # Fall through to baseline below
+                    risk_probability = None
+                else:
+                    # SYSTEM_ERROR — do NOT silently fallback
+                    logger.error(
+                        "Non-recoverable ML error for SKU %s [%s]: %s",
+                        sku_id, e.failure_type, e.message
+                    )
+                    raise
+            except Exception as e:
+                # Unexpected error — NEVER silently fallback
+                logger.critical(
+                    "Unexpected error in primary prediction for SKU %s: %s",
+                    sku_id, e, exc_info=True
+                )
+                raise
+
+        # ---- Tier 2 Fallback: Baseline Logistic Sigmoid ----
+        if risk_probability is None:
+            risk_probability, risk_level = HybridModelPipeline._baseline_predict(features)
+            base_value = 0.35  # baseline model's prior
+
+            # Determine fallback reason
+            if feature_vector is None:
+                if feature_store_result is None:
+                    fallback_reason = FailureType.FEATURE_INVALID
+                else:
+                    fallback_reason = FailureType.FEATURE_INVALID
+            elif ModelLoaderService.get_load_error():
+                fallback_reason = ModelLoaderService.get_load_error().failure_type
+            else:
+                fallback_reason = FailureType.PREDICTION_ERROR
+
+            prediction_meta = {
+                "engine": "BASELINE_LOGISTIC",
+                "model_version": "baseline-v1.0",
+                "status": "FALLBACK",
+                "fallback_reason": fallback_reason,
+                "calibrated": False,
+            }
+
+            logger.info(
+                "Baseline prediction for SKU %s: risk=%.4f, level=%s, reason=%s",
+                sku_id, risk_probability, risk_level, fallback_reason
+            )
+
+        return {
+            "risk_probability": round(risk_probability, 4),
+            "risk_level": risk_level,
+            "decision_confidence": None,  # Computed by ShapExplanationService
+            "base_value": base_value,
+            "prediction": prediction_meta,
+            "features": features,
+            "feature_vector": feature_vector,
+            "feature_completeness": feature_completeness,
+            "data_provenance": data_provenance,
+        }
+
+    # ================================================================
+    # Baseline Engine (Logistic Sigmoid — original heuristic)
+    # ================================================================
+
+    @staticmethod
+    def _baseline_predict(features):
+        """
+        Original logistic sigmoid heuristic model.
+        Used as fallback when XGBoost is unavailable.
+
+        Returns (risk_probability, risk_level).
+        """
+        # Base Log-Odds for inventory risk is around -0.62 (probability = 0.35)
         base_log_odds = -0.62
-        
-        # Coefficients
-        coef_coverage = -0.01   # high coverage = lower stockout risk
-        coef_trend = 0.8        # increasing trend = higher stockout risk
-        coef_delay = 2.5        # supplier delays = higher risk
-        coef_expiry = -0.05      # low expiration days left = higher risk
-        
+
+        # Coefficients (heuristic)
+        coef_coverage = -0.01
+        coef_trend = 0.8
+        coef_delay = 2.5
+        coef_expiry = -0.05
+
         # Calculate contribution in log-odds space
         coverage_contrib = coef_coverage * (features["inventory_coverage_days"] - 30.0)
-        # Cap coverage contrib to prevent extreme values
         coverage_contrib = max(-2.0, min(2.0, coverage_contrib))
-        
+
         trend_contrib = coef_trend * (features["sales_trend"] - 1.0)
         delay_contrib = coef_delay * (features["delay_rate"] - 0.05)
-        
+
         if features["expiration_days_left"] < 999.0:
             expiry_contrib = coef_expiry * (features["expiration_days_left"] - 30.0)
-            expiry_contrib = max(0.0, expiry_contrib) # Only add risk if expiring soon
+            expiry_contrib = max(0.0, expiry_contrib)
         else:
             expiry_contrib = 0.0
 
-        # Sum contributions in log-odds
-        log_odds = base_log_odds + coverage_contrib + trend_contrib + delay_contrib + expiry_contrib
-        
         # Sigmoid activation
+        log_odds = base_log_odds + coverage_contrib + trend_contrib + delay_contrib + expiry_contrib
         probability = 1.0 / (1.0 + math.exp(-log_odds))
         probability = max(0.05, min(0.95, probability))
 
-        return {
-            "risk_probability": round(probability, 2),
-            "base_value": 0.35,
-            "model_version": model_version,
-            "features": features
-        }
+        # Determine risk level from probability
+        if probability >= 0.80:
+            risk_level = "CRITICAL"
+        elif probability >= 0.60:
+            risk_level = "HIGH_RISK"
+        elif probability >= 0.40:
+            risk_level = "MEDIUM_RISK"
+        else:
+            risk_level = "LOW_RISK"
+
+        return probability, risk_level

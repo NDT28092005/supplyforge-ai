@@ -94,7 +94,7 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
       next: (res: any) => {
         if (res && res.analysis_id) {
           const aid = res.analysis_id;
-          this.apiService.listCapitalExposureItems(aid, { limit: 100 }).subscribe({
+          this.apiService.listCapitalExposureItems(aid, { limit: 500 }).subscribe({
             next: (itemsRes: any) => {
               const realItems = itemsRes.items || [];
               if (realItems.length > 0) {
@@ -140,7 +140,10 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
       const rawClass = i.slow_moving_risk_class || i.risk_class || 'LOW_RISK';
       const riskClass: 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK' = (rawClass === 'CRITICAL' || rawClass === 'HIGH_RISK') ? 'HIGH_RISK' : (rawClass === 'MEDIUM_RISK' ? 'MEDIUM_RISK' : 'LOW_RISK');
       const dsls = i.aging_days !== undefined ? i.aging_days : (i.dsls || 0);
-      const probVal = i.risk_probability !== undefined ? i.risk_probability : (riskClass === 'HIGH_RISK' ? 0.95 : (riskClass === 'MEDIUM_RISK' ? 0.65 : 0.15));
+      const rawProb = i.risk_probability ?? (i.risk_score ? (i.risk_score > 1 ? i.risk_score / 100 : i.risk_score) : undefined);
+      const probVal = rawProb !== undefined && rawProb !== null
+        ? Number(rawProb)
+        : (riskClass === 'HIGH_RISK' ? 0.92 : (riskClass === 'MEDIUM_RISK' ? 0.55 : 0.08));
       const invVal = i.inventory_value || i.capital_exposure || i.capital_locked || 0;
       const oppCostVal = i.estimated_opportunity_cost || (invVal * 0.12 / 365 * Math.max(1, dsls));
 
@@ -150,6 +153,8 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
       else if (dsls > 30) agingBucketStr = '31–60 ngày';
 
       const prioMultiplier = riskClass === 'HIGH_RISK' ? 0.9 : (riskClass === 'MEDIUM_RISK' ? 0.5 : 0.0);
+
+      const rawZeroRate = i.zero_rate_90d ?? i.zero_sales_rate ?? (dsls > 90 ? 0.92 : (dsls > 30 ? 0.55 : 0.12));
 
       return {
         sku: i.sku || i.canonical_sku_id || 'SKU_UNKNOWN',
@@ -165,7 +170,7 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
         agingBucket: agingBucketStr,
         sales30d: i.sold_30d || 0,
         sales90d: i.sold_90d || 0,
-        zeroRatePct: `${((i.zero_rate_90d || (dsls > 90 ? 0.92 : (dsls > 30 ? 0.55 : 0.12))) * 100).toFixed(1)}%`,
+        zeroRatePct: `${(rawZeroRate * 100).toFixed(1)}%`,
         demandProb: 0.1,
         demandPattern: dsls > 90 ? 'Bán lắt nhắt' : 'Bán không đều',
         shapFactors: [

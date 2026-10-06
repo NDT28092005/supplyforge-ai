@@ -72,7 +72,7 @@ class CSVFormatValidator:
     # Core domain columns required for SupplyForge AI ingestion
     DEFAULT_REQUIRED_KEYWORD_GROUPS = [
         # At least one SKU / product identifier
-        ["sku", "item_code", "product_id", "product_code", "mã", "ma_sp", "barcode", "model_id", "item_id", "tên", "product", "name"],
+        ["sku", "item_code", "product_id", "product_code", "mã", "ma_sp", "barcode", "model_id", "item_id", "tên", "product", "name", "item_sku", "product_name"],
     ]
 
     # Standard expected columns for SupplyForge AI

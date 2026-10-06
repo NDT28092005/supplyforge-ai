@@ -107,6 +107,28 @@ class TenantIsolationMiddleware:
 
         set_current_tenant_id(workspace_id)
 
+        # TEN-001 & TEN-002: Workspace URL Level Access Control (Tenant Isolation)
+        import re
+        ws_match = re.search(r'/workspaces?/(\d+)', request.path_info)
+        if ws_match:
+            target_ws_id = int(ws_match.group(1))
+            if not user_id:
+                from django.http import JsonResponse
+                return JsonResponse({
+                    "error": "Yêu cầu chưa được xác thực (Authorization header missing or invalid).",
+                    "code": "UNAUTHENTICATED"
+                }, status=401)
+            else:
+                from supplyforge.models import WorkspaceMember, Workspace
+                is_member = WorkspaceMember.objects.filter(workspace_id=target_ws_id, user_id=user_id).exists()
+                is_owner = Workspace.objects.filter(id=target_ws_id, owner_id=user_id).exists()
+                if not (is_member or is_owner):
+                    from django.http import JsonResponse
+                    return JsonResponse({
+                        "error": f"Không có quyền truy cập workspace {target_ws_id} (Tenant Isolation).",
+                        "code": "WORKSPACE_ACCESS_DENIED"
+                    }, status=403)
+
 
         try:
             response = self.get_response(request)

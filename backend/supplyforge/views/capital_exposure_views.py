@@ -47,14 +47,14 @@ def create_capital_exposure_analysis(request):
     aid = data.get("analysis_id")
 
     try:
-        from supplyforge.models import Product, SlowMovingRiskAssessment, Order
+        from supplyforge.models import IngestionSession, SlowMovingRiskAssessment, Order, Product
         from datetime import datetime, timedelta
         from django.db.models import Max
 
-        # Use real product data from database
-        products = Product.objects.all()
+        latest_session = IngestionSession.objects.filter(risk_assessments__isnull=False).order_by('-created_at').first()
+        assessments_qs = SlowMovingRiskAssessment.objects.filter(session=latest_session) if latest_session else SlowMovingRiskAssessment.objects.all()
 
-        if products.exists():
+        if assessments_qs.exists():
             # Determine reference date from actual data
             max_order_dt = Order.objects.aggregate(Max('created_at'))['created_at__max']
             ref_date = max_order_dt if max_order_dt else datetime.now()
@@ -62,81 +62,35 @@ def create_capital_exposure_analysis(request):
                 ref_date = ref_date.replace(tzinfo=None)
 
             product_rows = []
-            for p in products:
-                sku_val = p.item_sku or p.third_party_id or f"SKU_{p.id}"
-                cost = float(p.cost or p.price or 50000)
-                stock = int(p.stock or 0)
-
-                # Calculate DSLS from last order
-                from supplyforge.models import OrderItem
-                from django.db.models import Q
-                match_q = Q(sku=sku_val)
-                if p.item_id:
-                    match_q = match_q | Q(item_id=p.item_id)
-                last_sale = OrderItem.objects.filter(match_q).aggregate(
-                    last_date=Max('order__created_at')
-                )['last_date']
-                if last_sale:
-                    if hasattr(last_sale, 'tzinfo') and last_sale.tzinfo is not None:
-                        last_sale = last_sale.replace(tzinfo=None)
-                    dsls = max(0, (ref_date - last_sale).days)
-                else:
-                    dsls = 999
-
-                last_sale_str = last_sale.strftime('%Y-%m-%d') if last_sale else None
+            risk_assessments = []
+            for a in assessments_qs:
+                ev = a.evidence if isinstance(a.evidence, dict) else {}
+                stock = int(ev.get('stock_quantity') or 0)
+                cost = float(ev.get('unit_cost') or 0.0)
+                dsls = int(ev.get('dsls') or 0)
+                cap_exp = float(ev.get('capital_exposure_vnd') or (stock * cost))
+                r_prob = float(a.risk_probability or 0.0)
+                r_score = float(a.risk_score or 0.0)
 
                 product_rows.append({
-                    'sku': sku_val,
-                    'product_name': p.product_name or f"Product {sku_val}",
-                    'category': getattr(p, 'platform', None) or 'E-Commerce',
+                    'sku': a.sku,
+                    'product_name': a.product_name,
+                    'category': a.category or 'Tồn kho',
                     'stock_on_hand': stock,
                     'unit_cost': cost,
                     'dsls': dsls,
-                    'last_sale_date': last_sale_str,
+                    'capital_exposure_vnd': cap_exp,
+                    'last_sale_date': None,
+                })
+
+                risk_assessments.append({
+                    'sku': a.sku,
+                    'risk_class': a.risk_class,
+                    'risk_probability': r_prob,
+                    'risk_score': r_score,
                 })
 
             sample_df = pd.DataFrame(product_rows)
-
-            # Build risk assessments from SlowMovingRiskAssessment records
-            risk_records = SlowMovingRiskAssessment.objects.all()
-            risk_map = {r.sku: r for r in risk_records}
-
-            risk_assessments = []
-            for row in product_rows:
-                sku = row['sku']
-                r = risk_map.get(sku)
-                if r:
-                    risk_assessments.append({
-                        'sku': sku,
-                        'risk_class': r.risk_class,
-                        'risk_probability': float(r.risk_probability),
-                        'risk_score': float(r.risk_score),
-                    })
-                else:
-                    dsls_val = row.get('dsls', 0)
-                    if dsls_val > 90:
-                        r_cls = 'CRITICAL'
-                        r_prob = 0.95
-                        r_score = 95.0
-                    elif dsls_val > 60:
-                        r_cls = 'HIGH_RISK'
-                        r_prob = 0.80
-                        r_score = 80.0
-                    elif dsls_val > 30:
-                        r_cls = 'MEDIUM_RISK'
-                        r_prob = 0.50
-                        r_score = 50.0
-                    else:
-                        r_cls = 'LOW_RISK'
-                        r_prob = 0.15
-                        r_score = 15.0
-
-                    risk_assessments.append({
-                        'sku': sku,
-                        'risk_class': r_cls,
-                        'risk_probability': r_prob,
-                        'risk_score': r_score,
-                    })
         else:
             ref_date = datetime.now()
             product_rows = [
@@ -256,7 +210,7 @@ def list_capital_exposure_items(request, analysis_id):
     aging_priority = request.query_params.get('aging_priority')
     search = request.query_params.get('search')
     page = int(request.query_params.get('page', 1))
-    limit = int(request.query_params.get('limit', 50))
+    limit = int(request.query_params.get('limit', 500))
     sort = request.query_params.get('sort', '-risk_weighted_exposure')
 
     items, pagination_meta = CapitalExposureRepository.list_sku_items(

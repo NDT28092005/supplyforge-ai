@@ -64,26 +64,26 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
 
   // 1. DASH-001: Shop Health Summary Direct Answer State ("Shop đang thế nào?")
   shopHealthSummary = {
-    statusBadge: 'CẦN XỬ LÝ GẤP',
-    statusLevel: 'HIGH_RISK',
-    verdictTitle: 'Cửa hàng đang có rủi ro vốn đọng ở mức cao',
-    verdictMessage: 'Hiện tại cửa hàng có 25 sản phẩm rủi ro cao với 317.5 Triệu VNĐ vốn đang bị đọng. Trong đó, 190.5 Triệu VNĐ đã kẹt trong kho trên 90 ngày.',
+    statusBadge: 'ĐANG TẢI...',
+    statusLevel: 'LOADING',
+    verdictTitle: 'Đang hệ thống hóa dữ liệu kho hàng...',
+    verdictMessage: 'Hệ thống đang tính toán tổng hợp chỉ số tồn kho, phân nhóm rủi ro và giá trị vốn đọng.',
     takeaways: [
-      'Cần kích hoạt ngay chiến dịch xả hàng cho 25% mặt hàng bán chậm.',
-      'Ưu tiên xử lý 3 mặt hàng chiếm vốn lớn nhất (CRIT-024, CRIT-019, CRIT-017).',
-      'Dự kiến giải phóng và thu hồi lại 75% - 80% giá trị vốn bị chôn.'
+      'Đang kiểm tra chỉ số quay vòng vốn.',
+      'Đang xác định danh sách sản phẩm ưu tiên.',
+      'Đang tính toán khả năng giải phóng dòng tiền.'
     ]
   };
 
   // 2. DASH-002: Exact 5 Required KPI Metrics (100% Plain Friendly Vietnamese)
   kpiGrid = {
-    monitoredSkus: '100 sản phẩm',
-    highRiskSkus: '25 sản phẩm',
-    totalCapitalExposure: '1.27 Tỷ VNĐ',
-    atRiskCapital: '317.5 Triệu VNĐ',
-    agedCapital: '190.5 Triệu VNĐ',
-    safePct: '69%',
-    needActionPct: '25%'
+    monitoredSkus: '0 sản phẩm',
+    highRiskSkus: '0 sản phẩm',
+    totalCapitalExposure: '0 VNĐ',
+    atRiskCapital: '0 VNĐ',
+    agedCapital: '0 VNĐ',
+    safePct: '0%',
+    needActionPct: '0%'
   };
 
   // 3. DASH-003: Drill Down Flow Steps (Overview → Risk → Explanation → Capital → Decision)
@@ -97,23 +97,19 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
 
   // Risk Distribution Data (For Donut Chart & Text List)
   riskBreakdown = [
-    { label: 'An toàn', pct: '69%', value: 69, color: '#22C55E' },
-    { label: 'Cần theo dõi', pct: '6%', value: 6, color: '#EAB308' },
-    { label: 'Rủi ro cao', pct: '25%', value: 25, color: '#EF4444' }
+    { label: 'An toàn', pct: '0%', value: 0, color: '#22C55E' },
+    { label: 'Cần theo dõi', pct: '0%', value: 0, color: '#EAB308' },
+    { label: 'Rủi ro cao', pct: '0%', value: 0, color: '#EF4444' }
   ];
 
   // Top 3 Priorities List (Today's Priorities)
-  topPriorities: TopPrioritySku[] = [
-    { sku: 'CRIT-024', capitalExposure: '93.8M', riskLevel: 'HIGH_RISK', badgeClass: 'bg-rose-600 text-white' },
-    { sku: 'CRIT-019', capitalExposure: '88.7M', riskLevel: 'HIGH_RISK', badgeClass: 'bg-rose-600 text-white' },
-    { sku: 'CRIT-017', capitalExposure: '84.8M', riskLevel: 'HIGH_RISK', badgeClass: 'bg-rose-600 text-white' }
-  ];
+  topPriorities: TopPrioritySku[] = [];
 
   // Attention Notice State
   attentionNotice = {
-    highRiskCountText: '25 sản phẩm',
-    slowCountText: '10 sản phẩm',
-    deadCountText: '15 sản phẩm'
+    highRiskCountText: '0 sản phẩm',
+    slowCountText: '0 sản phẩm',
+    deadCountText: '0 sản phẩm'
   };
 
   constructor(
@@ -123,72 +119,205 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
   ) {}
 
   ngOnInit(): void {
-    if (!this.data) {
+    if (this.dashboardState.state.dashboardData) {
       this.data = this.dashboardState.state.dashboardData;
-    }
-    if (!this.data) {
-      this.fetchDashboardData();
-    } else {
       this.updateDashboardFromData();
     }
+    // Always fetch latest data from backend to ensure synchronization
+    this.fetchDashboardData();
+  }
+
+  formatVndHuman(amount: number): string {
+    if (!amount || amount === 0) return '0 VNĐ';
+    if (amount >= 1_000_000_000) {
+      return (amount / 1_000_000_000).toFixed(1) + ' Tỷ VNĐ';
+    }
+    if (amount >= 1_000_000) {
+      return (amount / 1_000_000).toFixed(1) + ' Triệu VNĐ';
+    }
+    if (amount >= 1_000) {
+      return (amount / 1_000).toFixed(0) + ' K VNĐ';
+    }
+    return amount.toLocaleString('vi-VN') + ' VNĐ';
   }
 
   fetchDashboardData(): void {
     this.loading = true;
-    this.apiService.getDashboard(1).subscribe({
-      next: (res) => {
-        this.loading = false;
-        if (res) {
-          const healthyVal = res.totalHealthyValue || 0;
-          const watchlistVal = res.totalWatchlistValue || 0;
-          const slowVal = res.totalSlowMovingValue || 0;
-          const deadVal = res.totalDeadStockValue || 0;
-          const totalInvVal = healthyVal + watchlistVal + slowVal + deadVal;
-
-          const healthyList = res.healthySkus || [];
-          const watchlistList = res.watchlistSkus || [];
-          const slowList = res.slowMovingSkus || [];
-          const deadList = res.deadStockSkus || [];
-          const allSkus = [...deadList, ...slowList, ...watchlistList, ...healthyList];
-
-          let topStale = [...deadList, ...slowList].map((item: any) => ({
-            sku: item.sku || item.item_sku || item.name || 'SKU Sản phẩm',
-            name: item.name || item.product_name || 'SKU Sản phẩm',
-            frozenValueVnd: item.totalValue || item.frozenValueVnd || ((item.quantity || 1) * (item.costPrice || 50000)) || 0,
-            lastRecordDate: item.lastRecordDate || 'N/A'
-          })).slice(0, 5);
-
-          if (topStale.length === 0 && allSkus.length > 0) {
-            topStale = allSkus.map((item: any) => ({
-              sku: item.sku || item.item_sku || item.name || 'SKU Sản phẩm',
-              name: item.name || item.product_name || 'SKU Sản phẩm',
-              frozenValueVnd: item.totalValue || item.frozenValueVnd || ((item.quantity || 1) * (item.costPrice || 50000)) || 0,
-              lastRecordDate: item.lastRecordDate || 'N/A'
-            })).slice(0, 5);
-          }
-
-          const finalDeadStockValue = deadVal + slowVal;
-          const finalStaleCount = deadList.length + slowList.length;
-          const finalBleedingRate = res.totalBleedingRateMonthly || Math.round(finalDeadStockValue * 0.08);
-
-          this.data = {
-            hasData: true,
-            ...res,
-            totalDeadStockValueVnd: finalDeadStockValue,
-            staleSkuCount: finalStaleCount,
-            estimatedLoss30DaysVnd: finalBleedingRate,
-            totalInventoryValueVnd: totalInvVal,
-            totalRootSkuCount: allSkus.length,
-            topStaleSkus: topStale
+    this.apiService.getExecutiveDashboardSummaryCached(1).subscribe({
+      next: (summary: any) => {
+        if (summary && summary.hasData) {
+          this.loading = false;
+          this.kpiGrid = {
+            monitoredSkus: `${summary.totalSkus} sản phẩm`,
+            highRiskSkus: `${summary.criticalCount + summary.highRiskCount} sản phẩm`,
+            totalCapitalExposure: this.formatVndHuman(summary.totalCapitalExposureVnd),
+            atRiskCapital: this.formatVndHuman(summary.atRiskCapitalVnd),
+            agedCapital: this.formatVndHuman(summary.agedCapitalVnd),
+            safePct: `${Math.round(((summary.lowRiskCount || 0) / (summary.totalSkus || 1)) * 100)}%`,
+            needActionPct: `${Math.round((((summary.criticalCount || 0) + (summary.highRiskCount || 0)) / (summary.totalSkus || 1)) * 100)}%`
           };
-          this.dashboardState.setDashboardData(this.data);
+
+          const atRiskVal = summary.atRiskCapitalVnd || 0;
+          const agedVal = summary.agedCapitalVnd || 0;
+          const highRiskCount = summary.criticalCount + summary.highRiskCount;
+          const highRiskPctVal = Math.round((highRiskCount / (summary.totalSkus || 1)) * 100);
+          const topSkusNames = (summary.topRiskSkus || []).slice(0, 3).map((s: any) => s.name);
+
+          this.shopHealthSummary = {
+            statusBadge: highRiskCount > 0 ? 'CẦN XỬ LÝ GẤP' : 'HOẠT ĐỘNG TỐT',
+            statusLevel: highRiskCount > 0 ? 'HIGH_RISK' : 'SAFE',
+            verdictTitle: highRiskCount > 0 ? `Cửa hàng đang có ${highRiskCount} sản phẩm gặp rủi ro vốn đọng` : 'Kho hàng đang vận hành ổn định và an toàn',
+            verdictMessage: highRiskCount > 0 ? `Hiện tại cửa hàng có ${highRiskCount} sản phẩm rủi ro cao với ${this.formatVndHuman(atRiskVal)} vốn đang có nguy cơ đọng vốn nặng. Trong đó, có ${this.formatVndHuman(agedVal)} vốn đã kẹt trong kho hơn 90 ngày.` : 'Toàn bộ các mặt hàng trong kho đang duy trì tốc độ tiêu thụ tốt, không ghi nhận tình trạng đọng vốn lâu ngày.',
+            takeaways: [
+              `Cần kích hoạt chiến dịch xả kho cho ${highRiskPctVal}% số sản phẩm bán chậm (${highRiskCount} SKU).`,
+              topSkusNames.length > 0 ? `Ưu tiên xử lý ${topSkusNames.length} mặt hàng chiếm vốn lớn nhất (${topSkusNames.join(', ')}).` : `Ưu tiên xử lý các sản phẩm có giá trị tồn đọng cao nhất.`,
+              `Dự kiến giải phóng và thu hồi lại dòng vốn khi áp dụng kịch bản khuyến nghị.`
+            ]
+          };
+
+          const totSkus = summary.totalSkus || 1;
+          const lowPct = Math.round(((summary.lowRiskCount || 0) / totSkus) * 100);
+          const medPct = Math.round(((summary.mediumRiskCount || 0) / totSkus) * 100);
+          const highPct = Math.round((((summary.criticalCount || 0) + (summary.highRiskCount || 0)) / totSkus) * 100);
+
+          this.riskBreakdown = [
+            { label: 'An toàn', pct: `${lowPct}%`, value: summary.lowRiskCount || 0, color: '#22C55E' },
+            { label: 'Cần theo dõi', pct: `${medPct}%`, value: summary.mediumRiskCount || 0, color: '#EAB308' },
+            { label: 'Rủi ro cao', pct: `${highPct}%`, value: (summary.criticalCount || 0) + (summary.highRiskCount || 0), color: '#EF4444' }
+          ];
+
+          this.attentionNotice = {
+            highRiskCountText: `${(summary.criticalCount || 0) + (summary.highRiskCount || 0)} sản phẩm`,
+            slowCountText: `${summary.criticalCount || 0} sản phẩm nguy cơ rủi ro rất cao`,
+            deadCountText: `${summary.agedCapitalVnd > 0 ? 1 : 0} sản phẩm`
+          };
+
+          this.topPriorities = (summary.topRiskSkus || []).slice(0, 3).map((s: any) => ({
+            sku: s.sku,
+            capitalExposure: this.formatVndHuman(s.capitalExposureVnd),
+            riskLevel: 'HIGH_RISK',
+            badgeClass: 'badge-danger'
+          }));
+        } else {
+          this.fetchM3FallbackData();
+        }
+      },
+      error: () => {
+        this.fetchM3FallbackData();
+      }
+    });
+  }
+
+  private fetchM3FallbackData(): void {
+    this.apiService.getM3RiskAssessments().subscribe({
+      next: (res: any) => {
+        this.loading = false;
+        if (res && res.assessments && res.assessments.length > 0) {
+          const deadList: any[] = [];
+          const slowList: any[] = [];
+          const watchlistList: any[] = [];
+          const healthyList: any[] = [];
+
+          res.assessments.forEach((a: any) => {
+            const rawClass = (a.risk?.class || a.risk_class || a.risk_level || 'LOW_RISK').toString().toUpperCase();
+            const realCap = a.capital_exposure_vnd || a.evidence?.capital_exposure_vnd;
+            const stockQty = a.stock_quantity || a.evidence?.stock_quantity || 0;
+            const costVal = a.unit_cost || a.evidence?.unit_cost || 0;
+            const capVal = realCap || (stockQty * costVal) || (a.evidence?.sold_90d ? a.evidence.sold_90d * 150000 : 5000000);
+
+            const skuItem = {
+              id: a.sku || a.canonical_sku_id,
+              sku: a.sku || 'SKU_UNSET',
+              name: a.product_name || a.sku || 'Sản phẩm',
+              quantity: stockQty || 1,
+              costPrice: costVal || 50000,
+              sellingPrice: a.unit_price || 75000,
+              totalValue: capVal,
+              daysInInventory: a.evidence?.dsls ?? a.days_since_last_sale ?? 0
+            };
+
+            if (rawClass.includes('CRITICAL') || rawClass.includes('DEAD')) {
+              deadList.push(skuItem);
+            } else if (rawClass.includes('HIGH') || rawClass.includes('SLOW')) {
+              slowList.push(skuItem);
+            } else if (rawClass.includes('MEDIUM') || rawClass.includes('WATCH')) {
+              watchlistList.push(skuItem);
+            } else {
+              healthyList.push(skuItem);
+            }
+          });
+
+          const allSkus = [...deadList, ...slowList, ...watchlistList, ...healthyList];
+          const resObj = {
+            totalHealthyValue: healthyList.reduce((acc, i) => acc + i.totalValue, 0),
+            totalWatchlistValue: watchlistList.reduce((acc, i) => acc + i.totalValue, 0),
+            totalSlowMovingValue: slowList.reduce((acc, i) => acc + i.totalValue, 0),
+            totalDeadStockValue: deadList.reduce((acc, i) => acc + i.totalValue, 0),
+            healthySkus: healthyList,
+            watchlistSkus: watchlistList,
+            slowMovingSkus: slowList,
+            deadStockSkus: deadList
+          };
+          this.processDashboardResponse(resObj, healthyList, watchlistList, slowList, deadList, allSkus);
+        } else {
+          this.data = null;
           this.updateDashboardFromData();
         }
       },
       error: () => {
         this.loading = false;
+        this.data = null;
+        this.updateDashboardFromData();
       }
     });
+  }
+
+  private processDashboardResponse(
+    res: any,
+    healthyList: any[],
+    watchlistList: any[],
+    slowList: any[],
+    deadList: any[],
+    allSkus: any[]
+  ): void {
+    const healthyVal = res.totalHealthyValue || 0;
+    const watchlistVal = res.totalWatchlistValue || 0;
+    const slowVal = res.totalSlowMovingValue || 0;
+    const deadVal = res.totalDeadStockValue || 0;
+    const totalInvVal = healthyVal + watchlistVal + slowVal + deadVal;
+
+    let topStale = [...deadList, ...slowList].map((item: any) => ({
+      sku: item.sku || item.item_sku || item.name || 'SKU Sản phẩm',
+      name: item.name || item.product_name || 'SKU Sản phẩm',
+      frozenValueVnd: item.totalValue || item.frozenValueVnd || ((item.quantity || 1) * (item.costPrice || 50000)) || 0,
+      lastRecordDate: item.lastRecordDate || 'N/A'
+    })).sort((a, b) => b.frozenValueVnd - a.frozenValueVnd).slice(0, 5);
+
+    if (topStale.length === 0 && allSkus.length > 0) {
+      topStale = allSkus.map((item: any) => ({
+        sku: item.sku || item.item_sku || item.name || 'SKU Sản phẩm',
+        name: item.name || item.product_name || 'SKU Sản phẩm',
+        frozenValueVnd: item.totalValue || item.frozenValueVnd || ((item.quantity || 1) * (item.costPrice || 50000)) || 0,
+        lastRecordDate: item.lastRecordDate || 'N/A'
+      })).sort((a, b) => b.frozenValueVnd - a.frozenValueVnd).slice(0, 5);
+    }
+
+    const finalDeadStockValue = deadVal + slowVal;
+    const finalStaleCount = deadList.length + slowList.length;
+    const finalBleedingRate = res.totalBleedingRateMonthly || 0;
+
+    this.data = {
+      hasData: allSkus.length > 0,
+      ...res,
+      totalDeadStockValueVnd: finalDeadStockValue,
+      staleSkuCount: finalStaleCount,
+      estimatedLoss30DaysVnd: finalBleedingRate,
+      totalInventoryValueVnd: totalInvVal,
+      totalRootSkuCount: allSkus.length,
+      topStaleSkus: topStale
+    };
+    this.dashboardState.setDashboardData(this.data);
+    this.updateDashboardFromData();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -226,7 +355,7 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
       if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)} Tỷ VNĐ`;
       if (val >= 1000000) return `${(val / 1000000).toFixed(1)} Triệu VNĐ`;
       if (val >= 1000) return `${(val / 1000).toFixed(0)} Nghìn VNĐ`;
-      return `${val} VNĐ`;
+      return `${Math.round(val).toLocaleString('vi-VN')} VNĐ`;
     };
 
     if (totalCount > 0) {
@@ -234,24 +363,20 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
       const watchPctVal = Math.round((watchCount / totalCount) * 100);
       const highRiskPctVal = Math.max(0, 100 - safePctVal - watchPctVal);
 
-      const totalCapVnd = this.data.totalInventoryValueVnd || (
-        healthyList.reduce((acc: number, item: any) => acc + (item.totalValue || 0), 0) +
-        slowList.reduce((acc: number, item: any) => acc + (item.totalValue || 0), 0) +
-        deadList.reduce((acc: number, item: any) => acc + (item.totalValue || 0), 0)
-      ) || 1270000000;
+      // Sum exact inventory values directly from data lists (no fixed magic numbers)
+      const healthyVal = healthyList.reduce((acc: number, item: any) => acc + (item.totalValue || 0), 0);
+      const watchVal = watchList.reduce((acc: number, item: any) => acc + (item.totalValue || 0), 0);
+      const slowVal = slowList.reduce((acc: number, item: any) => acc + (item.totalValue || 0), 0);
+      const deadVal = deadList.reduce((acc: number, item: any) => acc + (item.totalValue || 0), 0);
 
-      const atRiskVal = (
-        slowList.reduce((acc: number, item: any) => acc + (item.totalValue || 0), 0) +
-        deadList.reduce((acc: number, item: any) => acc + (item.totalValue || 0), 0)
-      ) || Math.round(totalCapVnd * 0.25);
-
-      const agedVal = (
-        deadList.reduce((acc: number, item: any) => acc + (item.totalValue || 0), 0)
-      ) || Math.round(totalCapVnd * 0.15);
+      const totalCapVnd = this.data.totalInventoryValueVnd || (healthyVal + watchVal + slowVal + deadVal);
+      const atRiskVal = this.data.totalFrozenValue || (slowVal + deadVal);
+      const agedVal = this.data.totalDeadStockValue || deadVal;
 
       const topStale = this.data.topStaleSkus || [];
+      const topSkusNames = topStale.slice(0, 3).map((p: any) => p.sku || p.name).filter(Boolean);
 
-      // DASH-002: Set exact 5 KPIs with human Vietnamese titles
+      // DASH-002: Set exact 5 KPIs derived from real database
       this.kpiGrid = {
         monitoredSkus: `${totalCount} sản phẩm`,
         highRiskSkus: `${highRiskCount} sản phẩm`,
@@ -264,15 +389,19 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
 
       // DASH-001: Set Direct Shop Assessment Verdict ("Shop đang thế nào?")
       if (highRiskCount > 0) {
+        const skuPriorityMessage = topSkusNames.length > 0
+          ? `Ưu tiên xử lý ${topSkusNames.length} mặt hàng chiếm vốn lớn nhất (${topSkusNames.join(', ')}).`
+          : `Ưu tiên xử lý các sản phẩm có giá trị tồn đọng cao nhất.`;
+
         this.shopHealthSummary = {
           statusBadge: 'CẦN XỬ LÝ GẤP',
           statusLevel: 'HIGH_RISK',
           verdictTitle: `Cửa hàng đang có ${highRiskCount} sản phẩm gặp rủi ro vốn đọng`,
           verdictMessage: `Hiện tại cửa hàng có ${highRiskCount} sản phẩm rủi ro cao với ${formatVndHuman(atRiskVal)} vốn đang có nguy cơ đọng vốn nặng. Trong đó, có ${formatVndHuman(agedVal)} vốn đã kẹt trong kho hơn 90 ngày. Cửa hàng nên triển khai chiết khấu để giải phóng dòng tiền.`,
           takeaways: [
-            `Cần kích hoạt chiến dịch xả kho cho ${highRiskPctVal}% số sản phẩm bán chậm.`,
-            `Ưu tiên xử lý 3 mặt hàng chiếm vốn lớn nhất (${topStale.slice(0, 3).map((p: any) => p.sku || p.name).join(', ') || 'CRIT-024, CRIT-019'}).`,
-            `Dự kiến giải phóng và thu hồi lại đến 80% vốn bị chôn khi áp dụng kịch bản khuyến nghị.`
+            `Cần kích hoạt chiến dịch xả kho cho ${highRiskPctVal}% số sản phẩm bán chậm (${highRiskCount} SKU).`,
+            skuPriorityMessage,
+            `Dự kiến giải phóng và thu hồi lại dòng vốn khi áp dụng kịch bản khuyến nghị.`
           ]
         };
       } else {
@@ -280,7 +409,7 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
           statusBadge: 'HOẠT ĐỘNG TỐT',
           statusLevel: 'SAFE',
           verdictTitle: 'Kho hàng đang vận hành ổn định và an toàn',
-          verdictMessage: 'Toàn bộ các mặt hàng trong kho đang duy trì tốc độ tiêu thụ tốt, không ghi nhận tình trạng đọng vốn đọng lâu ngày.',
+          verdictMessage: 'Toàn bộ các mặt hàng trong kho đang duy trì tốc độ tiêu thụ tốt, không ghi nhận tình trạng đọng vốn lâu ngày.',
           takeaways: [
             'Dòng vốn quay vòng ổn định và lành mạnh.',
             'Tiếp tục theo dõi biến động sức mua của thị trường.',
@@ -330,6 +459,10 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
       ];
       this.topPriorities = [];
     }
+
+    setTimeout(() => {
+      this.initDonutChart();
+    }, 50);
   }
 
   ngAfterViewInit(): void {

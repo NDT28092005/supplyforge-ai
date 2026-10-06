@@ -219,6 +219,20 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
     });
   }
 
+  enqueueBackgroundJob(): void {
+    if (!this.selectedFile) return;
+    this.uploadStatus = 'uploading';
+    this.apiService.enqueueUploadJob(this.selectedFile).subscribe({
+      next: (res: any) => {
+        this.router.navigate(['/app/queue']);
+      },
+      error: (err: any) => {
+        this.uploadStatus = 'error';
+        this.errorMessage = err.error?.error || 'Không thể đưa tệp vào hàng chờ xử lý.';
+      }
+    });
+  }
+
   isIdempotentRetry(): boolean {
     return !!this.profileResult?.idempotent_retry;
   }

@@ -116,6 +116,13 @@ from .export_views import (
     ExportDecisionReportView,
     ExportActionPlanReportView
 )
+from .job_views import (
+    enqueue_upload_job, list_jobs, get_job_status,
+    cancel_job, retry_job, delete_job
+)
+from .query_views import (
+    get_cached_dashboard_summary, refresh_workspace_cache
+)
 
 __all__ = [
     'about_us_api', 'services_api', 'blog_list_api', 'blog_detail_api',
@@ -125,6 +132,8 @@ __all__ = [
     'sync_products', 'sync_orders',
     'analyze_file', 'process_file', 'clear_data', 'process_file_async', 'get_ingestion_progress', 'cancel_ingestion_session', 'get_record_lineage', 'get_error_matrix',
     'tenant_delete_data', 'verify_tenant_context',
+    'enqueue_upload_job', 'list_jobs', 'get_job_status', 'cancel_job', 'retry_job', 'delete_job',
+    'get_cached_dashboard_summary', 'refresh_workspace_cache',
     'refresh_dead_stock', 'get_dead_stock', 'get_aging',
     'get_portfolio_command', 'get_financial_analysis',
     'get_sku_xai',
