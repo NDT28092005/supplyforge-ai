@@ -128,7 +128,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "rate(mysql_global_status_slow_queries[5m])",
+          "expr": "rate(mysql_global_status_slow_queries_total[5m])",
           "legendFormat": "Slow Queries / sec",
           "range": true,
           "refId": "A"
@@ -166,7 +166,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "(1 - (rate(mysql_global_status_innodb_buffer_pool_reads[5m]) / rate(mysql_global_status_innodb_buffer_pool_read_requests[5m]))) * 100",
+          "expr": "(1 - (rate(mysql_global_status_innodb_buffer_pool_reads_total[5m]) / rate(mysql_global_status_innodb_buffer_pool_read_requests_total[5m]))) * 100",
           "legendFormat": "Buffer Pool Hit Ratio",
           "range": true,
           "refId": "A"
@@ -272,7 +272,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "rate(mysql_global_status_bytes_received[5m])",
+          "expr": "rate(mysql_global_status_bytes_received_total[5m])",
           "legendFormat": "Bytes Received",
           "range": true,
           "refId": "A"
@@ -280,7 +280,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "rate(mysql_global_status_bytes_sent[5m])",
+          "expr": "rate(mysql_global_status_bytes_sent_total[5m])",
           "legendFormat": "Bytes Sent",
           "range": true,
           "refId": "B"

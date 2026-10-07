@@ -107,6 +107,21 @@ services:
       - monitoring
       - supplyforge_net
 
+  backend-mock:
+    image: python:3.11-slim
+    container_name: supplyforge_backend_mock
+    command: sh -c "pip install prometheus_client && python /app/simulate_telemetry.py"
+    volumes:
+      - ./../scripts/simulate_telemetry.py:/app/simulate_telemetry.py:ro
+    restart: unless-stopped
+    networks:
+      monitoring:
+        aliases:
+          - backend
+      supplyforge_net:
+        aliases:
+          - backend
+
 networks:
   monitoring:
     driver: bridge

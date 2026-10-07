@@ -280,7 +280,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "container_memory_working_set_bytes{container_label_com_docker_compose_service=\"backend\"}",
+          "expr": "process_resident_memory_bytes{job=\"django-backend\"}",
           "legendFormat": "Memory Working Set",
           "range": true,
           "refId": "A"
@@ -308,7 +308,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "sum(rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service=\"backend\"}[5m]))",
+          "expr": "rate(process_cpu_seconds_total{job=\"django-backend\"}[5m])",
           "legendFormat": "CPU Usage Cores",
           "range": true,
           "refId": "A"

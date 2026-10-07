@@ -1,9 +1,15 @@
 groups:
   - name: supplyforge-celery-recording
-    interval: 30s
+    interval: 15s
     rules:
       - record: supplyforge:celery:queue_depth
         expr: sum by (queue, worker_type) (supplyforge_task_queue_depth)
+
+      - record: supplyforge:celery:task_rate:5m
+        expr: sum(rate(supplyforge_task_total[5m]))
+
+      - record: supplyforge:celery:failure_rate:5m
+        expr: (sum(rate(supplyforge_task_total{status="failed"}[5m])) / sum(rate(supplyforge_task_total[5m]))) * 100
 
       - record: supplyforge:celery:task_age:p50
         expr: supplyforge_task_age_seconds

@@ -1,12 +1,21 @@
 groups:
   - name: supplyforge-api-recording
-    interval: 30s
+    interval: 15s
     rules:
       - record: supplyforge:api:request_rate
         expr: sum(rate(django_http_requests_before_middlewares_total[5m]))
 
+      - record: supplyforge:api:request_rate:5m
+        expr: sum(rate(django_http_requests_total_by_method_total[5m]))
+
       - record: supplyforge:api:error_rate
         expr: sum(rate(django_http_responses_total_by_status_name_total{status=~"5.*|5xx"}[5m])) / sum(rate(django_http_responses_total_by_status_name_total[5m]))
+
+      - record: supplyforge:api:error_rate:5m
+        expr: (sum(rate(django_http_requests_total_by_status_5xx_total[5m])) / sum(rate(django_http_requests_total_by_method_total[5m]))) * 100
+
+      - record: supplyforge:api:availability:ratio
+        expr: 1 - (sum(rate(django_http_requests_total_by_status_5xx_total[5m])) / sum(rate(django_http_requests_total_by_method_total[5m])))
 
       - record: supplyforge:api:request_duration:p50
         expr: histogram_quantile(0.50, sum(rate(django_http_requests_latency_seconds_bucket[5m])) by (le))
@@ -15,4 +24,13 @@ groups:
         expr: histogram_quantile(0.95, sum(rate(django_http_requests_latency_seconds_bucket[5m])) by (le))
 
       - record: supplyforge:api:request_duration:p99
+        expr: histogram_quantile(0.99, sum(rate(django_http_requests_latency_seconds_bucket[5m])) by (le))
+
+      - record: supplyforge:api:latency_seconds:p50
+        expr: histogram_quantile(0.50, sum(rate(django_http_requests_latency_seconds_bucket[5m])) by (le))
+
+      - record: supplyforge:api:latency_seconds:p95
+        expr: histogram_quantile(0.95, sum(rate(django_http_requests_latency_seconds_bucket[5m])) by (le))
+
+      - record: supplyforge:api:latency_seconds:p99
         expr: histogram_quantile(0.99, sum(rate(django_http_requests_latency_seconds_bucket[5m])) by (le))
