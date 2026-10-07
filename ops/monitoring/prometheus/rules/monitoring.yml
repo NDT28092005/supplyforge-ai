@@ -1,0 +1,156 @@
+groups:
+  - name: supplyforge-prometheus-self-monitoring
+    rules:
+      - alert: PrometheusTargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: P2
+          service: monitoring
+          environment: production
+          team: platform
+        annotations:
+          summary: "Prometheus target '{{ $labels.job }}' is DOWN"
+          description: "Monitoring target '{{ $labels.job }}' (instance {{ $labels.instance }}) is unreachable for more than 2 minutes. Operator must check target exporter or container health."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/target-down.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-monitoring/prometheus-self-monitoring"
+
+      - alert: PrometheusScrapeFailure
+        expr: rate(prometheus_target_scrapes_failed_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: P2
+          service: monitoring
+          environment: production
+          team: platform
+        annotations:
+          summary: "Prometheus repeated scrape failures for target '{{ $labels.job }}'"
+          description: "Prometheus target '{{ $labels.job }}' is experiencing repeated scrape execution failures over the last 5 minutes."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/scrape-failure.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-monitoring/prometheus-self-monitoring"
+
+      - alert: PrometheusScrapeLatencyHigh
+        expr: scrape_duration_seconds > 5
+        for: 5m
+        labels:
+          severity: P3
+          service: monitoring
+          environment: production
+          team: platform
+        annotations:
+          summary: "Prometheus target '{{ $labels.job }}' scrape latency is high (>5s)"
+          description: "Scrape duration for target '{{ $labels.job }}' has exceeded 5.0 seconds over 5 minutes. Target response degradation suspected."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/scrape-latency-high.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-monitoring/prometheus-self-monitoring"
+
+      - alert: PrometheusTSDBDiskUsageHigh
+        expr: prometheus_tsdb_head_series > 100000
+        for: 5m
+        labels:
+          severity: P1
+          service: monitoring
+          environment: production
+          team: platform
+        annotations:
+          summary: "Prometheus TSDB head series count is high (>100k series)"
+          description: "Prometheus TSDB active head series count has exceeded 100,000 series. High metric cardinality or memory exhaustion risk."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/tsdb-disk-usage.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-monitoring/prometheus-self-monitoring"
+
+      - alert: PrometheusWALFailure
+        expr: rate(prometheus_tsdb_wal_corruptions_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: P1
+          service: monitoring
+          environment: production
+          team: platform
+        annotations:
+          summary: "Prometheus TSDB Write-Ahead-Log (WAL) corruption detected"
+          description: "Prometheus TSDB is reporting WAL corruption or truncation failures. Storage data loss or crash loop risk."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/wal-failure.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-monitoring/prometheus-self-monitoring"
+
+      - alert: PrometheusSamplesRejected
+        expr: rate(prometheus_tsdb_out_of_order_samples_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: P2
+          service: monitoring
+          environment: production
+          team: platform
+        annotations:
+          summary: "Prometheus TSDB is rejecting out-of-order samples"
+          description: "Prometheus TSDB is rejecting sample ingestion due to out-of-order timestamps or out-of-bounds metrics."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/samples-rejected.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-monitoring/prometheus-self-monitoring"
+
+      - alert: PrometheusRuleEvaluationFailure
+        expr: rate(prometheus_rule_evaluation_failures_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: P2
+          service: monitoring
+          environment: production
+          team: platform
+        annotations:
+          summary: "Prometheus Recording/Alert Rule evaluation failed"
+          description: "Prometheus is encountering evaluation failures for rule group '{{ $labels.rule_group }}'. Check rule syntax or missing metrics."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/rule-evaluation-failure.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-monitoring/prometheus-self-monitoring"
+
+      - alert: PrometheusRuleEvaluationSlow
+        expr: prometheus_rule_group_last_duration_seconds > prometheus_rule_group_interval_seconds
+        for: 5m
+        labels:
+          severity: P3
+          service: monitoring
+          environment: production
+          team: platform
+        annotations:
+          summary: "Prometheus Rule Group '{{ $labels.rule_group }}' evaluation is slow"
+          description: "Rule group '{{ $labels.rule_group }}' evaluation duration is exceeding its evaluation interval. Prometheus rule processing lag risk."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/rule-evaluation-slow.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-monitoring/prometheus-self-monitoring"
+
+      - alert: PrometheusQueryOverload
+        expr: rate(prometheus_engine_query_duration_seconds_count[5m]) > 50
+        for: 5m
+        labels:
+          severity: P3
+          service: monitoring
+          environment: production
+          team: platform
+        annotations:
+          summary: "Prometheus Query Engine is experiencing heavy query load (>50 qps)"
+          description: "Prometheus engine query rate has crossed 50 queries per second continuously for 5 minutes. High Grafana dashboard panel load."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/query-overload.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-monitoring/prometheus-self-monitoring"
+
+      - alert: PrometheusRestarting
+        expr: changes(process_start_time_seconds{job="prometheus"}[15m]) > 1
+        for: 2m
+        labels:
+          severity: P3
+          service: monitoring
+          environment: production
+          team: platform
+        annotations:
+          summary: "Prometheus process has restarted multiple times"
+          description: "Prometheus process has restarted more than once within 15 minutes. Container crash loop or OOM kill suspected."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/prometheus-restarting.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-monitoring/prometheus-self-monitoring"
+
+      - alert: PrometheusMemoryPressure
+        expr: process_resident_memory_bytes{job="prometheus"} > 2000000000
+        for: 5m
+        labels:
+          severity: P3
+          service: monitoring
+          environment: production
+          team: platform
+        annotations:
+          summary: "Prometheus process memory usage is high (>2GB)"
+          description: "Prometheus process resident memory (RSS) has exceeded 2.0 GB. Check TSDB series retention or query memory limits."
+          runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/memory-pressure.md"
+          dashboard_url: "http://localhost:3001/d/supplyforge-monitoring/prometheus-self-monitoring"
