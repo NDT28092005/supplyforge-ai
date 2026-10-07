@@ -1,9 +1,9 @@
 global:
   resolve_timeout: 5m
-  smtp_smarthost: '${SMTP_SMARTHOST:-smtp.gmail.com:587}'
-  smtp_from: '${SMTP_FROM:-alertmanager@supplyforge.ai}'
-  smtp_auth_username: '${SMTP_USERNAME}'
-  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'alertmanager@supplyforge.ai'
+  smtp_auth_username: 'alertmanager'
+  smtp_auth_password: 'password'
   smtp_require_tls: true
 
 templates:
@@ -46,7 +46,7 @@ route:
 receivers:
   - name: 'default-email'
     email_configs:
-      - to: '${ALERT_EMAIL_TO:-ops@supplyforge.ai}'
+      - to: 'ops@supplyforge.ai'
         send_resolved: true
         html: '{{ template "email.default.html" . }}'
         headers:
@@ -54,7 +54,7 @@ receivers:
 
   - name: 'production-critical-email'
     email_configs:
-      - to: '${ALERT_EMAIL_TO:-oncall@supplyforge.ai}'
+      - to: 'oncall@supplyforge.ai'
         send_resolved: true
         html: '{{ template "email.default.html" . }}'
         headers:
@@ -62,7 +62,7 @@ receivers:
 
   - name: 'production-standard-email'
     email_configs:
-      - to: '${ALERT_EMAIL_TO:-ops@supplyforge.ai}'
+      - to: 'ops@supplyforge.ai'
         send_resolved: true
         html: '{{ template "email.default.html" . }}'
         headers:
@@ -70,7 +70,7 @@ receivers:
 
   - name: 'staging-email'
     email_configs:
-      - to: '${ALERT_EMAIL_TO:-staging-ops@supplyforge.ai}'
+      - to: 'staging-ops@supplyforge.ai'
         send_resolved: true
         html: '{{ template "email.default.html" . }}'
         headers:

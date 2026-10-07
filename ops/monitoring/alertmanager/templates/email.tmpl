@@ -1,5 +1,5 @@
 {{ define "email.default.subject" }}
-[SupplyForge][{{ .CommonLabels.severity | default "P3" }}][{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} ({{ .CommonLabels.service | default "system" }})
+[SupplyForge][{{ if .CommonLabels.severity }}{{ .CommonLabels.severity }}{{ else }}P3{{ end }}][{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} ({{ if .CommonLabels.service }}{{ .CommonLabels.service }}{{ else }}system{{ end }})
 {{ end }}
 
 {{ define "email.default.html" }}
