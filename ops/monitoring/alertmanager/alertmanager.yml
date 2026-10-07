@@ -1,13 +1,96 @@
 global:
   resolve_timeout: 5m
+  smtp_smarthost: '${SMTP_SMARTHOST:-smtp.gmail.com:587}'
+  smtp_from: '${SMTP_FROM:-alertmanager@supplyforge.ai}'
+  smtp_auth_username: '${SMTP_USERNAME}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: true
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
 
 route:
-  group_by: ['alertname', 'cluster', 'service']
+  receiver: 'default-email'
+  group_by: ['environment', 'alertname', 'service']
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
-  receiver: 'default-receiver'
+
+  routes:
+    # Production P1 Critical Route
+    - matchers:
+        - environment="production"
+        - severity="P1"
+      receiver: 'production-critical-email'
+      group_wait: 10s
+      group_interval: 2m
+      repeat_interval: 1h
+
+    # Production P2 & P3 Standard Route
+    - matchers:
+        - environment="production"
+        - severity=~"P2|P3"
+      receiver: 'production-standard-email'
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+
+    # Staging Isolation Route
+    - matchers:
+        - environment="staging"
+      receiver: 'staging-email'
+      group_wait: 1m
+      group_interval: 10m
+      repeat_interval: 12h
 
 receivers:
-  - name: 'default-receiver'
-    # Routing targets (Slack, PagerDuty, Email) to be configured in SF-OPS-11
+  - name: 'default-email'
+    email_configs:
+      - to: '${ALERT_EMAIL_TO:-ops@supplyforge.ai}'
+        send_resolved: true
+        html: '{{ template "email.default.html" . }}'
+        headers:
+          subject: '{{ template "email.default.subject" . }}'
+
+  - name: 'production-critical-email'
+    email_configs:
+      - to: '${ALERT_EMAIL_TO:-oncall@supplyforge.ai}'
+        send_resolved: true
+        html: '{{ template "email.default.html" . }}'
+        headers:
+          subject: '{{ template "email.default.subject" . }}'
+
+  - name: 'production-standard-email'
+    email_configs:
+      - to: '${ALERT_EMAIL_TO:-ops@supplyforge.ai}'
+        send_resolved: true
+        html: '{{ template "email.default.html" . }}'
+        headers:
+          subject: '{{ template "email.default.subject" . }}'
+
+  - name: 'staging-email'
+    email_configs:
+      - to: '${ALERT_EMAIL_TO:-staging-ops@supplyforge.ai}'
+        send_resolved: true
+        html: '{{ template "email.default.html" . }}'
+        headers:
+          subject: '{{ template "email.default.subject" . }}'
+
+inhibit_rules:
+  # MySQL Down suppresses MySQL Connection Saturation
+  - source_matchers:
+      - alertname="SupplyForgeMySQLDown"
+    target_matchers:
+      - alertname="SupplyForgeMySQLConnectionSaturation"
+
+  # Redis Down suppresses Redis memory & eviction alerts and Cache errors
+  - source_matchers:
+      - alertname="SupplyForgeRedisDown"
+    target_matchers:
+      - alertname=~"SupplyForgeRedisMemoryHigh|SupplyForgeRedisEvictionsHigh|SupplyForgeCacheErrorRateHigh"
+
+  # Backend Down suppresses API High Latency & API Error Rate alerts
+  - source_matchers:
+      - alertname="SupplyForgeBackendDown"
+    target_matchers:
+      - alertname=~"SupplyForgeAPIHighLatency|SupplyForgeAPIHighErrorRate"
