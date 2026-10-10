@@ -191,7 +191,7 @@ CELERY_TIMEZONE = TIME_ZONE
 
 REDIS_CACHE_URL = os.getenv('REDIS_CACHE_URL', f'redis://{REDIS_HOST}:{REDIS_PORT}/1')
 
-if 'test' in os.sys.argv:
+if 'test' in os.sys.argv or os.getenv('USE_LOCMEM_CACHE') == '1':
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
