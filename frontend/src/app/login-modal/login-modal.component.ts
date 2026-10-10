@@ -2,6 +2,7 @@ import { Component, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../auth.service';
+import { environment } from '../../environments/environment';
 
 @Component({
   selector: 'app-login-modal',
@@ -77,7 +78,7 @@ export class LoginModalComponent {
 
   onGoogleLogin(): void {
     const clientId = '7581962747-uj20trqmtba57s3psahigngcopku3ub3.apps.googleusercontent.com';
-    const redirectUri = 'http://localhost:8080/api/auth/google/callback';
+    const redirectUri = `${environment.apiUrl}/api/auth/google/callback`;
     const scope = 'openid email profile';
     const responseType = 'code';
     const prompt = 'select_account';

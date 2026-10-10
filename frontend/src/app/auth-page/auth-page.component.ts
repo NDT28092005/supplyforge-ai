@@ -273,7 +273,7 @@ export class AuthPageComponent implements OnInit {
 
   private triggerGoogleRedirectFallback(): void {
     const clientId = '7581962747-uj20trqmtba57s3psahigngcopku3ub3.apps.googleusercontent.com';
-    const redirectUri = 'http://localhost:8080/api/auth/google/callback';
+    const redirectUri = `${this.apiService.getApiUrl()}/api/auth/google/callback`;
     const scope = 'openid email profile';
     const nonce = 'supplyforge_' + Date.now();
 

@@ -1229,7 +1229,7 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
     this.copilotQuery = '';
     this.isCopilotLoading = true;
 
-    this.http.post('http://localhost:8080/api/v1/copilot/chat/', {
+    this.http.post(`${this.apiService.getApiUrl()}/api/v1/copilot/chat/`, {
       query: queryText,
       context_sku: contextSku
     }).subscribe({

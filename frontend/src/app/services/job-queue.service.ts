@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, interval, of } from 'rxjs';
 import { switchMap, takeWhile, catchError } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 
 export interface StageStatus {
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
@@ -32,7 +33,9 @@ export interface BackgroundJobDto {
   providedIn: 'root'
 })
 export class JobQueueService {
-  private apiUrl = 'http://localhost:8080';
+  private apiUrl = (typeof window !== 'undefined' && (window as any).__SUPPLYFORGE_API_URL__)
+    || environment.apiUrl
+    || 'https://supplyforge-ai-backend.onrender.com';
 
   constructor(private http: HttpClient) {}
 
