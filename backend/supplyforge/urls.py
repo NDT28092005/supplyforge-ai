@@ -8,6 +8,8 @@ from supplyforge.views.export_views import (
 )
 
 urlpatterns = [
+    # Root Health Check for Render & Cloud Probes
+    path('', views.health_live, name='root_health'),
 
     # Health & System Liveness & Readiness Probes (Phase 0 & Phase 1)
     path('health/live', views.health_live, name='health_live_root'),

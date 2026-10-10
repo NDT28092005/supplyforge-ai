@@ -64,15 +64,15 @@ def ping(request):
     return Response({"service": "supplyforge-ai", "status": "ok"})
 
 
-@api_view(['GET'])
+@api_view(['GET', 'HEAD'])
 @permission_classes([AllowAny])
 def health_live(request):
     """
-    GET /health/live & /api/v1/health/live (Liveness Probe)
-    Indicates if the Django process is alive. No external dependency checks.
+    GET/HEAD /health/live, /api/v1/health/live & / (Liveness Probe for Render & Load Balancers)
     """
     return Response({
-        "status": "ok"
+        "status": "ok",
+        "app": "SupplyForge AI Backend"
     }, status=200)
 
 
