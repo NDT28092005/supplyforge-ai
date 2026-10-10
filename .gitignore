@@ -40,17 +40,21 @@ Thumbs.db
 frontend/dist/
 
 # Project specific ignored folders
-skills/
-tasks/
-test-data/
+/skills/
+/tasks/
+/test-data/
 .gemini/
 notebooks/env/
-docs/
-data/
-scripts/
-models/
-predictions/
-reports/
+/docs/
+/data/
+/backend/data/
+/scripts/
+/models/
+/backend/models/
+!backend/supplyforge/models/
+/predictions/
+/reports/
+/backend/reports/
 frontend/.angular/
 backend/uploads/
 uploads/
