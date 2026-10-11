@@ -24,6 +24,12 @@ scrape_configs:
     static_configs:
       - targets: ['backend:8080']
 
+  - job_name: 'django-backend-render'
+    metrics_path: '/metrics'
+    scheme: https
+    static_configs:
+      - targets: ['supplyforge-ai-backend.onrender.com']
+
   - job_name: 'node-exporter'
     static_configs:
       - targets: ['node-exporter:9100']
