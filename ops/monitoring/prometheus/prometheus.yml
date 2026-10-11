@@ -21,14 +21,14 @@ scrape_configs:
 
   - job_name: 'django-backend'
     metrics_path: '/metrics'
-    static_configs:
-      - targets: ['backend:8080']
-
-  - job_name: 'django-backend-render'
-    metrics_path: '/metrics'
     scheme: https
     static_configs:
       - targets: ['supplyforge-ai-backend.onrender.com']
+
+  - job_name: 'django-backend-local'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
 
   - job_name: 'node-exporter'
     static_configs:
