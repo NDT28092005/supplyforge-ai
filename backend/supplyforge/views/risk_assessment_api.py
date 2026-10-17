@@ -3,7 +3,6 @@ import os
 import pandas as pd
 from django.conf import settings
 from django.db.models import Q, Count
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -17,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 # ── M3-07 Risk API & Persistence Views ─────────────────────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def run_and_persist_assessments(request=None, session_id=None, workspace_id=1, user_id='user_default_001'):
     """
@@ -160,7 +158,6 @@ def run_and_persist_assessments(request=None, session_id=None, workspace_id=1, u
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def list_risk_assessments(request):
     """
@@ -237,7 +234,6 @@ def list_risk_assessments(request):
     })
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_assessment_detail(request, id):
     """
@@ -276,7 +272,6 @@ def get_risk_assessment_detail(request, id):
     })
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_sku_risk_assessment(request, sku_id):
     """
@@ -627,7 +622,6 @@ def _auto_populate_assessments_from_products(session_id=None):
             logger.error("Auto decision generator failed: %s", e)
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_global_risk_summary(request):
     """

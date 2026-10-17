@@ -2,7 +2,6 @@ import logging
 import os
 import pandas as pd
 from django.conf import settings
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -15,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 # ── M3-08 Risk Monitoring & Validation Views ────────────────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def execute_risk_monitoring(request):
     """
@@ -120,7 +118,6 @@ def execute_risk_monitoring(request):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def list_monitoring_runs(request):
     """
@@ -154,7 +151,6 @@ def list_monitoring_runs(request):
     return Response({'total_runs': len(runs), 'runs': runs})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_monitoring_run_detail(request, run_id):
     """
@@ -179,7 +175,6 @@ def get_monitoring_run_detail(request, run_id):
     })
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_active_monitoring_alerts(request):
     """

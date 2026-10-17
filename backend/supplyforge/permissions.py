@@ -77,8 +77,10 @@ def require_role_permission(permission: str):
                 user_role = request.user.role
 
             if not user_role:
-                # Default to OWNER in open MVP dev mode if unauthenticated, or deny if explicitly missing
-                user_role = ROLE_OWNER
+                return JsonResponse({
+                    "error": "Yêu cầu chưa được xác thực.",
+                    "code": "UNAUTHENTICATED",
+                }, status=401)
 
             if not has_permission(user_role, permission):
                 return JsonResponse({

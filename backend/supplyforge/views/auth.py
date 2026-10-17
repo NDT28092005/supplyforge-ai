@@ -19,7 +19,12 @@ from supplyforge.models import User, RefreshToken, Workspace, WorkspaceMember
 from supplyforge.services.odoo import OdooIntegrationService
 from supplyforge.services.email_service import send_verification_email_async, send_password_reset_email_async
 from supplyforge.permissions import get_user_permissions, has_permission, ROLE_OWNER
+from supplyforge.request_identity import get_client_ip
 from supplyforge.services.rate_limiter import RegistrationRateLimiter
+
+# These endpoints are a stateless JSON/bearer-token API. They do not accept
+# Django session cookies, and CORS credentials are disabled; keep CSRF
+# exemptions limited to public token issuance and external OAuth callbacks.
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +54,9 @@ def get_or_create_user_tenant(user: User) -> Workspace:
     )
     return workspace
 
-GOOGLE_CLIENT_ID = settings.SUPPLYFORGE.get('google_oauth', {}).get(
-    'client_id',
-    '7581962747-uj20trqmtba57s3psahigngcopku3ub3.apps.googleusercontent.com'
-)
+GOOGLE_OAUTH_CONFIG = settings.SUPPLYFORGE.get('google_oauth', {})
+GOOGLE_OAUTH_ENABLED = bool(GOOGLE_OAUTH_CONFIG.get('enabled', False))
+GOOGLE_CLIENT_ID = GOOGLE_OAUTH_CONFIG.get('client_id', '').strip()
 JWT_SECRET = settings.SECRET_KEY
 JWT_ALGORITHM = 'HS256'
 
@@ -106,12 +110,15 @@ def serialize_user_minimal(user: User, mask_pii: bool = True) -> dict:
     }
 
 
-def serialize_user_profile(user: User, workspace_id: int = 1) -> dict:
+def serialize_user_profile(user: User, workspace_id: int | None = None) -> dict:
     """
     SEC-PRIV-001: Authenticated self-user profile serialization.
     Contains only strictly required operational fields (id, email, display_name, role, status, is_email_verified).
     Excludes password_hash, verification/reset codes, failed attempts, internal tokens.
     """
+    if workspace_id is None:
+        workspace_id = get_or_create_user_tenant(user).id
+
     return {
         "id": f"u_{user.id}",
         "user_id": user.id,
@@ -150,8 +157,11 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
 
 # ── JWT & Token Management Utilities ──────────────────────────────────
 
-def generate_access_token(user: User, workspace_id: int = 1, provider: str = "local") -> str:
+def generate_access_token(user: User, workspace_id: int | None = None, provider: str = "local") -> str:
     """Generate a short-lived access token for API authorization."""
+    if workspace_id is None:
+        workspace_id = get_or_create_user_tenant(user).id
+
     now = datetime.datetime.utcnow()
     payload = {
         'sub': f"u_{user.id}",
@@ -229,7 +239,6 @@ def register_user(request):
     """
     if request.method == "OPTIONS":
         resp = JsonResponse({})
-        resp["Access-Control-Allow-Origin"] = "*"
         resp["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         resp["Access-Control-Allow-Headers"] = "Content-Type, X-Device-Fingerprint, X-Session-Fingerprint, X-Network-Signal, X-Risk-Signal"
         return resp
@@ -242,7 +251,7 @@ def register_user(request):
         password = body.get("password", "")
 
         # ── SEC-AUTH-001: Registration Rate Limiting Check ──
-        ip = (request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip() or request.META.get('REMOTE_ADDR', '') or '127.0.0.1').strip()
+        ip = get_client_ip(request)
         fingerprint = (
             request.headers.get('X-Device-Fingerprint') or
             request.headers.get('X-Session-Fingerprint') or
@@ -362,7 +371,6 @@ def register_user(request):
 
         return JsonResponse({
             "message": "Đăng ký tài khoản thành công. Vui lòng kiểm tra mã xác thực email.",
-            "verification_code": verification_code,
             "user": {
                 "id": f"u_{user.id}",
                 "email": user.email,
@@ -372,9 +380,12 @@ def register_user(request):
             }
         }, status=201)
 
-    except Exception as e:
-        logger.error(f"[Register Error] {str(e)}")
-        return JsonResponse({"error": f"Lỗi hệ thống khi đăng ký: {str(e)}"}, status=500)
+    except Exception:
+        logger.exception("[Register Error]")
+        return JsonResponse({
+            "error": "Không thể hoàn tất đăng ký. Vui lòng thử lại.",
+            "code": "REGISTRATION_FAILED",
+        }, status=500)
 
 
 @csrf_exempt
@@ -387,7 +398,6 @@ def verify_email(request):
     """
     if request.method == "OPTIONS":
         resp = JsonResponse({})
-        resp["Access-Control-Allow-Origin"] = "*"
         resp["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         resp["Access-Control-Allow-Headers"] = "Content-Type"
         return resp
@@ -464,9 +474,12 @@ def verify_email(request):
             }
         })
 
-    except Exception as e:
-        logger.error(f"[Verify Email Error] {str(e)}")
-        return JsonResponse({"error": f"Lỗi xác thực email: {str(e)}"}, status=500)
+    except Exception:
+        logger.exception("[Verify Email Error]")
+        return JsonResponse({
+            "error": "Không thể xác thực email. Vui lòng thử lại.",
+            "code": "VERIFICATION_FAILED",
+        }, status=500)
 
 
 @csrf_exempt
@@ -479,7 +492,6 @@ def resend_verification_email(request):
     """
     if request.method == "OPTIONS":
         resp = JsonResponse({})
-        resp["Access-Control-Allow-Origin"] = "*"
         resp["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         resp["Access-Control-Allow-Headers"] = "Content-Type"
         return resp
@@ -511,9 +523,12 @@ def resend_verification_email(request):
             "message": "Nếu tài khoản tồn tại và chưa được xác thực, email chứa mã xác thực đã được gửi lại.",
             "code": "VERIFICATION_EMAIL_SENT"
         })
-    except Exception as e:
-        logger.error(f"[Resend Verification Error] {str(e)}")
-        return JsonResponse({"error": f"Lỗi gửi lại mã xác thực: {str(e)}"}, status=500)
+    except Exception:
+        logger.exception("[Resend Verification Error]")
+        return JsonResponse({
+            "error": "Không thể gửi lại email xác thực. Vui lòng thử lại.",
+            "code": "VERIFICATION_RESEND_FAILED",
+        }, status=500)
 
 
 
@@ -529,7 +544,6 @@ def login_user(request):
     """
     if request.method == "OPTIONS":
         resp = JsonResponse({})
-        resp["Access-Control-Allow-Origin"] = "*"
         resp["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         resp["Access-Control-Allow-Headers"] = "Content-Type"
         return resp
@@ -608,7 +622,7 @@ def login_user(request):
             user.status = User.STATUS_ACTIVE
         user.save()
 
-        workspace_id = 1
+        workspace_id = get_or_create_user_tenant(user).id
         access_token = generate_access_token(user, workspace_id=workspace_id, provider="local")
         refresh_token = generate_refresh_token(user)
 
@@ -634,9 +648,12 @@ def login_user(request):
                 "workspace_id": workspace_id
             }
         })
-    except Exception as e:
-        logger.error(f"[Login Error] {str(e)}")
-        return JsonResponse({"error": f"Lỗi xác thực: {str(e)}"}, status=500)
+    except Exception:
+        logger.exception("[Login Error]")
+        return JsonResponse({
+            "error": "Không thể hoàn tất đăng nhập. Vui lòng thử lại.",
+            "code": "AUTHENTICATION_FAILED",
+        }, status=500)
 
 
 @csrf_exempt
@@ -648,7 +665,6 @@ def refresh_token_api(request):
     """
     if request.method == "OPTIONS":
         resp = JsonResponse({})
-        resp["Access-Control-Allow-Origin"] = "*"
         resp["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         resp["Access-Control-Allow-Headers"] = "Content-Type"
         return resp
@@ -709,9 +725,12 @@ def refresh_token_api(request):
             "expires_in": ACCESS_TOKEN_EXPIRY_SECONDS
         })
 
-    except Exception as e:
-        logger.error(f"[Refresh Token Error] {str(e)}")
-        return JsonResponse({"error": f"Lỗi cấp lại token: {str(e)}"}, status=500)
+    except Exception:
+        logger.exception("[Refresh Token Error]")
+        return JsonResponse({
+            "error": "Không thể cấp lại phiên đăng nhập. Vui lòng đăng nhập lại.",
+            "code": "TOKEN_REFRESH_FAILED",
+        }, status=500)
 
 
 @csrf_exempt
@@ -723,7 +742,6 @@ def logout_user(request):
     """
     if request.method == "OPTIONS":
         resp = JsonResponse({})
-        resp["Access-Control-Allow-Origin"] = "*"
         resp["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         resp["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         return resp
@@ -750,11 +768,14 @@ def logout_user(request):
                     RefreshToken.objects.filter(user_id=payload.get('user_id')).update(is_revoked=True)
 
         return JsonResponse({"message": "Đăng xuất thành công."})
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except Exception:
+        logger.exception("[Logout Error]")
+        return JsonResponse({
+            "error": "Không thể hoàn tất đăng xuất.",
+            "code": "LOGOUT_FAILED",
+        }, status=500)
 
 
-@csrf_exempt
 @require_http_methods(["GET", "OPTIONS"])
 def verify_token(request):
     """
@@ -763,7 +784,6 @@ def verify_token(request):
     """
     if request.method == "OPTIONS":
         resp = JsonResponse({})
-        resp["Access-Control-Allow-Origin"] = "*"
         resp["Access-Control-Allow-Headers"] = "Authorization"
         return resp
 
@@ -794,14 +814,12 @@ def verify_token(request):
     })
 
 
-@csrf_exempt
 @require_http_methods(["GET", "OPTIONS"])
 def get_current_user(request):
     """GET /api/v1/auth/me & /api/auth/me"""
     return verify_token(request)
 
 
-@csrf_exempt
 @require_http_methods(["PUT", "PATCH", "POST", "OPTIONS"])
 def update_user_profile(request, target_user_id: int = None):
     """
@@ -812,7 +830,6 @@ def update_user_profile(request, target_user_id: int = None):
     """
     if request.method == "OPTIONS":
         resp = JsonResponse({})
-        resp["Access-Control-Allow-Origin"] = "*"
         resp["Access-Control-Allow-Methods"] = "PUT, PATCH, POST, OPTIONS"
         resp["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         return resp
@@ -890,14 +907,14 @@ def update_user_profile(request, target_user_id: int = None):
             "message": "Cập nhật thông tin tài khoản thành công.",
             "user": serialize_user_profile(target_user)
         })
-    except Exception as exc:
-        import traceback
-        print(f"UPDATE_USER_PROFILE ERROR: {exc}\n{traceback.format_exc()}")
-        logger.error(f"[update_user_profile Exception]: {exc}")
-        return JsonResponse({"error": str(exc), "code": "INTERNAL_SERVER_ERROR"}, status=500)
+    except Exception:
+        logger.exception("[update_user_profile Exception]")
+        return JsonResponse({
+            "error": "Không thể cập nhật thông tin tài khoản.",
+            "code": "INTERNAL_SERVER_ERROR",
+        }, status=500)
 
 
-@csrf_exempt
 @require_http_methods(["POST", "PUT", "PATCH", "OPTIONS"])
 def update_me_profile(request):
     """
@@ -908,7 +925,6 @@ def update_me_profile(request):
     """
     if request.method == "OPTIONS":
         resp = JsonResponse({})
-        resp["Access-Control-Allow-Origin"] = "*"
         resp["Access-Control-Allow-Methods"] = "PUT, PATCH, OPTIONS"
         resp["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         return resp
@@ -1011,10 +1027,17 @@ def google_callback(request):
     """GET/POST /api/auth/google/callback & /api/v1/auth/google/callback"""
     if request.method == "OPTIONS":
         resp = JsonResponse({})
-        resp["Access-Control-Allow-Origin"] = "*"
         resp["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
         resp["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         return resp
+
+    if not GOOGLE_OAUTH_ENABLED or not GOOGLE_CLIENT_ID:
+        if request.method == "GET":
+            return HttpResponseRedirect("http://localhost:4200/?error=google_auth_unavailable")
+        return JsonResponse({
+            "error": "Đăng nhập Google chưa được cấu hình.",
+            "code": "GOOGLE_AUTH_UNAVAILABLE",
+        }, status=503)
 
     if request.method == "GET":
         code = request.GET.get("code", "").strip()
@@ -1072,8 +1095,8 @@ def google_callback(request):
             response.set_cookie("sf_auth_token", token, max_age=86400, path="/", domain="localhost", samesite="Lax")
             return response
 
-        except Exception as e:
-            logger.error(f"[Google Auth GET Error] {str(e)}")
+        except Exception:
+            logger.exception("[Google Auth GET Error]")
             return HttpResponseRedirect("http://localhost:4200/?error=auth_exception")
 
     try:
@@ -1113,7 +1136,11 @@ def google_callback(request):
                 elif is_form_post:
                     return HttpResponseRedirect("http://localhost:4200/?error=invalid_google_token")
                 else:
-                    return JsonResponse({"error": f"Token Google không hợp lệ: {str(ver_err)}"}, status=401)
+                    logger.warning("[Google ID Token Error]", exc_info=True)
+                    return JsonResponse({
+                        "error": "Token Google không hợp lệ.",
+                        "code": "INVALID_GOOGLE_TOKEN",
+                    }, status=401)
         elif email_body:
             email = email_body
         else:
@@ -1160,8 +1187,12 @@ def google_callback(request):
             }
         })
 
-    except Exception as e:
-        return JsonResponse({"error": f"Lỗi xác thực Google: {str(e)}"}, status=500)
+    except Exception:
+        logger.exception("[Google Auth POST Error]")
+        return JsonResponse({
+            "error": "Không thể hoàn tất xác thực Google.",
+            "code": "GOOGLE_AUTH_FAILED",
+        }, status=500)
 
 
 @csrf_exempt
@@ -1170,7 +1201,6 @@ def google_complete_phone(request):
     """POST /api/v1/auth/google/complete-phone & /api/auth/google/complete-phone"""
     if request.method == "OPTIONS":
         resp = JsonResponse({})
-        resp["Access-Control-Allow-Origin"] = "*"
         resp["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         resp["Access-Control-Allow-Headers"] = "Content-Type"
         return resp
@@ -1212,8 +1242,12 @@ def google_complete_phone(request):
                 "status": user.status
             }
         })
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except Exception:
+        logger.exception("[Google Complete Phone Error]")
+        return JsonResponse({
+            "error": "Không thể hoàn tất cập nhật số điện thoại.",
+            "code": "GOOGLE_PHONE_UPDATE_FAILED",
+        }, status=500)
 
 
 # ── AUTH-003 & SEC-AUTH-005: PASSWORD RECOVERY (FORGOT & RESET PASSWORD) ─────
@@ -1228,7 +1262,6 @@ def forgot_password(request):
     """
     if request.method == "OPTIONS":
         resp = JsonResponse({})
-        resp["Access-Control-Allow-Origin"] = "*"
         resp["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         resp["Access-Control-Allow-Headers"] = "Content-Type"
         return resp
@@ -1258,9 +1291,12 @@ def forgot_password(request):
             "message": "Nếu tài khoản tồn tại trong hệ thống, email hướng dẫn khôi phục mật khẩu đã được gửi.",
             "code": "RECOVERY_EMAIL_SENT"
         })
-    except Exception as e:
-        logger.error(f"[Forgot Password Error] {str(e)}")
-        return JsonResponse({"error": f"Lỗi hệ thống: {str(e)}"}, status=500)
+    except Exception:
+        logger.exception("[Forgot Password Error]")
+        return JsonResponse({
+            "error": "Không thể xử lý yêu cầu khôi phục mật khẩu.",
+            "code": "PASSWORD_RECOVERY_FAILED",
+        }, status=500)
 
 
 @csrf_exempt
@@ -1273,7 +1309,6 @@ def reset_password(request):
     """
     if request.method == "OPTIONS":
         resp = JsonResponse({})
-        resp["Access-Control-Allow-Origin"] = "*"
         resp["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         resp["Access-Control-Allow-Headers"] = "Content-Type"
         return resp
@@ -1317,7 +1352,9 @@ def reset_password(request):
         return JsonResponse({
             "message": "Đặt lại mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới."
         })
-    except Exception as e:
-        logger.error(f"[Reset Password Error] {str(e)}")
-        return JsonResponse({"error": f"Lỗi hệ thống: {str(e)}"}, status=500)
-
+    except Exception:
+        logger.exception("[Reset Password Error]")
+        return JsonResponse({
+            "error": "Không thể đặt lại mật khẩu. Vui lòng thử lại.",
+            "code": "PASSWORD_RESET_FAILED",
+        }, status=500)

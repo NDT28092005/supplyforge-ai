@@ -62,7 +62,6 @@ def shopee_webhook_signature_required(view_func: Callable) -> Callable:
     return wrapper
 
 
-@csrf_exempt
 @api_view(['GET'])
 def shopee_oauth_authorize_url(request):
     cfg = settings.SUPPLYFORGE.get('shopee', {})
@@ -101,6 +100,8 @@ def shopee_oauth_authorize_url(request):
     return JsonResponse({'url': auth_url})
 
 
+# Shopee redirects here without a Django session; authenticity comes from the
+# short-lived OAuth code and the signed server-to-Shopee token exchange.
 @csrf_exempt
 @require_http_methods(['GET'])
 def shopee_oauth_callback(request):
@@ -185,6 +186,8 @@ def shopee_oauth_callback(request):
     })
 
 
+# This endpoint is external-provider traffic; the HMAC wrapper is the CSRF/
+# authenticity boundary and runs before the webhook handler.
 @csrf_exempt
 @require_http_methods(['POST'])
 @shopee_webhook_signature_required
@@ -230,7 +233,6 @@ def shopee_webhook(request):
     return JsonResponse({'message': 'Webhook received.'})
 
 
-@csrf_exempt
 @api_view(['POST'])
 def trigger_sync(request):
     connection_id = request.data.get('connection_id')

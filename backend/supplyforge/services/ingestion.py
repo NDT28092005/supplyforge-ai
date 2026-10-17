@@ -2,6 +2,7 @@ import os
 import re
 import json
 import uuid
+import logging
 import requests
 from decimal import Decimal
 from datetime import datetime, timedelta
@@ -10,6 +11,9 @@ from django.db import transaction
 from django.db.models import Min, Max
 from supplyforge.models import Product, Order, OrderItem, ArchivedDataSet
 from supplyforge.metrics import record_ingestion
+from supplyforge.services.storage_backend import StorageBackend
+
+logger = logging.getLogger(__name__)
 
 
 class GeminiColumnMappingService:
@@ -774,10 +778,7 @@ class DynamicFileImportService:
 
         # IR-016: Export processed canonical snapshot to /processed directory
         try:
-            from supplyforge.services.csv_profiler import StreamingCSVProfiler
-            processed_dir = StreamingCSVProfiler.get_processed_upload_dir()
             processed_filename = f"{session_id or uuid.uuid4().hex}_processed.json"
-            processed_filepath = os.path.join(processed_dir, processed_filename)
 
             processed_payload = {
                 "import_id": import_id_str,
@@ -796,13 +797,19 @@ class DynamicFileImportService:
                 "data_corrections": data_corrections_log
             }
 
-            with open(processed_filepath, 'w', encoding='utf-8') as pf:
-                json.dump(processed_payload, pf, ensure_ascii=False, indent=2)
+            processed_filepath = StorageBackend.save_bytes(
+                json.dumps(
+                    processed_payload,
+                    ensure_ascii=False,
+                    indent=2,
+                ).encode('utf-8'),
+                f"processed/{processed_filename}",
+            )
 
             if session_obj:
                 session_obj.processed_storage_path = processed_filepath
         except Exception as proc_err:
-            print(f"[Import Pipeline] Processed storage dump warning: {proc_err}")
+            logger.exception('[Import Pipeline] Processed storage dump failed')
 
         # Update IngestionSession history if session_id is provided or session exists
         if session_obj:
@@ -992,4 +999,3 @@ class DynamicFileImportService:
             NFRManager.release_chunk_memory()
 
         return total_result or {"status": "REJECT", "error": "ERR_EMPTY_FILE"}
-

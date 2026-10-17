@@ -14,13 +14,13 @@ import logging
 import os
 import sys
 
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 
 from supplyforge.models import IngestionSession
+from supplyforge.services.storage_backend import StorageBackend
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -34,7 +34,6 @@ from src.ingestion.data_readiness_gate import DataReadinessError
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def compute_slow_moving_features(request, session_id):
     """Compute M2-01 SKU Demand Features as of decision cutoff t0."""
@@ -60,14 +59,15 @@ def compute_slow_moving_features(request, session_id):
     elif os.path.exists(norm_csv_path):
         data_filepath = norm_csv_path
 
-    if not data_filepath or not os.path.exists(data_filepath):
+    if not data_filepath or not StorageBackend.exists(data_filepath):
         return Response(
             {'error': 'Dữ liệu giao dịch không tồn tại.'},
             status=status.HTTP_400_BAD_REQUEST
         )
 
     try:
-        df = pd.read_csv(data_filepath, nrows=50000, encoding_errors='replace')
+        with StorageBackend.localize(data_filepath) as local_path:
+            df = pd.read_csv(local_path, nrows=50000, encoding_errors='replace')
         engineer = SlowMovingFeatureEngineer(session_id=str(session.id))
         result = engineer.compute_sku_features(
             df=df,
@@ -103,7 +103,6 @@ def compute_slow_moving_features(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_slow_moving_features(request, session_id):
     """Retrieve computed M2-01 SKU Feature Matrix."""
@@ -128,7 +127,6 @@ def get_slow_moving_features(request, session_id):
     return Response({'summary': None, 'featureMatrix': []})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_feature_quality_report(request, session_id):
     """Retrieve Feature Quality Validation Report."""
@@ -148,7 +146,6 @@ def get_feature_quality_report(request, session_id):
 
 # ── M2-02 Demand Pattern Classification Views ─────────────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def classify_demand_patterns(request, session_id):
     """Classify SKU Demand Patterns (M2-02) based on M2-01 features."""
@@ -215,7 +212,6 @@ def classify_demand_patterns(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_demand_patterns(request, session_id):
     """Retrieve SKU Demand Pattern Classification records."""
@@ -240,7 +236,6 @@ def get_demand_patterns(request, session_id):
     return Response({'summary': None, 'demandPatternRecords': []})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_demand_pattern_summary(request, session_id):
     """Retrieve Demand Pattern Distribution Summary Report."""
@@ -266,7 +261,6 @@ from src.ingestion.data_readiness_gate import DataReadinessError
 
 # ── M2-03 Slow-Moving Risk Feature Assembly Views ─────────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def assemble_risk_features(request, session_id):
     """Assemble Slow-Moving Risk Feature Matrix (M2-03) from M2-01 and M2-02."""
@@ -361,7 +355,6 @@ def assemble_risk_features(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_features(request, session_id):
     """Retrieve Assembled Slow-Moving Risk Feature Matrix."""
@@ -386,7 +379,6 @@ def get_risk_features(request, session_id):
     return Response({'featureRegistry': [], 'riskFeatureRecords': []})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_feature_registry(request, session_id):
     """Retrieve Official Risk Feature Registry Schema & Metadata."""
@@ -413,7 +405,6 @@ from src.ingestion.data_readiness_gate import DataReadinessError
 
 # ── M2-04 Slow-Moving Risk Feature Engineering Views ───────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def build_risk_feature_matrix(request, session_id):
     """Build & Profile Canonical Slow-Moving Risk Feature Matrix (M2-04)."""
@@ -487,7 +478,6 @@ def build_risk_feature_matrix(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_feature_matrix(request, session_id):
     """Retrieve Canonical Risk Feature Matrix."""
@@ -512,7 +502,6 @@ def get_risk_feature_matrix(request, session_id):
     return Response({'featureDictionary': [], 'riskFeatureMatrixRecords': []})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_feature_dictionary(request, session_id):
     """Retrieve Official Feature Dictionary Metadata."""
@@ -530,7 +519,6 @@ def get_feature_dictionary(request, session_id):
     return Response({'featureDictionary': []})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_feature_correlation(request, session_id):
     """Retrieve Feature Correlation & Redundancy Profiling report."""
@@ -564,7 +552,6 @@ from src.ingestion.data_readiness_gate import DataReadinessError
 
 # ── M2-05 Slow-Moving Risk Feature Scoring Views ──────────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def compute_risk_scores(request, session_id):
     """Compute Slow-Moving Risk Feature Scoring & Diagnostic Flags (M2-05)."""
@@ -639,7 +626,6 @@ def compute_risk_scores(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_scores(request, session_id):
     """Retrieve SKU Slow-Moving Risk Feature Scoring Dataset."""
@@ -673,7 +659,6 @@ from src.analytics.slow_moving_risk_classifier import SlowMovingRiskClassifier, 
 from src.ingestion.data_readiness_gate import DataReadinessError
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_scoring_config(request, session_id):
     """Retrieve Risk Scoring Threshold Configuration."""
@@ -693,7 +678,6 @@ def get_risk_scoring_config(request, session_id):
 
 # ── M2-06 Slow-Moving Risk Classification Views ────────────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def classify_slow_moving_risk(request, session_id):
     """Perform XGBoost ML Inference for SKU Slow-Moving Risk Classification (M2-06)."""
@@ -764,7 +748,6 @@ def classify_slow_moving_risk(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_classifications(request, session_id):
     """Retrieve SKU Slow-Moving Risk Classification Dataset & Probabilities."""
@@ -799,7 +782,6 @@ from src.analytics.slow_moving_risk_prioritizer import SlowMovingRiskPrioritizer
 from src.ingestion.data_readiness_gate import DataReadinessError
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_classification_summary(request, session_id):
     """Retrieve Risk Classification Distribution Summary Report."""
@@ -822,7 +804,6 @@ def get_risk_classification_summary(request, session_id):
 
 # ── M2-07 Slow-Moving Risk Ranking & Prioritization Views ─────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def prioritize_slow_moving_risk(request, session_id):
     """Perform Deterministic Hierarchical Risk Ranking & Prioritization (M2-07)."""
@@ -897,7 +878,6 @@ def prioritize_slow_moving_risk(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_prioritized_queue(request, session_id):
     """Retrieve Prioritized Slow-Moving SKU Risk Queue Dataset."""
@@ -933,7 +913,6 @@ from src.analytics.feature_readiness_gate import FeatureReadinessGate, FeatureLe
 from src.ingestion.data_readiness_gate import DataReadinessError
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_prioritization_summary(request, session_id):
     """Retrieve Risk Prioritization Summary Report."""
@@ -956,7 +935,6 @@ def get_risk_prioritization_summary(request, session_id):
 
 # ── M2-08 Feature Validation & Readiness Gate Views ──────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def validate_feature_matrix(request, session_id):
     """Execute 8-step validation protocol and freeze Module 02 Feature Layer (M2-08)."""
@@ -1033,7 +1011,6 @@ def validate_feature_matrix(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_feature_readiness_certificate(request, session_id):
     """Retrieve Official Feature Readiness Certificate JSON."""
@@ -1070,7 +1047,6 @@ from src.analytics.feature_snapshot_engine import FeatureSnapshotEngine
 from src.ingestion.data_readiness_gate import DataReadinessError
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_frozen_feature_matrix(request, session_id):
     """Retrieve Frozen Feature Matrix Dataset."""
@@ -1090,7 +1066,6 @@ def get_frozen_feature_matrix(request, session_id):
 
 # ── M2-09 Feature Snapshot & Downstream Handoff Views ─────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def create_feature_snapshot(request, session_id):
     """Freeze Immutable Feature Snapshot, compute SHA-256 integrity, trace lineage & export contract (M2-09)."""
@@ -1176,7 +1151,6 @@ def create_feature_snapshot(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_feature_snapshot_metadata(request, session_id):
     """Retrieve Feature Snapshot Metadata M2-FEATURE-v1.0."""
@@ -1222,7 +1196,6 @@ from src.ingestion.data_readiness_gate import DataReadinessError
 
 # ── M3-06 Risk Assessment Assembly Views ─────────────────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def run_risk_assessment_assembly(request, session_id):
     """Execute Risk Assessment Assembly Engine (M3-06)."""
@@ -1294,7 +1267,6 @@ def run_risk_assessment_assembly(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_assessments(request, session_id):
     """Retrieve Unified SKU Risk Assessment Profiles."""
@@ -1319,7 +1291,6 @@ def get_risk_assessments(request, session_id):
     return Response({'assessments': []})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_assessment_summary(request, session_id):
     """Retrieve Risk Assessment Status Summary & Distribution."""
@@ -1345,7 +1316,6 @@ def get_risk_assessment_summary(request, session_id):
 
 # ── M3-05 Risk Diagnostic Engine Views ─────────────────────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def run_risk_diagnostics(request, session_id):
     """Execute Risk Diagnostic Engine on SKU predictions & observables (M3-05)."""
@@ -1410,7 +1380,6 @@ def run_risk_diagnostics(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_diagnostics(request, session_id):
     """Retrieve SKU Risk Diagnostic Profiles & Evidence."""
@@ -1435,7 +1404,6 @@ def get_risk_diagnostics(request, session_id):
     return Response({'profiles': []})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_diagnostic_summary(request, session_id):
     """Retrieve Diagnostic Signal Activation Summary & Frequency Distribution."""
@@ -1459,7 +1427,6 @@ def get_diagnostic_summary(request, session_id):
 
 # ── M3-04 Risk Probability Calibration Views ──────────────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def run_probability_calibration(request, session_id):
     """Execute Risk Probability Calibration Engine & Benchmark (M3-04)."""
@@ -1526,7 +1493,6 @@ def run_probability_calibration(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_probability_calibrated_predictions(request, session_id):
     """Retrieve SKU predictions with calibrated probability & confidence levels."""
@@ -1551,7 +1517,6 @@ def get_probability_calibrated_predictions(request, session_id):
     return Response({'calibratedPredictions': []})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_calibration_summary(request, session_id):
     """Retrieve Multi-Method Calibration Benchmark Summary & Metrics (ECE, Brier, Log Loss)."""
@@ -1576,7 +1541,6 @@ def get_calibration_summary(request, session_id):
 
 # ── M3-03 Risk Classification Views ───────────────────────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def run_risk_classification(request, session_id):
     """Execute Risk Classification Engine on Scored Risk Dataset (M3-03)."""
@@ -1643,7 +1607,6 @@ def run_risk_classification(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_classifications(request, session_id):
     """Retrieve SKU Risk Classifications, Severity & Confidence."""
@@ -1668,7 +1631,6 @@ def get_risk_classifications(request, session_id):
     return Response({'classifications': []})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_classification_summary(request, session_id):
     """Retrieve Risk Classification Distribution & Severity Summary."""
@@ -1695,7 +1657,6 @@ def get_risk_classification_summary(request, session_id):
 
 # ── M3-02 Risk Scoring Engine Views ───────────────────────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def run_risk_scoring(request, session_id):
     """Execute Risk Scoring Engine on XGBoost Predictions (M3-02)."""
@@ -1756,7 +1717,6 @@ def run_risk_scoring(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_scores(request, session_id):
     """Retrieve Normalized SKU Risk Scores & Priorities."""
@@ -1781,7 +1741,6 @@ def get_risk_scores(request, session_id):
     return Response({'scores': []})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_scoring_summary(request, session_id):
     """Retrieve Risk Scoring Distribution & Consistency Summary."""
@@ -1807,7 +1766,6 @@ def get_risk_scoring_summary(request, session_id):
 
 # ── M3-01 Risk Model Integration Views ─────────────────────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def run_risk_model_inference(request, session_id):
     """Execute XGBoost model inference on Feature Snapshot (M3-01)."""
@@ -1869,7 +1827,6 @@ def run_risk_model_inference(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_model_predictions(request, session_id):
     """Retrieve SKU Predictions from XGBoost Risk Model."""
@@ -1894,7 +1851,6 @@ def get_risk_model_predictions(request, session_id):
     return Response({'predictions': []})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_model_status(request, session_id):
     """Retrieve XGBoost Risk Model Traceability & Status Metadata."""
@@ -1917,7 +1873,6 @@ def get_risk_model_status(request, session_id):
     })
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_model_contract(request, session_id):
     """Retrieve Downstream Handoff Contract for Risk Model (EXP-03)."""
@@ -1937,7 +1892,6 @@ def get_risk_model_contract(request, session_id):
 
 # ── M2-10 Risk Dashboard UI & Module 02 Acceptance Views ─────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def run_module02_acceptance(request, session_id):
     """Execute 18-Criteria Acceptance Protocol & Generate Module 02 Final Certificate (M2-10)."""
@@ -2000,7 +1954,6 @@ def run_module02_acceptance(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_summary(request, session_id):
     """Retrieve Executive Risk KPI Summary & Distribution."""
@@ -2036,7 +1989,6 @@ def get_risk_summary(request, session_id):
     })
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_products(request, session_id):
     """Retrieve SKU Risk List with Filtering, Search & Sorting."""
@@ -2092,7 +2044,6 @@ def get_risk_products(request, session_id):
     return Response({'totalSkus': len(records), 'products': records})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_risk_product_detail(request, session_id, sku):
     """Retrieve Single SKU Risk Detail for Detail Drawer."""

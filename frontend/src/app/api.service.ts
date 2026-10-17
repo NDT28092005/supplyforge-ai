@@ -204,7 +204,7 @@ export class ApiService {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('workspaceId', workspaceId.toString());
-    return this.http.post(`${this.apiUrl}/api/v2/ingestion/upload`, formData);
+    return this.http.post(`${this.apiUrl}/api/v2/jobs/upload`, formData);
   }
 
   getJobsList(workspaceId: number = 1): Observable<any> {
@@ -690,6 +690,5 @@ export class ApiService {
     return this.http.patch(`${this.apiUrl}/api/v1/action-plans/${planId}/outcome/`, outcome);
   }
 }
-
 
 

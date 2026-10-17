@@ -2,7 +2,6 @@ import json
 import uuid
 from decimal import Decimal
 from datetime import datetime
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -10,11 +9,10 @@ from rest_framework import status
 from supplyforge.models import Product, Order, OrderItem
 
 
-@csrf_exempt
 @api_view(['POST'])
 def sync_products(request):
     file = request.FILES.get('file')
-    user_id = request.data.get('userId', 'user_default_001')
+    user_id = str(request.user_id)
     
     if not file:
         return Response("File is missing", status=status.HTTP_400_BAD_REQUEST)
@@ -74,15 +72,17 @@ def sync_products(request):
             
         Product.objects.bulk_create(products_to_create)
         return Response("Products synced successfully.")
-    except Exception as e:
-        return Response(f"Sync failed: {str(e)}", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception:
+        return Response(
+            {'error': 'Không thể đồng bộ dữ liệu.', 'code': 'SYNC_FAILED'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
-@csrf_exempt
 @api_view(['POST'])
 def sync_orders(request):
     file = request.FILES.get('file')
-    user_id = request.data.get('userId', 'user_default_001')
+    user_id = str(request.user_id)
     
     if not file:
         return Response("File is empty", status=status.HTTP_400_BAD_REQUEST)
@@ -140,5 +140,8 @@ def sync_orders(request):
                     )
                     
         return Response("Sync initiated successfully in batch mode.")
-    except Exception as e:
-        return Response(f"Sync failed: {str(e)}", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception:
+        return Response(
+            {'error': 'Không thể đồng bộ dữ liệu.', 'code': 'SYNC_FAILED'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

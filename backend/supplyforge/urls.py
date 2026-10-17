@@ -117,8 +117,8 @@ urlpatterns = [
     path('api/v2/ingestion/lineage/<str:record_id>', views.get_record_lineage, name='get_record_lineage'),
     path('api/v1/ingestion/error-matrix', views.get_error_matrix, name='get_error_matrix_v1'),
     path('api/v2/ingestion/error-matrix', views.get_error_matrix, name='get_error_matrix'),
-    path('api/v1/ingestion/sessions/<uuid:session_id>/quality-report', views.get_post_import_quality_report, name='get_post_import_quality_report_v1'),
-    path('api/v2/ingestion/sessions/<uuid:session_id>/quality-report', views.get_post_import_quality_report, name='get_post_import_quality_report'),
+    path('api/v1/ingestion/sessions/<uuid:session_id>/post-import-quality-report', views.get_post_import_quality_report, name='get_post_import_quality_report_v1'),
+    path('api/v2/ingestion/sessions/<uuid:session_id>/post-import-quality-report', views.get_post_import_quality_report, name='get_post_import_quality_report'),
     path('api/v1/ingestion/sessions/<uuid:session_id>/pipeline-propagate', views.propagate_pipeline_health_score, name='propagate_pipeline_health_score_v1'),
     path('api/v2/ingestion/sessions/<uuid:session_id>/pipeline-propagate', views.propagate_pipeline_health_score, name='propagate_pipeline_health_score'),
     path('api/v1/tenant/verify-isolation', views.verify_tenant_isolation, name='verify_tenant_isolation_v1'),
@@ -196,13 +196,11 @@ urlpatterns = [
     path('api/v2/ingestion/sessions/<uuid:session_id>/record-history', views.record_ingestion_history_event, name='record_ingestion_history_event'),
     path('api/v1/ingestion/sessions/<uuid:session_id>/history', views.get_ingestion_history_detail, name='get_ingestion_history_detail_v1'),
     path('api/v2/ingestion/sessions/<uuid:session_id>/history', views.get_ingestion_history_detail, name='get_ingestion_history_detail'),
-    path('api/v1/ingestion/history-list', views.get_all_ingestion_history_list, name='get_all_ingestion_history_list_v1_dup'),
-    path('api/v2/ingestion/history-list', views.get_all_ingestion_history_list, name='get_all_ingestion_history_list_v2_dup'),
 
     # ── Module 01 DAT-10 Data Quality Report UI & Readiness Guard ──
     path('api/v1/ingestion/sessions/<uuid:session_id>/generate-quality-report', views.generate_quality_report, name='generate_quality_report_v1'),
     # ── Background Job Queue (Release 1: Queue v1.0) ──
-    path('api/v2/ingestion/upload', views.enqueue_upload_job, name='enqueue_upload_job'),
+    path('api/v2/jobs/upload', views.enqueue_upload_job, name='enqueue_upload_job'),
     path('api/v2/jobs', views.list_jobs, name='list_jobs_no_slash'),
     path('api/v2/jobs/', views.list_jobs, name='list_jobs'),
     path('api/v2/jobs/<str:job_id>/status', views.get_job_status, name='get_job_status'),
@@ -263,18 +261,12 @@ urlpatterns = [
     # ── Module 02 Analytics: M2-05 Slow-Moving Risk Feature Scoring ──
     path('api/v1/analytics/sessions/<uuid:session_id>/compute-risk-scores', views.compute_risk_scores, name='compute_risk_scores_v1'),
     path('api/v2/analytics/sessions/<uuid:session_id>/compute-risk-scores', views.compute_risk_scores, name='compute_risk_scores'),
-    path('api/v1/analytics/sessions/<uuid:session_id>/risk-scores', views.get_risk_scores, name='get_risk_scores_v1'),
-    path('api/v2/analytics/sessions/<uuid:session_id>/risk-scores', views.get_risk_scores, name='get_risk_scores'),
     path('api/v1/analytics/sessions/<uuid:session_id>/risk-scoring-config', views.get_risk_scoring_config, name='get_risk_scoring_config_v1'),
     path('api/v2/analytics/sessions/<uuid:session_id>/risk-scoring-config', views.get_risk_scoring_config, name='get_risk_scoring_config'),
 
     # ── Module 02 Analytics: M2-06 Slow-Moving Risk Classification ──
     path('api/v1/analytics/sessions/<uuid:session_id>/classify-slow-moving-risk', views.classify_slow_moving_risk, name='classify_slow_moving_risk_v1'),
     path('api/v2/analytics/sessions/<uuid:session_id>/classify-slow-moving-risk', views.classify_slow_moving_risk, name='classify_slow_moving_risk'),
-    path('api/v1/analytics/sessions/<uuid:session_id>/risk-classifications', views.get_risk_classifications, name='get_risk_classifications_v1'),
-    path('api/v2/analytics/sessions/<uuid:session_id>/risk-classifications', views.get_risk_classifications, name='get_risk_classifications'),
-    path('api/v1/analytics/sessions/<uuid:session_id>/risk-classification-summary', views.get_risk_classification_summary, name='get_risk_classification_summary_v1'),
-    path('api/v2/analytics/sessions/<uuid:session_id>/risk-classification-summary', views.get_risk_classification_summary, name='get_risk_classification_summary'),
 
     # ── Module 02 Analytics: M2-07 Slow-Moving Risk Ranking & Prioritization ──
     path('api/v1/analytics/sessions/<uuid:session_id>/prioritize-slow-moving-risk', views.prioritize_slow_moving_risk, name='prioritize_slow_moving_risk_v1'),
@@ -452,7 +444,5 @@ urlpatterns = [
     path('api/v1/export/action-plans', ExportActionPlanReportView.as_view(), name='export_action_plan_report'),
     path('api/v1/export/action-plans/', ExportActionPlanReportView.as_view()),
 ]
-
-
 
 

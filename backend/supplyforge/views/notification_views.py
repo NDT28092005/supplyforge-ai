@@ -9,11 +9,47 @@ REST API Endpoints for In-App Notifications:
 
 import json
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+from rest_framework.decorators import api_view
 from supplyforge.models import NotificationRecord
 
 
-def _seed_default_notifications(workspace_id=1):
+def _trusted_workspace_id(request):
+    if not (
+        getattr(request, 'tenant_context_validated', False)
+        and getattr(request, 'workspace_id', None)
+    ):
+        return None, JsonResponse(
+            {
+                'error': 'Yêu cầu cần Authorization Bearer token.',
+                'code': 'UNAUTHENTICATED',
+            },
+            status=401,
+        )
+    return int(request.workspace_id), None
+
+
+def _validate_requested_workspace(request, workspace_id):
+    if workspace_id in (None, ''):
+        return None
+    try:
+        requested_id = int(workspace_id)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {'error': 'workspace_id không hợp lệ.', 'code': 'INVALID_WORKSPACE'},
+            status=400,
+        )
+    if requested_id != request.workspace_id:
+        return JsonResponse(
+            {
+                'error': 'Workspace trong request không khớp tenant của phiên đăng nhập.',
+                'code': 'WORKSPACE_MISMATCH',
+            },
+            status=403,
+        )
+    return None
+
+
+def _seed_default_notifications(workspace_id):
     """Seed default realistic notifications covering all 6 NOTI-001 triggers."""
     default_items = [
         {
@@ -75,17 +111,21 @@ def _seed_default_notifications(workspace_id=1):
         )
 
 
-@csrf_exempt
+@api_view(['GET'])
 def list_notifications(request):
     """GET /api/v1/notifications/"""
     if request.method != 'GET':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-    workspace_id = request.GET.get('workspace_id', 1)
-    try:
-        workspace_id = int(workspace_id)
-    except ValueError:
-        workspace_id = 1
+    workspace_id, context_error = _trusted_workspace_id(request)
+    if context_error:
+        return context_error
+    workspace_error = _validate_requested_workspace(
+        request,
+        request.GET.get('workspace_id'),
+    )
+    if workspace_error:
+        return workspace_error
 
     unread_only = request.GET.get('unread_only', 'false').lower() == 'true'
 
@@ -124,7 +164,7 @@ def list_notifications(request):
     })
 
 
-@csrf_exempt
+@api_view(['POST'])
 def mark_notifications_read(request):
     """POST /api/v1/notifications/mark-read/"""
     if request.method != 'POST':
@@ -135,7 +175,15 @@ def mark_notifications_read(request):
     except json.JSONDecodeError:
         body = {}
 
-    workspace_id = body.get('workspace_id', 1)
+    workspace_id, context_error = _trusted_workspace_id(request)
+    if context_error:
+        return context_error
+    workspace_error = _validate_requested_workspace(
+        request,
+        body.get('workspace_id'),
+    )
+    if workspace_error:
+        return workspace_error
     notification_id = body.get('id')
     mark_all = body.get('mark_all', False)
 
@@ -158,7 +206,7 @@ def mark_notifications_read(request):
     })
 
 
-@csrf_exempt
+@api_view(['POST'])
 def create_notification(request):
     """POST /api/v1/notifications/create/"""
     if request.method != 'POST':
@@ -169,7 +217,15 @@ def create_notification(request):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON body'}, status=400)
 
-    workspace_id = body.get('workspace_id', 1)
+    workspace_id, context_error = _trusted_workspace_id(request)
+    if context_error:
+        return context_error
+    workspace_error = _validate_requested_workspace(
+        request,
+        body.get('workspace_id'),
+    )
+    if workspace_error:
+        return workspace_error
     notification_type = body.get('notification_type', NotificationRecord.TRIGGER_NEW_CRITICAL_SKU)
     title = body.get('title', 'Cảnh báo hệ thống mới')
     message = body.get('message', 'Đã ghi nhận sự kiện rủi ro mới.')

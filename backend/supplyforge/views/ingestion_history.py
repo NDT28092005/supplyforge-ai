@@ -14,7 +14,6 @@ import logging
 import os
 import sys
 
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -31,7 +30,6 @@ from src.ingestion.ingestion_history_tracker import IngestionHistoryTracker
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def record_ingestion_history_event(request, session_id):
     """Record or update an ingestion session event in history."""
@@ -89,7 +87,6 @@ def record_ingestion_history_event(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_ingestion_history_detail(request, session_id):
     """Retrieve detailed history for a specific ingestion session."""
@@ -116,7 +113,6 @@ def get_ingestion_history_detail(request, session_id):
     return Response({'historyDetail': None})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_all_ingestion_history_list(request):
     """Retrieve master list of all ingestion sessions across datasets."""

@@ -72,9 +72,11 @@ class Ten001And002TestCase(TestCase):
             status='COMPLETED'
         )
 
-        # Mock request with Tenant A header
+        # Tenant context must come from validated middleware state, not a
+        # client-controlled tenant header.
         class DummyRequest:
-            headers = {'X-Tenant-ID': f"T{self.tenant_a.id:03d}"}
+            tenant_context_validated = True
+            authenticated_tenant_id = f"T{self.tenant_a.id:03d}"
 
         req = DummyRequest()
         with self.assertRaises(PermissionDenied):

@@ -55,7 +55,7 @@ class AuthModuleTestCase(TestCase):
         )
         self.assertEqual(response.status_code, 201)
         data = response.json()
-        self.assertIn("verification_code", data)
+        self.assertNotIn("verification_code", data)
         self.assertEqual(data["user"]["email"], self.valid_email)
 
         # Check DB
@@ -104,7 +104,7 @@ class AuthModuleTestCase(TestCase):
             }),
             content_type='application/json'
         )
-        code = reg_resp.json()["verification_code"]
+        code = User.objects.get(email=self.valid_email).email_verification_code
 
         # Verify email
         ver_resp = self.client.post(

@@ -161,15 +161,23 @@ def health_celery(request):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
 def check_data(request):
-    user_id = request.GET.get('userId', 'user_default_001')
-    p_count = Product.objects.filter(user_id=user_id).count()
-    if p_count == 0:
-        p_count = Product.objects.count()
+    if not (
+        getattr(request, 'tenant_context_validated', False)
+        and getattr(request, 'user_id', None)
+        and getattr(request, 'workspace_id', None)
+    ):
+        return Response({
+            "error": "Yêu cầu cần Authorization Bearer token.",
+            "code": "UNAUTHENTICATED",
+        }, status=401)
 
-    r_count = SlowMovingRiskAssessment.objects.count()
-    o_count = Order.objects.count()
+    user_id = str(request.user_id)
+    p_count = Product.objects.filter(user_id=user_id).count()
+    r_count = SlowMovingRiskAssessment.objects.filter(
+        session__workspace_id=request.workspace_id
+    ).count()
+    o_count = Order.objects.filter(user_id=user_id).count()
 
     has_data = (p_count > 0) or (r_count > 0) or (o_count > 0)
     return Response({

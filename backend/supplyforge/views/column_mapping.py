@@ -14,13 +14,13 @@ import logging
 import os
 import sys
 
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 
 from supplyforge.models import IngestionSession
+from supplyforge.services.storage_backend import StorageBackend
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -32,7 +32,6 @@ from src.ingestion.column_mapper import ColumnMapper
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def trigger_column_mapping(request, session_id):
     """Execute multi-strategy automatic column mapping on session CSV."""
@@ -50,9 +49,10 @@ def trigger_column_mapping(request, session_id):
     preview_rows = session.preview_rows_json or []
 
     # If headers missing in DB session, load from file directly
-    if not headers and session.storage_path and os.path.exists(session.storage_path):
+    if not headers and session.storage_path and StorageBackend.exists(session.storage_path):
         try:
-            df_sample = pd.read_csv(session.storage_path, nrows=5, encoding_errors='replace')
+            with StorageBackend.localize(session.storage_path) as local_path:
+                df_sample = pd.read_csv(local_path, nrows=5, encoding_errors='replace')
             headers = list(df_sample.columns)
             preview_rows = df_sample.astype(str).values.tolist()
         except Exception as e:
@@ -96,7 +96,6 @@ def trigger_column_mapping(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['POST'])
 def submit_mapping_override(request, session_id):
     """Submit human-in-the-loop user overrides for column mappings."""
@@ -159,7 +158,6 @@ def submit_mapping_override(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_mapping_audit(request, session_id):
     """Retrieve column mapping result and audit log for a session."""

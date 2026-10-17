@@ -16,13 +16,13 @@ import logging
 import os
 import sys
 
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 
 from supplyforge.models import IngestionSession
+from supplyforge.services.storage_backend import StorageBackend
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -35,7 +35,6 @@ from src.ingestion.column_mapper import ColumnMapper
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def trigger_sku_normalization(request, session_id):
     """Execute DAT-06 SKU Normalization pipeline on session CSV."""
@@ -47,7 +46,7 @@ def trigger_sku_normalization(request, session_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    if not session.storage_path or not os.path.exists(session.storage_path):
+    if not session.storage_path or not StorageBackend.exists(session.storage_path):
         return Response(
             {'error': 'Tệp CSV của phiên này không tồn tại trên hệ thống.'},
             status=status.HTTP_400_BAD_REQUEST
@@ -62,7 +61,8 @@ def trigger_sku_normalization(request, session_id):
         session.column_mapping_json = mapping_result
 
     try:
-        df = pd.read_csv(session.storage_path, nrows=50000, encoding_errors='replace')
+        with StorageBackend.localize(session.storage_path) as local_path:
+            df = pd.read_csv(local_path, nrows=50000, encoding_errors='replace')
 
         normalizer = SkuNormalizer(session_id=str(session.id))
         summary_result = normalizer.normalize_dataset(df, mapping_result)
@@ -92,7 +92,6 @@ def trigger_sku_normalization(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_sku_candidates(request, session_id):
     """Retrieve pending REVIEW_REQUIRED candidate merge pairs."""
@@ -114,7 +113,6 @@ def get_sku_candidates(request, session_id):
     return Response({'candidates': []})
 
 
-@csrf_exempt
 @api_view(['POST'])
 def merchant_merge_sku(request, session_id):
     """Merchant confirms merging a child SKU into a canonical SKU."""
@@ -152,7 +150,6 @@ def merchant_merge_sku(request, session_id):
     })
 
 
-@csrf_exempt
 @api_view(['POST'])
 def merchant_undo_sku_merge(request, session_id):
     """Merchant undoes a previous SKU merge decision."""
@@ -188,7 +185,6 @@ def merchant_undo_sku_merge(request, session_id):
     })
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_sku_master_catalog(request, session_id):
     """Retrieve master SKU catalog of canonical SKUs."""

@@ -14,13 +14,13 @@ import logging
 import os
 import sys
 
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 
 from supplyforge.models import IngestionSession
+from supplyforge.services.storage_backend import StorageBackend
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -33,7 +33,6 @@ from src.ingestion.column_mapper import ColumnMapper
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def trigger_data_quality_validation(request, session_id):
     """Execute 13-dimension deterministic Data Quality Validation on session dataset."""
@@ -45,7 +44,7 @@ def trigger_data_quality_validation(request, session_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    if not session.storage_path or not os.path.exists(session.storage_path):
+    if not session.storage_path or not StorageBackend.exists(session.storage_path):
         return Response(
             {'error': 'Tệp CSV của phiên này không tồn tại trên hệ thống.'},
             status=status.HTTP_400_BAD_REQUEST
@@ -63,7 +62,8 @@ def trigger_data_quality_validation(request, session_id):
 
     try:
         # Load CSV dataset (up to 50k rows for quality profiling)
-        df = pd.read_csv(session.storage_path, nrows=50000, encoding_errors='replace')
+        with StorageBackend.localize(session.storage_path) as local_path:
+            df = pd.read_csv(local_path, nrows=50000, encoding_errors='replace')
 
         validator = DataQualityValidator(session_id=str(session.id))
         report_result = validator.validate_quality(df, mapping_result)
@@ -95,7 +95,6 @@ def trigger_data_quality_validation(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_data_quality_report(request, session_id):
     """Retrieve Data Quality Validation report JSON."""
@@ -123,7 +122,6 @@ def get_data_quality_report(request, session_id):
     )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_sku_quality_profiles(request, session_id):
     """Retrieve paginated SKU-level Data Quality Profiles."""

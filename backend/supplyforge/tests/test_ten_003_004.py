@@ -32,7 +32,11 @@ class Ten003And004TestCase(TestCase):
 
     def test_ten_003_tenant_context_endpoint(self):
         """TEN-003: Every request identifies user, tenant, role, and permissions."""
-        response = self.client.get('/api/v1/tenant/context?workspaceId=1')
+        token = generate_access_token(self.owner, workspace_id=self.tenant.id)
+        response = self.client.get(
+            '/api/v1/tenant/context?workspaceId=1',
+            HTTP_AUTHORIZATION=f'Bearer {token}',
+        )
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertEqual(data["status"], "ACTIVE")

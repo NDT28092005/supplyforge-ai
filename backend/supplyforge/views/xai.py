@@ -16,6 +16,8 @@ def get_sku_xai(request, workspace_id, sku_id):
     - shap_contributions (list of dict)
     - ai_explanation (str)
     """
+    workspace_id = request.workspace_id
+
     # 1. Run ML Hybrid Model Prediction (Phase 6)
     pred_result = HybridModelPipeline.predict_risk(sku_id, workspace_id)
     if not pred_result:

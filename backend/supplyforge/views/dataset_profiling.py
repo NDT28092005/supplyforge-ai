@@ -13,13 +13,13 @@ import logging
 import os
 import sys
 
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 
 from supplyforge.models import IngestionSession
+from supplyforge.services.storage_backend import StorageBackend
 
 # Add project root to sys.path to import src.ingestion.dataset_profiler
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -31,7 +31,6 @@ from src.ingestion.dataset_profiler import DatasetProfiler
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def trigger_dataset_profiling(request, session_id):
     """Trigger full dataset profiling on an ingestion session's CSV file."""
@@ -43,7 +42,7 @@ def trigger_dataset_profiling(request, session_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    if not session.storage_path or not os.path.exists(session.storage_path):
+    if not session.storage_path or not StorageBackend.exists(session.storage_path):
         return Response(
             {'error': 'Tệp CSV của phiên này không tồn tại trên hệ thống.'},
             status=status.HTTP_400_BAD_REQUEST
@@ -54,7 +53,8 @@ def trigger_dataset_profiling(request, session_id):
 
     try:
         # Load CSV with pandas
-        df = pd.read_csv(session.storage_path, encoding_errors='replace')
+        with StorageBackend.localize(session.storage_path) as local_path:
+            df = pd.read_csv(local_path, encoding_errors='replace')
 
         profiler = DatasetProfiler(
             df=df,
@@ -92,7 +92,6 @@ def trigger_dataset_profiling(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_dataset_profile(request, session_id):
     """Retrieve stored Dataset Profile JSON for a session."""
@@ -106,8 +105,9 @@ def get_dataset_profile(request, session_id):
 
     if not session.dataset_profile_json:
         # If profile not yet generated, attempt to generate on the fly
-        if session.storage_path and os.path.exists(session.storage_path):
-            df = pd.read_csv(session.storage_path, encoding_errors='replace')
+        if session.storage_path and StorageBackend.exists(session.storage_path):
+            with StorageBackend.localize(session.storage_path) as local_path:
+                df = pd.read_csv(local_path, encoding_errors='replace')
             profiler = DatasetProfiler(df=df, session_id=str(session.id))
             profile_result = profiler.run_full_profile()
             reports_dir = os.path.join(PROJECT_ROOT, 'reports')
@@ -130,7 +130,6 @@ def get_dataset_profile(request, session_id):
     return Response(session.dataset_profile_json)
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_sku_profiles(request, session_id):
     """Retrieve paginated/searchable SKU profiles for a session."""
@@ -161,8 +160,9 @@ def get_sku_profiles(request, session_id):
     if sku_df.empty and os.path.exists(csv_path):
         sku_df = pd.read_csv(csv_path)
 
-    if sku_df.empty and session.storage_path and os.path.exists(session.storage_path):
-        df = pd.read_csv(session.storage_path, encoding_errors='replace')
+    if sku_df.empty and session.storage_path and StorageBackend.exists(session.storage_path):
+        with StorageBackend.localize(session.storage_path) as local_path:
+            df = pd.read_csv(local_path, encoding_errors='replace')
         profiler = DatasetProfiler(df=df, session_id=str(session.id))
         profiler.run_full_profile()
         profiler.export_reports(output_dir=reports_dir)

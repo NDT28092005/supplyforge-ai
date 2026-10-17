@@ -12,7 +12,6 @@ import logging
 import os
 import json
 
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -20,20 +19,83 @@ from rest_framework import status
 from supplyforge.models import IngestionSession, Workspace
 from supplyforge.services.csv_profiler import StreamingCSVProfiler, humanize_bytes
 from supplyforge.services.ingestion import DynamicFileImportService
+from supplyforge.services.storage_backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
+def _require_tenant_context(request):
+    """Return a trusted workspace or a safe HTTP error response."""
+    if not (
+        getattr(request, 'tenant_context_validated', False)
+        and getattr(request, 'user_id', None)
+        and getattr(request, 'workspace_id', None)
+    ):
+        return None, Response(
+            {
+                'error': 'Yêu cầu cần Authorization Bearer token.',
+                'code': 'UNAUTHENTICATED',
+            },
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    workspace_id = request.workspace_id
+    try:
+        workspace = Workspace.objects.get(id=int(workspace_id))
+    except (TypeError, ValueError, Workspace.DoesNotExist):
+        return None, Response(
+            {
+                'error': 'Workspace hiện tại không tồn tại.',
+                'code': 'WORKSPACE_NOT_FOUND',
+            },
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    return workspace, None
+
+
+def _reject_client_workspace(request, workspace):
+    """Reject attempts to switch tenant through request data."""
+    requested = request.data.get('workspaceId') if hasattr(request, 'data') else None
+    if requested in (None, ''):
+        return None
+    try:
+        requested_id = int(requested)
+    except (TypeError, ValueError):
+        return Response(
+            {
+                'error': 'workspaceId không hợp lệ.',
+                'code': 'INVALID_WORKSPACE',
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if requested_id != workspace.id:
+        return Response(
+            {
+                'error': 'Workspace trong request không khớp tenant của phiên đăng nhập.',
+                'code': 'WORKSPACE_MISMATCH',
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
 @api_view(['POST'])
 def ingestion_upload(request):
     """Upload a CSV file → save to disk → streaming profile → return results.
 
     Accepts:
         - file: CSV file (multipart/form-data)
-        - workspaceId: workspace ID (default: 1)
+        - workspaceId: optional consistency check against the authenticated workspace
         - sessionType: 'INITIAL' or 'INCREMENTAL' (default: 'INITIAL')
     """
+    workspace, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
+    workspace_error = _reject_client_workspace(request, workspace)
+    if workspace_error:
+        return workspace_error
+
     file_obj = request.FILES.get('file')
     if not file_obj:
         return Response(
@@ -55,17 +117,7 @@ def ingestion_upload(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    workspace_id = request.data.get('workspaceId', 1)
     session_type = request.data.get('sessionType', 'INITIAL')
-
-    # Validate workspace exists (create default if needed for MVP)
-    try:
-        workspace = Workspace.objects.get(id=workspace_id)
-    except Workspace.DoesNotExist:
-        workspace, _ = Workspace.objects.get_or_create(
-            id=1,
-            defaults={'name': 'Default Workspace', 'slug': 'default'}
-        )
 
     import hashlib
 
@@ -208,26 +260,35 @@ def ingestion_upload(request):
             'profile': profile.to_dict(),
         })
 
-    except Exception as e:
-        import traceback
-        print("REAL UPLOAD EXCEPTION:", e)
-        traceback.print_exc()
+    except Exception:
         logger.exception('Ingestion profiling failed for session %s', session.id)
         session.status = 'FAILED'
-        session.error_message = str(e)
-        session.save(update_fields=['status', 'error_message', 'updated_at'])
+        session.error_code = 'INGESTION_PROCESSING_FAILED'
+        session.error_message = 'Không thể hoàn tất xử lý tệp CSV.'
+        session.save(update_fields=[
+            'status', 'error_code', 'error_message', 'updated_at'
+        ])
         return Response(
-            {'error': f'Profiling thất bại: {str(e)}', 'sessionId': str(session.id)},
+            {
+                'error': 'Profiling thất bại. Vui lòng kiểm tra tệp và thử lại.',
+                'code': 'INGESTION_PROCESSING_FAILED',
+                'sessionId': str(session.id),
+            },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def ingestion_session_detail(request, session_id):
     """Get profiling results for a specific ingestion session."""
+    workspace, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
     try:
-        session = IngestionSession.objects.get(id=session_id)
+        session = IngestionSession.objects.get(
+            id=session_id,
+            workspace_id=workspace.id,
+        )
     except IngestionSession.DoesNotExist:
         return Response(
             {'error': 'Không tìm thấy phiên ingestion.'},
@@ -237,12 +298,13 @@ def ingestion_session_detail(request, session_id):
     return Response(_serialize_session(session))
 
 
-@csrf_exempt
 @api_view(['GET'])
 def ingestion_session_list(request):
     """List all ingestion sessions, optionally filtered by workspace."""
-    workspace_id = request.GET.get('workspaceId', 1)
-    sessions = IngestionSession.objects.filter(workspace_id=workspace_id)[:50]
+    workspace, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
+    sessions = IngestionSession.objects.filter(workspace_id=workspace.id)[:50]
     return Response([_serialize_session(s) for s in sessions])
 
 
@@ -280,37 +342,55 @@ def _serialize_session(session: IngestionSession) -> dict:
         },
         'createdAt': session.created_at.isoformat() if session.created_at else None,
         'updatedAt': session.updated_at.isoformat() if session.updated_at else None,
-        'errorMessage': session.error_message,
+        'errorCode': session.error_code,
+        'errorMessage': (
+            'Không thể hoàn tất xử lý tệp CSV.'
+            if session.status == 'FAILED' and session.error_message
+            else session.error_message
+        ),
     }
 
 
 # ── Legacy v1 Adapter Functions ───────────────────────────────────────
 
-@csrf_exempt
 @api_view(['POST'])
 def analyze_file(request):
     """v1 Legacy Adapter -> Delegates to Streaming Ingestion Upload."""
     return ingestion_upload(request)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def process_file(request):
     """
     POST /api/v1/import/process
     Process uploaded CSV or session file with mapping rule and import into Products & Orders.
     """
+    workspace, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
+    workspace_error = _reject_client_workspace(request, workspace)
+    if workspace_error:
+        return workspace_error
+
     file_obj = request.FILES.get('file')
     mapping_rule_raw = request.data.get('mappingRule')
     session_id = request.data.get('sessionId') or request.GET.get('sessionId')
-    user_id = request.data.get('userId') or request.GET.get('userId', 'user_default_001')
+    user_id = request.user_id
+    storage_context = None
 
     if not file_obj and session_id:
         try:
-            session = IngestionSession.objects.get(id=session_id)
-            if session.storage_path and os.path.exists(session.storage_path):
-                file_obj = open(session.storage_path, 'rb')
-        except Exception:
+            session = IngestionSession.objects.get(
+                id=session_id,
+                workspace_id=workspace.id,
+            )
+            if session.storage_path:
+                storage_context = StorageBackend.localize(session.storage_path)
+                file_obj = open(storage_context.__enter__(), 'rb')
+        except (IngestionSession.DoesNotExist, OSError):
+            if storage_context:
+                storage_context.__exit__(None, None, None)
+                storage_context = None
             pass
 
     if not file_obj:
@@ -334,10 +414,16 @@ def process_file(request):
             file_obj, mapping_rule, user_id, session_type=session_type, force_reset=force_reset
         )
     except ValueError as ve:
+        logger.info("Import validation rejected for user %s: %s", user_id, ve)
         return Response({
             'status': 'REJECT',
-            'error': str(ve)
+            'error': 'Dữ liệu import không hợp lệ.',
+            'code': 'IMPORT_VALIDATION_FAILED',
         }, status=status.HTTP_400_BAD_REQUEST)
+    finally:
+        if storage_context:
+            file_obj.close()
+            storage_context.__exit__(None, None, None)
 
     return Response({
         'status': res.get('status', 'DATA_READY'),
@@ -356,7 +442,6 @@ def process_file(request):
     }, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
 @api_view(['DELETE', 'POST'])
 def clear_data(request):
     """
@@ -364,8 +449,11 @@ def clear_data(request):
     TEN-004: Tenant Data Deletion Policy.
     Requires 'delete_dataset' permission (OWNER or ADMIN).
     """
+    workspace, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
     try:
-        role = getattr(request, 'user_role', 'OWNER')
+        role = getattr(request, 'user_role', None)
         from supplyforge.permissions import has_permission, PERM_DELETE_DATASET
         if not has_permission(role, PERM_DELETE_DATASET):
             return Response({
@@ -373,30 +461,30 @@ def clear_data(request):
                 "code": "PERMISSION_DENIED"
             }, status=status.HTTP_403_FORBIDDEN)
 
-        workspace_id = getattr(request, 'workspace_id', 1)
-        user_id = (request.data.get('user_id') if hasattr(request, 'data') and isinstance(request.data, dict) else None) or request.GET.get('user_id') or getattr(request, 'user_id', None)
+        workspace_id = workspace.id
+        user_id = request.user_id
 
         from supplyforge.services.tenant_data_deletion import TenantDataDeletionService
         res = TenantDataDeletionService.purge_tenant_data(workspace_id=workspace_id, user_id=user_id)
         return Response(res, status=status.HTTP_200_OK)
-    except Exception as exc:
-        import traceback
-        logger.error(f"[clear_data ERROR]: {exc}\n{traceback.format_exc()}")
+    except Exception:
+        logger.exception("[clear_data ERROR]")
         return Response({
-            "error": str(exc),
-            "traceback": traceback.format_exc(),
+            "error": "Không thể xóa dữ liệu tenant.",
             "code": "INTERNAL_SERVER_ERROR"
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@csrf_exempt
 @api_view(['POST', 'DELETE'])
 def tenant_delete_data(request):
     """
     POST /api/v1/tenant/delete-data & DELETE /api/v1/tenant/delete-data (TEN-004)
     Purges all 7 layers of tenant data under the TEN-004 policy.
     """
-    role = getattr(request, 'user_role', 'OWNER')
+    workspace, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
+    role = getattr(request, 'user_role', None)
     from supplyforge.permissions import has_permission, PERM_DELETE_DATASET
     if not has_permission(role, PERM_DELETE_DATASET):
         return Response({
@@ -404,21 +492,25 @@ def tenant_delete_data(request):
             "code": "PERMISSION_DENIED"
         }, status=status.HTTP_403_FORBIDDEN)
 
-    workspace_id = getattr(request, 'workspace_id', 1)
-    user_id = getattr(request, 'user_id', None)
+    workspace_id = workspace.id
+    user_id = request.user_id
 
     from supplyforge.services.tenant_data_deletion import TenantDataDeletionService
     res = TenantDataDeletionService.purge_tenant_data(workspace_id=workspace_id, user_id=user_id)
     return Response(res, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
 @api_view(['GET'])
 def verify_tenant_context(request):
     """
     GET /api/v1/tenant/context (TEN-003)
     Returns current active Tenant Context (user, tenant, role, permissions).
     """
+    if not getattr(request, 'tenant_context_validated', False):
+        return Response({
+            "error": "Yêu cầu cần Authorization Bearer token.",
+            "code": "UNAUTHENTICATED",
+        }, status=status.HTTP_401_UNAUTHORIZED)
     context = getattr(request, 'tenant_context', {})
     return Response({
         "status": "ACTIVE",
@@ -426,7 +518,6 @@ def verify_tenant_context(request):
     }, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def process_file_async(request):
     """
@@ -434,8 +525,19 @@ def process_file_async(request):
     Asynchronous Import Job Queue returning HTTP 202 Accepted.
     Does not hold HTTP request blocking while processing large CSV files.
     """
+    workspace, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
     session_id = request.data.get('sessionId') or request.GET.get('sessionId')
-    user_id = request.data.get('userId') or request.GET.get('userId', 'user_default_001')
+    if session_id and not IngestionSession.objects.filter(
+        id=session_id,
+        workspace_id=workspace.id,
+    ).exists():
+        return Response({
+            'error': 'Không tìm thấy phiên ingestion.',
+            'code': 'SESSION_NOT_FOUND',
+        }, status=status.HTTP_404_NOT_FOUND)
+    user_id = request.user_id
     session_type = request.data.get('sessionType') or request.GET.get('sessionType', 'INITIAL')
 
     from datetime import datetime
@@ -456,18 +558,26 @@ def process_file_async(request):
     }, status=status.HTTP_202_ACCEPTED)
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_ingestion_progress(request, session_id):
     """
     GET /api/v2/ingestion/sessions/<session_id>/progress (IR-013)
     Retrieve real-time granular progress percentage for each pipeline stage.
     """
+    workspace, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
     try:
-        session = IngestionSession.objects.get(id=session_id)
+        session = IngestionSession.objects.get(
+            id=session_id,
+            workspace_id=workspace.id,
+        )
         stage_status = session.status
-    except Exception:
-        stage_status = 'COMPLETED'
+    except IngestionSession.DoesNotExist:
+        return Response({
+            'error': 'Không tìm thấy phiên ingestion.',
+            'code': 'SESSION_NOT_FOUND',
+        }, status=status.HTTP_404_NOT_FOUND)
 
     if stage_status == 'CANCELLED':
         return Response({
@@ -497,7 +607,6 @@ def get_ingestion_progress(request, session_id):
     })
 
 
-@csrf_exempt
 @api_view(['POST'])
 def cancel_ingestion_session(request, session_id):
     """
@@ -505,17 +614,23 @@ def cancel_ingestion_session(request, session_id):
     Import Cancellation: Stops processing, releases file/memory resources,
     marks session status = CANCELLED, and ensures 0 half-valid rows in canonical DB.
     """
+    workspace, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
     try:
-        session = IngestionSession.objects.get(id=session_id)
+        session = IngestionSession.objects.get(
+            id=session_id,
+            workspace_id=workspace.id,
+        )
         session.status = 'CANCELLED'
         session.error_message = 'Tiến trình nạp tệp đã được người dùng chủ động hủy bỏ (IR-014).'
         session.save(update_fields=['status', 'error_message', 'updated_at'])
 
-        if session.storage_path and os.path.exists(session.storage_path):
+        if session.storage_path:
             try:
-                os.remove(session.storage_path)
+                StorageBackend.delete(session.storage_path)
             except Exception:
-                pass
+                logger.exception('Failed to delete ingestion storage for session %s', session_id)
 
         return Response({
             'sessionId': str(session_id),
@@ -530,7 +645,6 @@ def cancel_ingestion_session(request, session_id):
         }, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_record_lineage(request, record_id):
     """
@@ -538,13 +652,24 @@ def get_record_lineage(request, record_id):
     Trace record lineage back from Risk prediction -> Feature snapshot -> Canonical data -> Import -> Original file.
     Includes LIN-002 prediction lineage metadata (model_version, feature_version, calibration_version, threshold_version, training_cutoff, prediction_timestamp, dataset_version).
     """
+    _, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
     from supplyforge.services.lineage_service import LineageService
     full_lineage = LineageService.get_full_record_lineage(record_id)
 
     step5 = full_lineage["lin001_traceability_chain"]["step_5_original_file"]
     step4 = full_lineage["lin001_traceability_chain"]["step_4_import"]
+    if not IngestionSession.objects.filter(
+        id=step4.get("session_id"),
+        workspace_id=request.workspace_id,
+    ).exists():
+        return Response({
+            'error': 'Không tìm thấy lineage trong tenant hiện tại.',
+            'code': 'RESOURCE_NOT_FOUND',
+        }, status=status.HTTP_404_NOT_FOUND)
 
-    merchant_val = request.GET.get('userId') or step5["merchant"]
+    merchant_val = str(request.user_id)
     rec_type = 'order' if str(full_lineage["record_id"]).startswith("ORD") else 'product'
     base_lineage = {
         'record_id': full_lineage["record_id"],
@@ -570,7 +695,6 @@ def get_record_lineage(request, record_id):
     }, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_error_matrix(request):
     """
@@ -583,15 +707,20 @@ def get_error_matrix(request):
     }, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_post_import_quality_report(request, session_id):
     """
     GET /api/v2/ingestion/sessions/<session_id>/quality-report (Requirement 25)
     Generate post-import Data Quality Report & calculate Data Health Score (e.g. 94/100).
     """
+    workspace, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
     try:
-        session = IngestionSession.objects.get(id=session_id)
+        session = IngestionSession.objects.get(
+            id=session_id,
+            workspace_id=workspace.id,
+        )
     except IngestionSession.DoesNotExist:
         return Response({'error': 'Không tìm thấy phiên ingestion.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -599,8 +728,12 @@ def get_post_import_quality_report(request, session_id):
     from supplyforge.services.tenant_isolation import TenantIsolationService
     try:
         TenantIsolationService.enforce_tenant_isolation(session, request, action="read quality report")
-    except Exception as exc:
-        return Response({'error': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except Exception:
+        logger.exception("[quality report tenant access denied]")
+        return Response({
+            'error': 'Không có quyền truy cập tài nguyên tenant này.',
+            'code': 'TENANT_ACCESS_DENIED',
+        }, status=status.HTTP_403_FORBIDDEN)
 
     from supplyforge.services.data_quality_service import DataQualityService
     report = DataQualityService.generate_post_import_report(session)
@@ -610,7 +743,6 @@ def get_post_import_quality_report(request, session_id):
     }, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def propagate_pipeline_health_score(request, session_id):
     """
@@ -618,23 +750,32 @@ def propagate_pipeline_health_score(request, session_id):
     Propagate Data Health Score down the 6 pipeline stages:
     Import -> Data Quality -> Risk Model -> Explanation -> Capital -> Decision
     """
+    workspace, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
     try:
-        session = IngestionSession.objects.get(id=session_id)
+        session = IngestionSession.objects.get(
+            id=session_id,
+            workspace_id=workspace.id,
+        )
     except IngestionSession.DoesNotExist:
         return Response({'error': 'Không tìm thấy phiên ingestion.'}, status=status.HTTP_404_NOT_FOUND)
 
     from supplyforge.services.tenant_isolation import TenantIsolationService
     try:
         TenantIsolationService.enforce_tenant_isolation(session, request, action="propagate pipeline health score")
-    except Exception as exc:
-        return Response({'error': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except Exception:
+        logger.exception("[pipeline health tenant access denied]")
+        return Response({
+            'error': 'Không có quyền truy cập tài nguyên tenant này.',
+            'code': 'TENANT_ACCESS_DENIED',
+        }, status=status.HTTP_403_FORBIDDEN)
 
     from supplyforge.services.data_quality_service import DataQualityService
     res = DataQualityService.propagate_health_score_to_pipeline(session)
     return Response(res, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
 @api_view(['GET'])
 def verify_tenant_isolation(request):
     """
@@ -642,12 +783,15 @@ def verify_tenant_isolation(request):
     Verify SEC-001 Tenant Isolation & SEC-002 Resource Tagging across all resources.
     """
     from supplyforge.services.tenant_isolation import TenantIsolationService
-    raw_tenant_hdr = request.headers.get('X-Tenant-ID') or request.headers.get('X-Workspace-ID')
-    tenant_id = raw_tenant_hdr if raw_tenant_hdr else TenantIsolationService.get_tenant_id_from_request(request)
+    if not getattr(request, 'tenant_context_validated', False):
+        return Response({
+            'error': 'Yêu cầu cần Authorization Bearer token.',
+            'code': 'UNAUTHENTICATED',
+        }, status=status.HTTP_401_UNAUTHORIZED)
+    tenant_id = TenantIsolationService.get_tenant_id_from_request(request)
     audit = TenantIsolationService.audit_all_resources_tenant_tagging()
     return Response({
         'current_tenant_id': tenant_id,
         'sec_001_isolation': 'ENFORCED',
         'sec_002_resource_tagging': audit
     }, status=status.HTTP_200_OK)
-

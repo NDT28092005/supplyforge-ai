@@ -51,7 +51,9 @@ supplyforge-ai/
 
 ## 2. Thiết lập cơ sở dữ liệu (MySQL)
 
-Dữ liệu được lưu trữ trong MySQL. Django ORM tự động quản lý việc tạo bảng và migrations. Khi chạy lần đầu, container backend sẽ thực hiện lệnh seed dữ liệu mặc định (`demo@supplyforge.local` và workspace `demo` ứng với `workspace_id = 1`).
+Dữ liệu được lưu trữ trong MySQL. Django ORM quản lý schema; service
+`migrate` chạy migrations một lần trước khi service web/worker khởi động.
+Compose không tự seed tài khoản hoặc workspace mặc định.
 
 ---
 
@@ -63,7 +65,7 @@ Yêu cầu máy cài đặt Docker và Docker Compose.
 # 1. Sao chép biến môi trường
 copy .env.example .env
 
-# 2. Khởi chạy toàn bộ hệ thống
+# 2. Điền các secret bắt buộc trong .env rồi khởi chạy toàn bộ hệ thống
 docker compose up --build
 ```
 
@@ -74,17 +76,22 @@ Sau khi các container khởi động hoàn tất, bạn có thể truy cập h�
 - **Readiness Probe**: `http://localhost:8080/health/ready`
 - **API Version Info**: `http://localhost:8080/api/version`
 - **Celery Worker Status**: `http://localhost:8080/api/v1/health/celery`
-- **MySQL Database**: `localhost:3306`
-- **Redis Cache/Broker**: `localhost:6379`
+
+API clients should send the JWT as `Authorization: Bearer <token>`. Tenant
+identity comes from the validated token; `workspaceId`, `workspace_id`, and
+`userId` request fields are only consistency checks and cannot switch scope.
+The synchronous profiling upload remains at `/api/v2/ingestion/upload`; the
+background queue upload is `/api/v2/jobs/upload`.
 
 ### Các Container Services được tự động khởi tạo:
 1. `frontend`: Single Page App (Angular JS/TS phục vụ bởi Nginx).
 2. `backend`: REST API Server (Django / Gunicorn / Python 3.11).
-3. `mysql`: Database Server (MySQL 8.0).
-4. `redis`: In-memory data store & Celery Broker (Redis 7).
-5. `celery_data`: Dedicated Worker cho xử lý dữ liệu và CSV Ingestion (`data_worker` queue).
-6. `celery_ml`: Dedicated Worker cho mô hình ML & Risk Calibration (`ml_worker` queue).
-7. `celery_decision`: Dedicated Worker cho Decision Engine & Action Planning (`decision_worker` queue).
+3. `migrate`: Release step chạy Django migrations một lần.
+4. `mysql`: Database Server (MySQL 8.0), chỉ truy cập trong network nội bộ.
+5. `redis`: In-memory data store & Celery Broker (Redis 7), chỉ truy cập trong network nội bộ.
+6. `celery_data`: Dedicated Worker cho xử lý dữ liệu và CSV Ingestion (`data_worker` queue).
+7. `celery_ml`: Dedicated Worker cho mô hình ML & Risk Calibration (`ml_worker` queue).
+8. `celery_decision`: Dedicated Worker cho Decision Engine & Action Planning (`decision_worker` queue).
 
 ---
 
@@ -99,6 +106,12 @@ Hệ thống hỗ trợ 3 môi trường phát triển chính thông qua biến 
 | **production** | `backend/.env.production` | Môi trường production chính thức (Template không commit secret thật) |
 
 Khai báo mẫu mặc định được lưu ở `backend/.env.example` và `.env.example` tại thư mục gốc. Phiên bản hệ thống được định nghĩa tại file [VERSION](file:///home/nguyen-dai-tung/supplyforge-ai/VERSION).
+
+Ở development/test, `STORAGE_BACKEND=local` dùng filesystem local. Staging và
+production bắt buộc `STORAGE_BACKEND=s3` với bucket S3/MinIO-compatible được
+cấu hình qua `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` và tùy chọn
+`S3_ENDPOINT_URL`/`S3_REGION`. SQLite chỉ được phép ngoài staging/production;
+test runner dùng database in-memory.
 
 ---
 

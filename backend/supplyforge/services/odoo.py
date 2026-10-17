@@ -7,13 +7,14 @@ logger = logging.getLogger(__name__)
 class OdooIntegrationService:
     @staticmethod
     def get_odoo_config():
-        """Get Odoo configuration from settings with sensible fallbacks."""
+        """Get Odoo configuration without production credential fallbacks."""
         odoo_cfg = settings.SUPPLYFORGE.get('odoo', {})
         return {
-            'url': odoo_cfg.get('url', 'http://34.130.191.122'),
-            'db': odoo_cfg.get('db', 'odoo'),
-            'username': odoo_cfg.get('username', 'admin'),
-            'password': odoo_cfg.get('password', 'admin'),  # API Key or Password
+            'enabled': bool(odoo_cfg.get('enabled', False)),
+            'url': odoo_cfg.get('url', ''),
+            'db': odoo_cfg.get('db', ''),
+            'username': odoo_cfg.get('username', ''),
+            'password': odoo_cfg.get('password', ''),
         }
 
     @staticmethod
@@ -23,6 +24,9 @@ class OdooIntegrationService:
         Prevents duplicates by checking if the email already exists in res.partner.
         """
         cfg = OdooIntegrationService.get_odoo_config()
+        if not cfg['enabled']:
+            return None
+
         url = cfg['url'].rstrip('/')
         db = cfg['db']
         username = cfg['username']

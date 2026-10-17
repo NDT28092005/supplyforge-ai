@@ -12,13 +12,13 @@ import logging
 import os
 import sys
 
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 
 from supplyforge.models import IngestionSession
+from supplyforge.services.storage_backend import StorageBackend
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -31,7 +31,6 @@ from src.ingestion.column_mapper import ColumnMapper
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def validate_canonical_schema(request, session_id):
     """Execute Canonical Schema Validation on session CSV and column mapping."""
@@ -43,7 +42,7 @@ def validate_canonical_schema(request, session_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    if not session.storage_path or not os.path.exists(session.storage_path):
+    if not session.storage_path or not StorageBackend.exists(session.storage_path):
         return Response(
             {'error': 'Tệp CSV của phiên này không tồn tại trên hệ thống.'},
             status=status.HTTP_400_BAD_REQUEST
@@ -61,10 +60,10 @@ def validate_canonical_schema(request, session_id):
 
     try:
         # Load CSV sample / full
-        df = pd.read_csv(session.storage_path, nrows=5000, encoding_errors='replace')
-
-        validator = SchemaValidator(session_id=str(session.id))
-        report_result = validator.validate_schema(df, mapping_result)
+        with StorageBackend.localize(session.storage_path) as local_path:
+            df = pd.read_csv(local_path, nrows=5000, encoding_errors='replace')
+            validator = SchemaValidator(session_id=str(session.id))
+            report_result = validator.validate_schema(df, mapping_result)
 
         # Export reports/schema_validation_report.json
         reports_dir = os.path.join(PROJECT_ROOT, 'reports')
@@ -90,7 +89,6 @@ def validate_canonical_schema(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_schema_validation_report(request, session_id):
     """Retrieve existing Canonical Schema Validation report JSON."""
@@ -113,11 +111,12 @@ def get_schema_validation_report(request, session_id):
             return Response(json.load(f))
 
     # If not yet generated, attempt to validate on the fly
-    if session.storage_path and os.path.exists(session.storage_path):
+    if session.storage_path and StorageBackend.exists(session.storage_path):
         mapping_result = session.column_mapping_json or {}
-        df = pd.read_csv(session.storage_path, nrows=5000, encoding_errors='replace')
-        validator = SchemaValidator(session_id=str(session.id))
-        report_result = validator.validate_schema(df, mapping_result)
+        with StorageBackend.localize(session.storage_path) as local_path:
+            df = pd.read_csv(local_path, nrows=5000, encoding_errors='replace')
+            validator = SchemaValidator(session_id=str(session.id))
+            report_result = validator.validate_schema(df, mapping_result)
         validator.export_report(report_result, output_dir=reports_dir)
 
         session.schema_validation_status = report_result.get('status', 'VALID')

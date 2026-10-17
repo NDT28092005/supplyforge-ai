@@ -15,13 +15,13 @@ import logging
 import os
 import sys
 
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 
 from supplyforge.models import IngestionSession
+from supplyforge.services.storage_backend import StorageBackend
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -33,7 +33,6 @@ from src.ingestion.data_quality_report_aggregator import DataQualityReportAggreg
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def generate_quality_report(request, session_id):
     """Generate consolidated DAT-10 Data Quality Dashboard Report."""
@@ -56,9 +55,10 @@ def generate_quality_report(request, session_id):
         data_filepath = norm_csv_path
 
     df = None
-    if data_filepath and os.path.exists(data_filepath):
+    if data_filepath and StorageBackend.exists(data_filepath):
         try:
-            df = pd.read_csv(data_filepath, nrows=10000, encoding_errors='replace')
+            with StorageBackend.localize(data_filepath) as local_path:
+                df = pd.read_csv(local_path, nrows=10000, encoding_errors='replace')
         except Exception:
             pass
 
@@ -87,7 +87,6 @@ def generate_quality_report(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_quality_dashboard(request, session_id):
     """Retrieve consolidated Data Quality Dashboard payload."""
@@ -112,7 +111,6 @@ def get_quality_dashboard(request, session_id):
     return Response({'dashboard': None})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_affected_records_sample(request, session_id):
     """Retrieve sample affected records for a given issue ID."""

@@ -57,7 +57,7 @@ class VerificationTokenSecuritySECAuth003TestCase(TestCase):
             "email": "single_use@example.com",
             "password": "Password123"
         }, format='json')
-        token = reg_res.json()["verification_code"]
+        token = User.objects.get(email="single_use@example.com").email_verification_code
 
         # First verification attempt -> Successful (200 OK)
         ver_res = self.client.post('/api/v1/auth/verify-email', {

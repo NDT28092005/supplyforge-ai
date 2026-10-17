@@ -18,6 +18,7 @@ from django.utils import timezone
 from supplyforge.models import BackgroundJob, IngestionSession, NotificationRecord
 from supplyforge.services.csv_profiler import StreamingCSVProfiler
 from supplyforge.services.ingestion import DynamicFileImportService, GeminiColumnMappingService
+from supplyforge.services.storage_backend import StorageBackend
 import supplyforge.celery_telemetry
 
 logger = logging.getLogger(__name__)
@@ -85,14 +86,17 @@ def _update_stage_progress(job: BackgroundJob, stage_name: str, stage_pct: int, 
 
 def _stage_parse(job: BackgroundJob, context: dict) -> dict:
     session = job.ingestion_session
-    if not session or not session.storage_path or not os.path.exists(session.storage_path):
+    if not session or not session.storage_path:
         raise FileNotFoundError(f"Tệp CSV không tồn tại tại đường dẫn {session.storage_path if session else 'N/A'}")
 
     _update_stage_progress(job, 'PARSING', 50, 'PROCESSING', 10)
     
     headers, sample_rows = [], []
-    with open(session.storage_path, 'r', encoding='utf-8', errors='ignore') as f:
-        headers, sample_rows = DynamicFileImportService.peek_sample_data(f)
+    with StorageBackend.localize(session.storage_path) as local_path:
+        if not local_path or not os.path.exists(local_path):
+            raise FileNotFoundError('Tệp CSV không tồn tại.')
+        with open(local_path, 'r', encoding='utf-8', errors='ignore') as f:
+            headers, sample_rows = DynamicFileImportService.peek_sample_data(f)
 
     if not headers:
         raise ValueError("Tệp CSV rỗng hoặc không đúng định dạng.")
@@ -166,14 +170,15 @@ def _stage_import(job: BackgroundJob, context: dict) -> dict:
     session.status = 'PROCESSING'
     session.save(update_fields=['status', 'updated_at'])
 
-    with open(session.storage_path, 'rb') as f:
-        import_res = DynamicFileImportService.process_batch_import(
-            file_obj=f,
-            mapping_rule=mapping_rule,
-            user_id=1,
-            session_type=session.session_type,
-            session_id=str(session.id)
-        )
+    with StorageBackend.localize(session.storage_path) as local_path:
+        with open(local_path, 'rb') as f:
+            import_res = DynamicFileImportService.process_batch_import(
+                file_obj=f,
+                mapping_rule=mapping_rule,
+                user_id=job.workspace.owner_id or job.workspace_id,
+                session_type=session.session_type,
+                session_id=str(session.id)
+            )
 
     context['import_result'] = import_res
     _update_stage_progress(job, 'IMPORTING', 100, 'COMPLETED', 80)
@@ -324,8 +329,9 @@ def process_file_import_async(self, file_path, mapping_rule, user_id):
         time.sleep(1)
         self.update_state(state='PROCESSING', meta={'progress': 40, 'message': 'Executing AI fuzzy matching & column normalization...'})
         
-        with open(file_path, 'rb') as f:
-            result = DynamicFileImportService.process_batch_import(f, mapping_rule, user_id)
+        with StorageBackend.localize(file_path) as local_path:
+            with open(local_path, 'rb') as f:
+                result = DynamicFileImportService.process_batch_import(f, mapping_rule, user_id)
             
         self.update_state(state='PROCESSING', meta={'progress': 90, 'message': 'Saving products to database...'})
         time.sleep(0.5)

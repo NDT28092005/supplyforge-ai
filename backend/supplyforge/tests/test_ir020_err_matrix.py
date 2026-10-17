@@ -1,8 +1,9 @@
 import io
 from rest_framework.test import APIClient
 from django.test import TestCase
-from supplyforge.models import IngestionSession, Workspace
+from supplyforge.models import IngestionSession, User, Workspace, WorkspaceMember
 from supplyforge.services.error_matrix import ErrorMatrixRegistry
+from supplyforge.views.auth import generate_access_token
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 
@@ -16,7 +17,24 @@ class ImportIdempotencyAndErrorMatrixTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user_id = 'test_merchant_ir020'
-        self.workspace, _ = Workspace.objects.get_or_create(id=1, defaults={'name': 'Test Workspace'})
+        self.user = User.objects.create(
+            email='ir020@example.com',
+            status=User.STATUS_ACTIVE,
+            is_email_verified=True,
+        )
+        self.workspace, _ = Workspace.objects.get_or_create(
+            id=1,
+            defaults={'name': 'Test Workspace', 'owner': self.user},
+        )
+        WorkspaceMember.objects.get_or_create(
+            workspace=self.workspace,
+            user=self.user,
+        )
+        self.auth = {
+            'HTTP_AUTHORIZATION': (
+                f'Bearer {generate_access_token(self.user, self.workspace.id)}'
+            )
+        }
 
     def test_ir020_import_idempotency_retries(self):
         """Verify uploading exact same file twice returns existing session without duplicating datasets."""
@@ -28,6 +46,8 @@ class ImportIdempotencyAndErrorMatrixTestCase(TestCase):
             '/api/v2/ingestion/upload',
             {'file': file_1, 'workspaceId': 1},
             format='multipart'
+            ,
+            **self.auth
         )
         self.assertEqual(res1.status_code, 200)
         data1 = res1.json()
@@ -40,6 +60,8 @@ class ImportIdempotencyAndErrorMatrixTestCase(TestCase):
             '/api/v2/ingestion/upload',
             {'file': file_2, 'workspaceId': 1},
             format='multipart'
+            ,
+            **self.auth
         )
         self.assertEqual(res2.status_code, 200)
         data2 = res2.json()
@@ -67,7 +89,7 @@ class ImportIdempotencyAndErrorMatrixTestCase(TestCase):
             self.assertIn(code, codes)
 
         # Call GET /api/v2/ingestion/error-matrix API
-        response = self.client.get('/api/v2/ingestion/error-matrix')
+        response = self.client.get('/api/v2/ingestion/error-matrix', **self.auth)
         self.assertEqual(response.status_code, 200)
         res_data = response.json()
         self.assertIn('error_matrix', res_data)

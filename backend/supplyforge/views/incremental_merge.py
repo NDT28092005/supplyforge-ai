@@ -14,13 +14,13 @@ import logging
 import os
 import sys
 
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 
 from supplyforge.models import IngestionSession
+from supplyforge.services.storage_backend import StorageBackend
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -33,7 +33,6 @@ from src.ingestion.column_mapper import ColumnMapper
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def trigger_incremental_merge(request, session_id):
     """Execute DAT-07 Incremental Merge pipeline on session CSV."""
@@ -45,7 +44,7 @@ def trigger_incremental_merge(request, session_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    if not session.storage_path or not os.path.exists(session.storage_path):
+    if not session.storage_path or not StorageBackend.exists(session.storage_path):
         return Response(
             {'error': 'Tệp CSV của phiên này không tồn tại trên hệ thống.'},
             status=status.HTTP_400_BAD_REQUEST
@@ -60,7 +59,8 @@ def trigger_incremental_merge(request, session_id):
         session.column_mapping_json = mapping_result
 
     try:
-        new_df = pd.read_csv(session.storage_path, nrows=50000, encoding_errors='replace')
+        with StorageBackend.localize(session.storage_path) as local_path:
+            new_df = pd.read_csv(local_path, nrows=50000, encoding_errors='replace')
 
         # Check if existing canonical dataset exists on disk
         reports_dir = os.path.join(PROJECT_ROOT, 'reports')
@@ -99,7 +99,6 @@ def trigger_incremental_merge(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_merge_report(request, session_id):
     """Retrieve merge report and upload metadata."""
@@ -121,7 +120,6 @@ def get_merge_report(request, session_id):
     return Response({'report': None})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_dataset_versions(request, session_id):
     """Retrieve dataset versions and historical mutation audit log."""

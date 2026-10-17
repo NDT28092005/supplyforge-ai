@@ -1,12 +1,16 @@
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Determine environment (development | staging | production)
 APP_ENV = os.getenv('APP_ENV', os.getenv('ENVIRONMENT', 'development')).lower()
+IS_DEPLOYED = APP_ENV in {'staging', 'production'}
+IS_TEST_RUN = 'test' in sys.argv
 
 # Load environment variables (.env.<APP_ENV>, .env, root .env)
 env_file_specific = BASE_DIR / f'.env.{APP_ENV}'
@@ -26,12 +30,36 @@ else:
     APP_VERSION = '1.0.0'
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-supplyforge-ai-mvp-secret-key-change-me')
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', '').strip()
+if IS_DEPLOYED:
+    if not SECRET_KEY:
+        raise ImproperlyConfigured('DJANGO_SECRET_KEY is required for staging/production.')
+    if len(SECRET_KEY) < 50:
+        raise ImproperlyConfigured('DJANGO_SECRET_KEY must contain at least 50 characters.')
+else:
+    SECRET_KEY = SECRET_KEY or 'django-insecure-dev-only-key-not-for-production'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DJANGO_DEBUG', 'True' if APP_ENV == 'development' else 'False') == 'True'
+DEBUG = os.getenv('DJANGO_DEBUG', 'True' if APP_ENV == 'development' else 'False').lower() in {
+    '1', 'true', 'yes'
+}
+if IS_DEPLOYED and DEBUG:
+    raise ImproperlyConfigured('DJANGO_DEBUG must be false for staging/production.')
 
-ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '0.0.0.0', 'host.docker.internal']
+_configured_hosts = [
+    host.strip() for host in os.getenv('ALLOWED_HOSTS', '').split(',') if host.strip()
+]
+if IS_DEPLOYED:
+    if not _configured_hosts or '*' in _configured_hosts:
+        raise ImproperlyConfigured('ALLOWED_HOSTS must be an explicit allowlist.')
+    ALLOWED_HOSTS = _configured_hosts
+else:
+    ALLOWED_HOSTS = _configured_hosts or [
+        'localhost',
+        '127.0.0.1',
+        '0.0.0.0',
+        'host.docker.internal',
+    ]
 
 # Application definition
 INSTALLED_APPS = [
@@ -53,10 +81,15 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'django.middleware.gzip.GZipMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'supplyforge.middleware.SecurityHeadersMiddleware',
+    # Rate-limit before JWT parsing so malformed/invalid bearer floods are
+    # throttled even when tenant authentication rejects the request.
+    'supplyforge.middleware.APIRateLimiterMiddleware',
     'supplyforge.middleware.TenantIsolationMiddleware',
     'django_prometheus.middleware.PrometheusAfterMiddleware',
 ]
@@ -85,7 +118,14 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Using PyMySQL as driver (installed in backend/supplyforge_ai/__init__.py)
 MYSQL_DB = os.getenv('MYSQL_DATABASE', 'supplyforge')
 MYSQL_USER = os.getenv('MYSQL_USER', 'supplyforge')
-MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', 'change-me')
+MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', '').strip()
+if IS_DEPLOYED:
+    if not MYSQL_PASSWORD:
+        raise ImproperlyConfigured('MYSQL_PASSWORD is required for staging/production.')
+    if MYSQL_PASSWORD.lower() in {'change-me', 'rootpassword', 'admin', 'supplyforge'}:
+        raise ImproperlyConfigured('MYSQL_PASSWORD must not use a development default.')
+else:
+    MYSQL_PASSWORD = MYSQL_PASSWORD or 'change-me'
 MYSQL_HOST = os.getenv('MYSQL_HOST', '127.0.0.1')
 if MYSQL_HOST == 'localhost':
     MYSQL_HOST = '127.0.0.1'
@@ -99,14 +139,63 @@ DATABASES = {
         'PASSWORD': MYSQL_PASSWORD,
         'HOST': MYSQL_HOST,
         'PORT': MYSQL_PORT,
+        # Django's persistent connections are the application-side pool. A
+        # real proxy (for example ProxySQL) can be put in front for larger
+        # deployments without changing application code.
+        'CONN_MAX_AGE': int(os.getenv('DB_CONN_MAX_AGE', '600' if IS_DEPLOYED else '0')),
+        'CONN_HEALTH_CHECKS': True,
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            'connect_timeout': 10,
+            'read_timeout': 30,
+            'write_timeout': 30,
+        },
     }
 }
 
-if 'test' in os.sys.argv or os.getenv('USE_SQLITE') == '1':
+if IS_TEST_RUN or os.getenv('USE_SQLITE') == '1':
+    if IS_DEPLOYED:
+        raise ImproperlyConfigured('SQLite is not allowed in staging/production.')
     DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        # Keep test data in memory. Local development may opt into a
+        # persistent SQLite path explicitly with SQLITE_PATH.
+        'NAME': ':memory:' if IS_TEST_RUN else os.getenv(
+            'SQLITE_PATH',
+            str(BASE_DIR / 'db.sqlite3'),
+        ),
+        'CONN_MAX_AGE': 0,
     }
+
+DB_REPLICA_ENABLED = os.getenv('DB_REPLICA_ENABLED', 'false').lower() in {
+    '1', 'true', 'yes'
+}
+if DB_REPLICA_ENABLED:
+    DB_REPLICA_HOST = os.getenv('DB_REPLICA_HOST', '').strip()
+    if IS_DEPLOYED and not DB_REPLICA_HOST:
+        raise ImproperlyConfigured(
+            'DB_REPLICA_HOST is required when DB_REPLICA_ENABLED is true.'
+        )
+    if DB_REPLICA_HOST and not IS_TEST_RUN:
+        DATABASES['replica'] = {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': os.getenv('DB_REPLICA_DATABASE', MYSQL_DB),
+            'USER': os.getenv('DB_REPLICA_USER', MYSQL_USER),
+            'PASSWORD': os.getenv('DB_REPLICA_PASSWORD', MYSQL_PASSWORD),
+            'HOST': DB_REPLICA_HOST,
+            'PORT': os.getenv('DB_REPLICA_PORT', MYSQL_PORT),
+            'CONN_MAX_AGE': int(os.getenv('DB_REPLICA_CONN_MAX_AGE', '600')),
+            'CONN_HEALTH_CHECKS': True,
+            'OPTIONS': {
+                'charset': 'utf8mb4',
+                'connect_timeout': 10,
+                'read_timeout': 30,
+                'write_timeout': 30,
+            },
+        }
+
+DATABASE_ROUTERS = ['supplyforge.db_router.ReadReplicaRouter']
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -136,10 +225,20 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS Config
-CORS_ALLOW_ALL_ORIGINS = True  # For MVP simplified connection
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
-    origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',') if origin.strip()
+    origin.strip()
+    for origin in os.getenv(
+        'CORS_ALLOWED_ORIGINS',
+        '' if IS_DEPLOYED else 'http://localhost:3000',
+    ).split(',')
+    if origin.strip()
 ]
+if IS_DEPLOYED and not CORS_ALLOWED_ORIGINS:
+    raise ImproperlyConfigured(
+        'CORS_ALLOWED_ORIGINS is required for staging/production.'
+    )
+CORS_ALLOW_CREDENTIALS = False
 
 # Custom SupplyForge settings (mapped from application.yml)
 SUPPLYFORGE = {
@@ -157,19 +256,25 @@ SUPPLYFORGE = {
         'slow_moving_max_days': 90,
     },
     'gemini': {
+        'enabled': os.getenv('GEMINI_ENABLED', 'false').lower() in {'1', 'true', 'yes'},
         'api_key': os.getenv('GEMINI_API_KEY', ''),
         'model': os.getenv('GEMINI_MODEL', 'gemini-1.5-flash'),
         'base_url': os.getenv('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com'),
     },
     'google_oauth': {
-        'client_id': os.getenv('GOOGLE_CLIENT_ID', '7581962747-uj20trqmtba57s3psahigngcopku3ub3.apps.googleusercontent.com'),
+        'enabled': os.getenv('GOOGLE_OAUTH_ENABLED', 'false').lower() in {'1', 'true', 'yes'},
+        'client_id': os.getenv('GOOGLE_CLIENT_ID', '').strip(),
         'client_secret': os.getenv('GOOGLE_CLIENT_SECRET', ''),
     },
     'odoo': {
-        'url': os.getenv('ODOO_URL', 'http://34.130.191.122/odoo'),
-        'db': os.getenv('ODOO_DB', 'odoo'),
-        'username': os.getenv('ODOO_USERNAME', 'admin'),
-        'password': os.getenv('ODOO_PASSWORD', 'admin'),
+        'enabled': os.getenv('ODOO_ENABLED', 'false').lower() in {'1', 'true', 'yes'},
+        'url': os.getenv(
+            'ODOO_URL',
+            'http://localhost:8069' if not IS_DEPLOYED else '',
+        ),
+        'db': os.getenv('ODOO_DB', ''),
+        'username': os.getenv('ODOO_USERNAME', ''),
+        'password': os.getenv('ODOO_PASSWORD', ''),
     },
     'shopee': {
         'partner_id': os.getenv('SHOPEE_PARTNER_ID', '0'),
@@ -178,6 +283,52 @@ SUPPLYFORGE = {
         'redirect_url': os.getenv('SHOPEE_REDIRECT_URL', 'http://localhost:8080/api/v1/shopee/oauth/callback'),
     },
 }
+
+if IS_DEPLOYED and SUPPLYFORGE['odoo']['enabled']:
+    for _name in ('ODOO_URL', 'ODOO_DB', 'ODOO_USERNAME', 'ODOO_PASSWORD'):
+        if not os.getenv(_name, '').strip():
+            raise ImproperlyConfigured(
+                f'{_name} is required when ODOO_ENABLED is true.'
+            )
+
+if IS_DEPLOYED and SUPPLYFORGE['gemini']['enabled'] and not SUPPLYFORGE['gemini']['api_key'].strip():
+    raise ImproperlyConfigured(
+        'GEMINI_API_KEY is required when GEMINI_ENABLED is true.'
+    )
+
+if IS_DEPLOYED and SUPPLYFORGE['google_oauth']['enabled']:
+    for _name in ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'):
+        if not os.getenv(_name, '').strip():
+            raise ImproperlyConfigured(
+                f'{_name} is required when GOOGLE_OAUTH_ENABLED is true.'
+            )
+
+# Security headers. HTTPS redirect is safe only when the trusted proxy forwards
+# X-Forwarded-Proto correctly.
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+TRUSTED_PROXY_IPS = tuple(
+    value.strip()
+    for value in os.getenv('TRUSTED_PROXY_IPS', '').split(',')
+    if value.strip()
+)
+CONTENT_SECURITY_POLICY = os.getenv(
+    'CONTENT_SECURITY_POLICY',
+    "default-src 'self'; base-uri 'self'; object-src 'none'; "
+    "frame-ancestors 'none'; script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+    "font-src 'self' data:; connect-src 'self' https: wss:; "
+    "form-action 'self'",
+)
+if APP_ENV == 'production':
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 # Celery & Redis Configuration
 REDIS_HOST = os.getenv('REDIS_HOST', '127.0.0.1')
@@ -240,11 +391,51 @@ if SENTRY_DSN:
 
 # ── Ingestion File Storage (Module 01) ─────────────────────────────
 INGESTION_UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads', 'ingestion')
-INGESTION_MAX_FILE_SIZE_MB = 500
+INGESTION_MAX_FILE_SIZE_MB = int(os.getenv('INGESTION_MAX_FILE_SIZE_MB', '500'))
+STORAGE_BACKEND = os.getenv(
+    'STORAGE_BACKEND',
+    's3' if IS_DEPLOYED else 'local',
+).lower()
+if STORAGE_BACKEND not in {'local', 's3'}:
+    raise ImproperlyConfigured('STORAGE_BACKEND must be either local or s3.')
+if IS_DEPLOYED and STORAGE_BACKEND != 's3':
+    raise ImproperlyConfigured(
+        'STORAGE_BACKEND=s3 is required in staging/production.'
+    )
+
+S3_ENDPOINT_URL = os.getenv('S3_ENDPOINT_URL', '').strip()
+S3_ACCESS_KEY = os.getenv('S3_ACCESS_KEY', '').strip()
+S3_SECRET_KEY = os.getenv('S3_SECRET_KEY', '').strip()
+S3_BUCKET = os.getenv('S3_BUCKET', '').strip()
+S3_REGION = os.getenv('S3_REGION', '').strip()
+if STORAGE_BACKEND == 's3' and IS_DEPLOYED:
+    for _name, _value in (
+        ('S3_BUCKET', S3_BUCKET),
+        ('S3_ACCESS_KEY', S3_ACCESS_KEY),
+        ('S3_SECRET_KEY', S3_SECRET_KEY),
+    ):
+        if not _value:
+            raise ImproperlyConfigured(
+                f'{_name} is required when STORAGE_BACKEND=s3.'
+            )
 
 # Increase Django's default data upload limit for large CSVs (500 MB)
 DATA_UPLOAD_MAX_MEMORY_SIZE = INGESTION_MAX_FILE_SIZE_MB * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB — above this, Django uses temp file on disk
+
+# Application rate limiting is enabled by default in deployed environments.
+RATE_LIMIT_ENABLED = os.getenv(
+    'RATE_LIMIT_ENABLED',
+    'true' if IS_DEPLOYED else 'false',
+).lower() in {'1', 'true', 'yes'}
+RATE_LIMIT_FAIL_CLOSED = os.getenv(
+    'RATE_LIMIT_FAIL_CLOSED',
+    'true' if IS_DEPLOYED else 'false',
+).lower() in {'1', 'true', 'yes'}
+RATE_LIMIT_WINDOW_SECONDS = int(os.getenv('RATE_LIMIT_WINDOW_SECONDS', '60'))
+RATE_LIMIT_API_REQUESTS = int(os.getenv('RATE_LIMIT_API_REQUESTS', '120'))
+RATE_LIMIT_AUTH_REQUESTS = int(os.getenv('RATE_LIMIT_AUTH_REQUESTS', '20'))
+RATE_LIMIT_UPLOAD_REQUESTS = int(os.getenv('RATE_LIMIT_UPLOAD_REQUESTS', '10'))
 
 # ── Email Delivery Configuration (SMTP & SaaS Mail Provider) ─────────
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
@@ -254,5 +445,3 @@ EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '').strip()
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '').replace(' ', '').strip()
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'SupplyForge AI <ndaitung28092005@gmail.com>')
-
-

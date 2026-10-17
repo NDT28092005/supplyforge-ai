@@ -38,5 +38,14 @@ def get_version_info(request):
         "application_version": app_version,
         "commit": commit_hash,
         "model_version": model_version,
-        "feature_version": feature_version
+        "feature_version": feature_version,
+        "api_versions": {
+            "current": "v2",
+            "supported": ["v1", "v2"],
+            "legacy_unversioned": "v1",
+            "deprecation_policy": (
+                "v1 remains supported until a versioned sunset date is announced; "
+                "clients should migrate new integrations to v2."
+            ),
+        },
     }, status=200)

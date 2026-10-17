@@ -22,10 +22,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project files
 COPY . /app/
 
+# Do not run the application as root inside the container.
+RUN addgroup --system supplyforge && \
+    adduser --system --ingroup supplyforge supplyforge && \
+    chown -R supplyforge:supplyforge /app
+USER supplyforge
+
 EXPOSE 8080
 
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=15s \
     CMD curl -f http://localhost:8080/health/live || exit 1
 
-# Default startup command for Django API
-CMD python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8080
+# Migrations are executed once by the release job, not by every web replica.
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8080", "--workers", "3", "--graceful-timeout", "30", "--timeout", "120", "--keep-alive", "5", "--max-requests", "1000", "--max-requests-jitter", "50", "--access-logfile", "-", "--error-logfile", "-"]

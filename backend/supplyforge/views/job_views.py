@@ -8,7 +8,6 @@ cancellation, retry, and upload job creation.
 import logging
 import hashlib
 import threading
-from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -21,16 +20,25 @@ from supplyforge.tasks import run_import_pipeline
 logger = logging.getLogger(__name__)
 
 
+def _safe_job_error(job):
+    """Do not expose worker exceptions or internal paths in API payloads."""
+    if job.status == 'FAILED' and job.error_message:
+        return 'Tiến trình import thất bại. Vui lòng thử lại.'
+    return job.error_message
+
+
 def _get_workspace_from_request(request):
-    workspace_id = request.data.get('workspaceId') or request.GET.get('workspaceId') or getattr(request, 'workspace_id', 1)
+    """Resolve only the workspace supplied by validated middleware context."""
+    if not (
+        getattr(request, 'tenant_context_validated', False)
+        and getattr(request, 'workspace_id', None)
+    ):
+        return None
+    workspace_id = request.workspace_id
     try:
-        return Workspace.objects.get(id=workspace_id)
+        return Workspace.objects.get(id=int(workspace_id))
     except Workspace.DoesNotExist:
-        ws, _ = Workspace.objects.get_or_create(
-            id=1,
-            defaults={'name': 'Default Workspace', 'slug': 'default'}
-        )
-        return ws
+        return None
 
 
 def _dispatch_background_job(job_id: str) -> str:
@@ -49,7 +57,6 @@ def _dispatch_background_job(job_id: str) -> str:
         return "thread-executor"
 
 
-@csrf_exempt
 @api_view(['POST'])
 def enqueue_upload_job(request):
     """
@@ -78,6 +85,11 @@ def enqueue_upload_job(request):
         )
 
     workspace = _get_workspace_from_request(request)
+    if workspace is None:
+        return Response({
+            'error': 'Yêu cầu cần Authorization Bearer token và workspace hợp lệ.',
+            'code': 'UNAUTHENTICATED',
+        }, status=status.HTTP_401_UNAUTHORIZED)
 
     # Compute SHA256 file fingerprint
     hasher = hashlib.sha256()
@@ -163,7 +175,6 @@ def enqueue_upload_job(request):
     }, status=status.HTTP_202_ACCEPTED)
 
 
-@csrf_exempt
 @api_view(['GET'])
 def list_jobs(request):
     """
@@ -172,6 +183,11 @@ def list_jobs(request):
     Auto-reconciles stale/orphaned jobs.
     """
     workspace = _get_workspace_from_request(request)
+    if workspace is None:
+        return Response({
+            'error': 'Yêu cầu cần Authorization Bearer token và workspace hợp lệ.',
+            'code': 'UNAUTHENTICATED',
+        }, status=status.HTTP_401_UNAUTHORIZED)
     jobs = BackgroundJob.objects.filter(workspace=workspace).order_by('-created_at')[:50]
 
     data = []
@@ -218,14 +234,13 @@ def list_jobs(request):
             'createdAt': job.created_at.isoformat(),
             'updatedAt': job.updated_at.isoformat() if job.updated_at else None,
             'completedAt': job.completed_at.isoformat() if job.completed_at else None,
-            'errorMessage': job.error_message,
+            'errorMessage': _safe_job_error(job),
             'resultSummary': job.result_summary_json or {},
         })
 
     return Response({'jobs': data}, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_job_status(request, job_id):
     """
@@ -233,6 +248,11 @@ def get_job_status(request, job_id):
     Get job status + stage progress dictionary.
     """
     workspace = _get_workspace_from_request(request)
+    if workspace is None:
+        return Response({
+            'error': 'Yêu cầu cần Authorization Bearer token và workspace hợp lệ.',
+            'code': 'UNAUTHENTICATED',
+        }, status=status.HTTP_401_UNAUTHORIZED)
     try:
         job = BackgroundJob.objects.get(id=job_id, workspace=workspace)
     except BackgroundJob.DoesNotExist:
@@ -260,12 +280,11 @@ def get_job_status(request, job_id):
         'createdAt': job.created_at.isoformat(),
         'updatedAt': job.updated_at.isoformat(),
         'completedAt': job.completed_at.isoformat() if job.completed_at else None,
-        'errorMessage': job.error_message,
+        'errorMessage': _safe_job_error(job),
         'resultSummary': job.result_summary_json or {},
     }, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def cancel_job(request, job_id):
     """
@@ -273,6 +292,11 @@ def cancel_job(request, job_id):
     Immediately cancels the background job and moves it to history.
     """
     workspace = _get_workspace_from_request(request)
+    if workspace is None:
+        return Response({
+            'error': 'Yêu cầu cần Authorization Bearer token và workspace hợp lệ.',
+            'code': 'UNAUTHENTICATED',
+        }, status=status.HTTP_401_UNAUTHORIZED)
     try:
         job = BackgroundJob.objects.get(id=job_id, workspace=workspace)
     except BackgroundJob.DoesNotExist:
@@ -300,7 +324,6 @@ def cancel_job(request, job_id):
     }, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def retry_job(request, job_id):
     """
@@ -308,6 +331,11 @@ def retry_job(request, job_id):
     Retry a failed or cancelled job.
     """
     workspace = _get_workspace_from_request(request)
+    if workspace is None:
+        return Response({
+            'error': 'Yêu cầu cần Authorization Bearer token và workspace hợp lệ.',
+            'code': 'UNAUTHENTICATED',
+        }, status=status.HTTP_401_UNAUTHORIZED)
     try:
         job = BackgroundJob.objects.get(id=job_id, workspace=workspace)
     except BackgroundJob.DoesNotExist:
@@ -359,7 +387,6 @@ def retry_job(request, job_id):
     }, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
 @api_view(['DELETE'])
 def delete_job(request, job_id):
     """
@@ -367,6 +394,11 @@ def delete_job(request, job_id):
     Delete background job record.
     """
     workspace = _get_workspace_from_request(request)
+    if workspace is None:
+        return Response({
+            'error': 'Yêu cầu cần Authorization Bearer token và workspace hợp lệ.',
+            'code': 'UNAUTHENTICATED',
+        }, status=status.HTTP_401_UNAUTHORIZED)
     try:
         job = BackgroundJob.objects.get(id=job_id, workspace=workspace)
     except BackgroundJob.DoesNotExist:

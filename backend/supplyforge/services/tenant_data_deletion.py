@@ -27,6 +27,7 @@ from supplyforge.models import (
     CopilotConversation, CopilotMessage, CopilotToolCall, CopilotAuditLog,
     ShopeeProduct, ShopeeVariation, ShopeeOrder, ShopeeOrderItem, SyncLog
 )
+from supplyforge.services.storage_backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +50,9 @@ class TenantDataDeletionService:
         for sess in sessions:
             for path_attr in ['storage_path', 'raw_storage_path', 'processed_storage_path']:
                 path_val = getattr(sess, path_attr, None)
-                if path_val and os.path.exists(path_val):
+                if path_val:
                     try:
-                        os.remove(path_val)
+                        StorageBackend.delete(path_val)
                         file_count += 1
                     except Exception as e:
                         logger.warning(f"[TEN-004 Purge] Failed to delete raw file {path_val}: {e}")

@@ -7,14 +7,16 @@ from supplyforge.services.portfolio import PortfolioOrchestrationService
 
 @api_view(['GET'])
 def get_portfolio_command(request, workspace_id):
-    user_id = request.GET.get('userId', 'user_default_001')
+    user_id = request.user_id
+    workspace_id = request.workspace_id
     command_plan = PortfolioOrchestrationService.get_portfolio_command(user_id, workspace_id)
     return Response(command_plan)
 
 
 @api_view(['GET'])
 def get_financial_analysis(request, workspace_id):
-    user_id = request.GET.get('userId', 'user_default_001')
+    user_id = request.user_id
+    workspace_id = request.workspace_id
     sku_id = request.GET.get('skuId')
     discount_pct = float(request.GET.get('discount', '0.30'))
     accounting_method = request.GET.get('accounting', 'FIFO')

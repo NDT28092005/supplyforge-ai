@@ -136,23 +136,20 @@ class StreamingCSVProfiler:
         Returns:
             (raw_storage_path, file_size_bytes)
         """
-        raw_dir = StreamingCSVProfiler.get_raw_upload_dir()
-        ext = os.path.splitext(file_obj.name)[1] or '.csv'
-        unique_name = f"{uuid.uuid4().hex}{ext}"
-        storage_path = os.path.join(raw_dir, unique_name)
-
-        total_bytes = 0
-        with open(storage_path, 'wb') as dest:
-            for chunk in file_obj.chunks(chunk_size=8192):
-                dest.write(chunk)
-                total_bytes += len(chunk)
-
-        return storage_path, total_bytes
+        from supplyforge.services.storage_backend import StorageBackend
+        return StorageBackend.save_uploaded_file(file_obj)
 
     # ── Main profiling entry ──────────────────────────────────────────
 
     @staticmethod
     def profile_csv(storage_path: str) -> ProfileResult:
+        from supplyforge.services.storage_backend import StorageBackend
+
+        with StorageBackend.localize(storage_path) as local_path:
+            return StreamingCSVProfiler._profile_local_csv(local_path)
+
+    @staticmethod
+    def _profile_local_csv(storage_path: str) -> ProfileResult:
         """Full streaming profile of a CSV file on disk."""
         result = ProfileResult()
 

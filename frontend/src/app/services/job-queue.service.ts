@@ -44,7 +44,7 @@ export class JobQueueService {
     formData.append('file', file);
     formData.append('workspaceId', workspaceId.toString());
 
-    return this.http.post<any>(`${this.apiUrl}/api/v2/ingestion/upload`, formData);
+    return this.http.post<any>(`${this.apiUrl}/api/v2/jobs/upload`, formData);
   }
 
   getJobsList(): Observable<{ jobs: BackgroundJobDto[] }> {

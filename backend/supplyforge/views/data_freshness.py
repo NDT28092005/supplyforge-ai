@@ -14,13 +14,13 @@ import logging
 import os
 import sys
 
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 
 from supplyforge.models import IngestionSession
+from supplyforge.services.storage_backend import StorageBackend
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -33,7 +33,6 @@ from src.ingestion.column_mapper import ColumnMapper
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def trigger_freshness_tracking(request, session_id):
     """Execute DAT-08 Data Freshness Evaluation on session dataset."""
@@ -56,7 +55,7 @@ def trigger_freshness_tracking(request, session_id):
     elif os.path.exists(norm_csv_path):
         data_filepath = norm_csv_path
 
-    if not data_filepath or not os.path.exists(data_filepath):
+    if not data_filepath or not StorageBackend.exists(data_filepath):
         return Response(
             {'error': 'Không tìm thấy tệp dữ liệu của phiên này trên hệ thống.'},
             status=status.HTTP_400_BAD_REQUEST
@@ -66,7 +65,8 @@ def trigger_freshness_tracking(request, session_id):
     custom_thresholds = request.data.get('customThresholds')
 
     try:
-        df = pd.read_csv(data_filepath, nrows=50000, encoding_errors='replace')
+        with StorageBackend.localize(data_filepath) as local_path:
+            df = pd.read_csv(local_path, nrows=50000, encoding_errors='replace')
 
         tracker = DataFreshnessTracker(session_id=str(session.id))
         status_result = tracker.evaluate_freshness(
@@ -101,7 +101,6 @@ def trigger_freshness_tracking(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_freshness_status(request, session_id):
     """Retrieve data freshness status, decision safety guard, and alerts."""
@@ -123,7 +122,6 @@ def get_freshness_status(request, session_id):
     return Response({'statusResult': None})
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_sku_freshness_report(request, session_id):
     """Retrieve paginated SKU-level freshness report."""

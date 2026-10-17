@@ -13,13 +13,13 @@ import logging
 import os
 import sys
 
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 
 from supplyforge.models import IngestionSession
+from supplyforge.services.storage_backend import StorageBackend
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -31,7 +31,6 @@ from src.ingestion.data_readiness_gate import DataReadinessGate
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @api_view(['POST'])
 def evaluate_data_readiness(request, session_id):
     """Evaluate Data Readiness Gate for an Ingestion Session."""
@@ -54,9 +53,10 @@ def evaluate_data_readiness(request, session_id):
         data_filepath = norm_csv_path
 
     df = None
-    if data_filepath and os.path.exists(data_filepath):
+    if data_filepath and StorageBackend.exists(data_filepath):
         try:
-            df = pd.read_csv(data_filepath, nrows=10000, encoding_errors='replace')
+            with StorageBackend.localize(data_filepath) as local_path:
+                df = pd.read_csv(local_path, nrows=10000, encoding_errors='replace')
         except Exception:
             pass
 
@@ -88,7 +88,6 @@ def evaluate_data_readiness(request, session_id):
         )
 
 
-@csrf_exempt
 @api_view(['GET'])
 def get_readiness_gate_status(request, session_id):
     """Retrieve Data Readiness Gate Status & Downstream Interceptor payload."""

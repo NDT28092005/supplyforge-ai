@@ -59,41 +59,86 @@ graph TB
 
 ---
 
-## Các lỗ hổng & điểm cần cải thiện (47 issues phát hiện)
+## Các lỗ hổng & điểm cần cải thiện
 
 ### 🔴 CRITICAL (Phải sửa ngay — Blocking production)
 
-| # | Issue | File | Severity |
-|:--|:------|:-----|:---------|
-| C1 | `ALLOWED_HOSTS = ['*']` — Cho phép bất kỳ domain nào truy cập | [settings.py](file:///home/nguyen-dai-tung/supplyforge-ai/backend/config/settings.py#L34) | 🔴 Critical |
-| C2 | `CORS_ALLOW_ALL_ORIGINS = True` — Open CORS cho tất cả origins | [settings.py](file:///home/nguyen-dai-tung/supplyforge-ai/backend/config/settings.py#L139) | 🔴 Critical |
-| C3 | `SECRET_KEY` hardcoded insecure default | [settings.py](file:///home/nguyen-dai-tung/supplyforge-ai/backend/config/settings.py#L29) | 🔴 Critical |
-| C4 | `GOOGLE_CLIENT_ID` hardcoded trong settings.py | [settings.py](file:///home/nguyen-dai-tung/supplyforge-ai/backend/config/settings.py#L165) | 🔴 Critical |
-| C5 | `verification_code` trả lại trong response đăng ký (leaks token!) | [auth.py](file:///home/nguyen-dai-tung/supplyforge-ai/backend/supplyforge/views/auth.py#L366) | 🔴 Critical |
-| C6 | Backend chạy `runserver` trong Docker production (không phải Gunicorn) | [Dockerfile](file:///home/nguyen-dai-tung/supplyforge-ai/backend/Dockerfile#L31) | 🔴 Critical |
-| C7 | Database credentials mặc định không đổi (`supplyforge/supplyforge`) | [docker-compose.yml](file:///home/nguyen-dai-tung/supplyforge-ai/backend/docker-compose.yml) | 🔴 Critical |
-| C8 | JWT exception swallowed silently — `pass` block ẩn authentication errors | [middleware.py](file:///home/nguyen-dai-tung/supplyforge-ai/backend/supplyforge/middleware.py#L53) | 🔴 Critical |
-| C9 | `print()` statement trong production code (information disclosure) | [ingestion.py](file:///home/nguyen-dai-tung/supplyforge-ai/backend/supplyforge/views/ingestion.py#L213) | 🔴 Critical |
-| C10 | `traceback` trả về cho client trong error response | [ingestion.py](file:///home/nguyen-dai-tung/supplyforge-ai/backend/supplyforge/views/ingestion.py#L387) | 🔴 Critical |
+Các mục dưới đây được xác nhận từ mã nguồn ban đầu. Tất cả C1–C10 đã được
+triển khai trong working tree; link dùng đường dẫn tương đối để tài liệu không
+phụ thuộc vào thư mục của một developer cụ thể.
+
+| # | Issue | File | Severity | Status |
+|:--|:------|:-----|:---------|:-------|
+| C1 | `ALLOWED_HOSTS = ['*']` — Chấp nhận mọi Host header, làm mất lớp bảo vệ Host header | [settings.py](backend/config/settings.py#L34) | 🔴 Critical | ✅ Fixed |
+| C2 | `CORS_ALLOW_ALL_ORIGINS = True` — Cho phép mọi origin gọi API | [settings.py](backend/config/settings.py#L139) | 🔴 Critical | ✅ Fixed |
+| C3 | `SECRET_KEY` có fallback hardcoded — mọi môi trường thiếu secret dùng cùng một khóa JWT/Django | [settings.py](backend/config/settings.py#L29) | 🔴 Critical | ✅ Fixed |
+| C4 | Credential tích hợp có default yếu hoặc trống (`ODOO_PASSWORD=admin`, secret OAuth/Gemini không được bắt buộc) | [settings.py](backend/config/settings.py#L159-L178) | 🔴 Critical | ✅ Fixed |
+| C5 | `verification_code` trả lại trong response đăng ký, làm lộ token xác thực email | [auth.py](backend/supplyforge/views/auth.py#L363-L373) | 🔴 Critical | ✅ Fixed |
+| C6 | Image mặc định chạy `runserver`, không phải Gunicorn production | [Dockerfile](backend/Dockerfile#L27-L31) | 🔴 Critical | ✅ Fixed |
+| C7 | Database password/root password có default trong Compose và được hardcode ở Compose cũ | [docker-compose.yml](docker-compose.yml#L6-L10), [backend/docker-compose.yml](backend/docker-compose.yml#L8-L12) | 🔴 Critical | ✅ Fixed |
+| C8 | JWT lỗi bị nuốt, role mặc định là `OWNER`, và request không có auth bị gán `workspace_id = 1` — nguy cơ tenant isolation/authorization bypass | [middleware.py](backend/supplyforge/middleware.py#L33-L60) | 🔴 Critical | ✅ Fixed |
+| C9 | Upload và auth views trả `str(e)` cho client; ingestion còn ghi exception bằng `print()` | [ingestion.py](backend/supplyforge/views/ingestion.py#L211-L221), [auth.py](backend/supplyforge/views/auth.py#L375-L377) | 🔴 Critical | ✅ Fixed |
+| C10 | `traceback` đầy đủ được trả về client trong `clear_data` | [ingestion.py](backend/supplyforge/views/ingestion.py#L382-L389) | 🔴 Critical | ✅ Fixed |
+
+`GOOGLE_CLIENT_ID` bản thân nó là public identifier, không phải secret và không nên
+được xếp Critical. Có thể chuyển nó sang cấu hình bắt buộc theo môi trường ở mục C4,
+nhưng không được coi việc ẩn client ID là biện pháp bảo mật.
+
+### Production gate cho CRITICAL
+
+Không deploy staging/production khi chưa đạt đủ các điều kiện sau:
+
+1. Ứng dụng fail fast nếu thiếu secret, host/origin allowlist hoặc database credential; không còn fallback production.
+2. Bearer token không hợp lệ nhận HTTP `401`; request không xác thực không được tự động gán workspace/tenant.
+3. Không có token, stack trace, đường dẫn nội bộ hoặc raw exception trong HTTP response hay field được trả lại từ API.
+4. Web container chạy bằng Gunicorn, user không phải root; database migration chạy trong release job một lần, không chạy đồng thời khi mỗi web replica khởi động.
+5. Production Compose không publish MySQL/Redis ra host và không chứa password literal/default.
+
+**Kết quả xác minh:** `34/34` security/auth/tenant tests pass; `manage.py
+check --deploy` pass với cấu hình production hợp lệ; cấu hình fail-fast khi
+thiếu `DJANGO_SECRET_KEY`.
 
 ### 🟠 HIGH (Ảnh hưởng lớn đến scalability & security)
 
-| # | Issue | Impact |
-|:--|:------|:-------|
-| H1 | Không có API-level rate limiting (chỉ có registration rate limit) | DoS attack trên mọi endpoint |
-| H2 | SQLite fallback cho tests có thể vô tình dùng trên production | Data loss |
-| H3 | `db.sqlite3` (34MB) commit trong repo | Repo bloat, security leak |
-| H4 | Không có database connection pooling | Connection exhaustion khi scale |
-| H5 | Không có database read replicas | Single point of failure cho reads |
-| H6 | CSV files lưu trên local disk (`backend/uploads/`) | Không share được giữa nhiều instances |
-| H7 | Không có request size limiting ở reverse proxy level | Memory exhaustion attack |
-| H8 | `@csrf_exempt` trên tất cả API endpoints | CSRF vulnerability |
-| H9 | Không có Content-Security-Policy, X-Content-Type-Options headers | XSS, MIME sniffing |
-| H10 | `workspace_id` default = 1 khi không có auth header | Data isolation bypass |
-| H11 | TenantManager filter theo `user_id = tenant_id` (integer vs string mismatch) | Silent data leaks |
-| H12 | Không có API versioning strategy thống nhất (v1 + v2 duplicate routes) | Maintenance nightmare |
-| H13 | 459 URL routes — nhiều duplicate `/api/v1/` và `/api/v2/` | Technical debt |
-| H14 | Không có graceful shutdown / connection draining | Request drops khi deploy |
+| # | Issue | Impact | Status |
+|:--|:------|:------|:-------|
+| H1 | Không có API-level rate limiting (chỉ có registration rate limit) | DoS attack trên mọi endpoint | ✅ Fixed |
+| H2 | SQLite fallback cho tests có thể vô tình dùng trên production | Data loss | ✅ Fixed |
+| H3 | `db.sqlite3` (34MB) commit trong repo | Repo bloat, security leak | ✅ Verified |
+| H4 | Không có database connection pooling | Connection exhaustion khi scale | ✅ Fixed |
+| H5 | Không có database read replicas | Single point of failure cho reads | 🟡 Optional topology |
+| H6 | CSV files lưu trên local disk (`backend/uploads/`) | Không share được giữa nhiều instances | ✅ Fixed |
+| H7 | Không có request size limiting ở reverse proxy level | Memory exhaustion attack | ✅ Fixed |
+| H8 | `@csrf_exempt` trên tất cả API endpoints | CSRF vulnerability | ✅ Mitigated |
+| H9 | Không có Content-Security-Policy, X-Content-Type-Options headers | XSS, MIME sniffing | ✅ Fixed |
+| H10 | Một số view vẫn đọc `workspaceId`/`user_id` trực tiếp từ client thay vì trusted tenant context | Data isolation bypass | ✅ Fixed |
+| H11 | TenantManager filter theo `user_id = tenant_id` (integer vs string mismatch) | Silent data leaks | ✅ Fixed |
+| H12 | Không có API versioning strategy thống nhất (v1 + v2 duplicate routes) | Maintenance nightmare | ✅ Fixed |
+| H13 | 459 URL routes — nhiều duplicate `/api/v1/` và `/api/v2/` | Technical debt | ✅ Fixed |
+| H14 | Không có graceful shutdown / connection draining | Request drops khi deploy | ✅ Fixed |
+
+#### HIGH implementation notes
+
+- H1 dùng `cache.add()` + `cache.incr()` atomic theo fixed window, bật mặc định ở
+  staging/production và fail-closed khi Redis/cache không khả dụng. IP chỉ được
+  lấy từ `X-Forwarded-For` khi `REMOTE_ADDR` thuộc `TRUSTED_PROXY_IPS`.
+- H2 không cho phép `manage.py test` hoặc `USE_SQLITE=1` khi `APP_ENV` là
+  staging/production; test database dùng `:memory:`. H3 đã được xác minh không có
+  `db.sqlite3` tracked và các SQLite/upload artifacts đã nằm trong `.gitignore`.
+- H4 bật persistent connections với health checks; H5 có `replica` router tùy
+  chọn qua `DB_REPLICA_*`, nhưng việc dựng MySQL replication vẫn là deployment
+  topology, không tự tạo trong Compose.
+- H6 yêu cầu `STORAGE_BACKEND=s3` ở môi trường deployed và dùng S3/MinIO-compatible
+  bucket; local filesystem chỉ là backend development/test.
+- H7 áp dụng đồng thời ở Nginx (`client_max_body_size`, timeout, streaming upload)
+  và Django. H8 bỏ explicit exemption khỏi REST views; chỉ giữ exemption cho
+  OAuth/webhook stateless hoặc external callback. H9 thêm CSP và headers ở cả
+  Django lẫn frontend Nginx.
+- H10/H11 dùng workspace/user đã xác thực từ JWT, không cho URL/query/body đổi
+  tenant; `TenantManager` filter `workspace_id` theo integer và legacy `user_id`
+  theo authenticated user string. H12 đặt version header và H13 loại route trùng,
+  chuyển queue upload sang `/api/v2/jobs/upload`. H14 cấu hình Gunicorn graceful
+  timeout và Compose `stop_grace_period`.
 
 ### 🟡 MEDIUM (Performance & UX improvements)
 
@@ -128,52 +173,112 @@ graph TB
 #### [MODIFY] backend/config/settings.py
 
 ```diff
+ from django.core.exceptions import ImproperlyConfigured
+
  # SECURITY WARNING: keep the secret key used in production secret!
 -SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-supplyforge-ai-mvp-secret-key-change-me')
 +SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
++IS_DEPLOYED = APP_ENV in {'staging', 'production'}
++if IS_DEPLOYED and not SECRET_KEY:
++    raise ImproperlyConfigured("DJANGO_SECRET_KEY is required for staging/production.")
 +if not SECRET_KEY:
-+    if APP_ENV == 'development':
-+        SECRET_KEY = 'django-insecure-dev-only-key-not-for-production'
-+    else:
-+        raise ImproperlyConfigured(
-+            "DJANGO_SECRET_KEY environment variable is required for staging/production. "
-+            "Generate one with: python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'"
-+        )
++    SECRET_KEY = 'django-insecure-dev-only-key-not-for-production'
++DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() in {'1', 'true', 'yes'}
++if IS_DEPLOYED and DEBUG:
++    raise ImproperlyConfigured("DJANGO_DEBUG must be false for staging/production.")
 
 -ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '0.0.0.0', 'host.docker.internal']
++# Do not accept arbitrary Host headers.
 +_ALLOWED_HOSTS_ENV = os.getenv('ALLOWED_HOSTS', '')
-+if APP_ENV == 'development':
++ALLOWED_HOSTS = [
++    host.strip() for host in _ALLOWED_HOSTS_ENV.split(',') if host.strip()
++]
++if not ALLOWED_HOSTS and not IS_DEPLOYED:
 +    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'host.docker.internal']
-+elif _ALLOWED_HOSTS_ENV:
-+    ALLOWED_HOSTS = [h.strip() for h in _ALLOWED_HOSTS_ENV.split(',') if h.strip()]
-+else:
-+    raise ImproperlyConfigured("ALLOWED_HOSTS must be explicitly set for staging/production.")
++if IS_DEPLOYED and (not ALLOWED_HOSTS or '*' in ALLOWED_HOSTS):
++    raise ImproperlyConfigured("ALLOWED_HOSTS must be an explicit allowlist.")
 
 -CORS_ALLOW_ALL_ORIGINS = True  # For MVP simplified connection
-+CORS_ALLOW_ALL_ORIGINS = APP_ENV == 'development'
-+if not CORS_ALLOW_ALL_ORIGINS:
-+    CORS_ALLOW_CREDENTIALS = True
++CORS_ALLOW_ALL_ORIGINS = False
++CORS_ALLOWED_ORIGINS = [
++    origin.strip()
++    for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
++    if origin.strip()
++]
++if IS_DEPLOYED and not CORS_ALLOWED_ORIGINS:
++    raise ImproperlyConfigured("CORS_ALLOWED_ORIGINS is required for staging/production.")
 ```
+
+Xóa block `CORS_ALLOWED_ORIGINS` cũ bên dưới để không vô tình ghi đè cấu hình
+đã được validate.
 
 Thêm security headers middleware:
 
 ```python
 # Security Headers (OWASP Best Practices)
-SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 
 if APP_ENV == 'production':
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
-    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 ```
 
-### 1.2 Fix Verification Code Leak
+### 1.2 Production Secrets & Credentials
+
+Không commit secret thật vào repository và không dùng fallback production. Các
+credential bắt buộc phải được inject từ secret manager hoặc environment của
+deployment:
+
+| Secret/config | Rule |
+|:--|:--|
+| `DJANGO_SECRET_KEY`, `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD` | Bắt buộc ở staging/production; thiếu thì app fail fast |
+| `ODOO_PASSWORD`, `GOOGLE_CLIENT_SECRET`, `GEMINI_API_KEY`, `S3_SECRET_KEY` | Bắt buộc khi integration tương ứng được bật; không fallback về `admin`, giá trị rỗng hoặc key mẫu |
+| `GOOGLE_CLIENT_ID` | Có thể public nhưng phải cấu hình theo môi trường; không coi đây là secret |
+
+Ví dụ guard trong `settings.py`:
+
+```python
+def required_production_secret(name, development_default=''):
+    value = os.getenv(name, '').strip()
+    insecure_defaults = {'change-me', 'rootpassword', 'admin', 'supplyforge'}
+    if IS_DEPLOYED and (not value or value.lower() in insecure_defaults):
+        raise ImproperlyConfigured(f'{name} is required for staging/production.')
+    return value or development_default
+
+MYSQL_PASSWORD = required_production_secret('MYSQL_PASSWORD', 'change-me')
+
+ODOO_ENABLED = os.getenv('ODOO_ENABLED', 'false').lower() == 'true'
+if ODOO_ENABLED:
+    required_production_secret('ODOO_PASSWORD', 'admin')
+```
+
+Trong production Compose, dùng required interpolation và không publish database
+hoặc Redis ra host:
+
+```yaml
+services:
+  mysql:
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE is required}
+      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+    # Không khai báo ports ở production.
+```
+
+`docker-compose.yml` hiện tại và `backend/docker-compose.yml` phải được đánh dấu
+local-only hoặc thay bằng production Compose riêng. Không dùng các default
+`supplyforge`, `rootpassword`, `supplyforge_secret_pass`, `supplyforge_root_pass`
+cho môi trường có dữ liệu thật.
+
+### 1.3 Fix Verification Code Leak
 
 #### [MODIFY] backend/supplyforge/views/auth.py
 
@@ -186,194 +291,140 @@ if APP_ENV == 'production':
                  "email": user.email,
 ```
 
-### 1.3 API-Level Rate Limiting
+Mã chỉ được gửi qua email provider. Cập nhật test đăng ký/xác thực để lấy mã từ
+mock email/outbox hoặc fixture của test, không đọc mã từ HTTP response và không
+tạo debug endpoint để phục vụ test.
 
-#### [NEW] backend/supplyforge/middleware/api_rate_limiter.py
+### 1.4 Request Abuse Controls
 
-```python
-"""
-Global API Rate Limiter using Redis Sliding Window.
-Applies per-IP and per-user rate limits to all API endpoints.
-"""
-import time
-import logging
-from django.http import JsonResponse
-from django.conf import settings
+Rate limiting vẫn cần có trước production, nhưng implementation cũ không phải
+sliding window an toàn: `cache.get()`/`cache.set()` không atomic và
+`X-Forwarded-For` có thể bị spoof nếu không có trusted proxy.
 
-logger = logging.getLogger(__name__)
+Thiết kế tối thiểu:
 
-class APIRateLimiterMiddleware:
-    # Configurable limits per endpoint category
-    RATE_LIMITS = {
-        'default': {'requests': 100, 'window': 60},       # 100 req/min
-        'auth': {'requests': 10, 'window': 60},            # 10 req/min
-        'upload': {'requests': 5, 'window': 300},          # 5 per 5 min
-        'export': {'requests': 10, 'window': 300},         # 10 per 5 min
-        'analytics': {'requests': 30, 'window': 60},       # 30 req/min
-    }
+- Rate limit tại Nginx/API gateway theo IP và tại application theo user/workspace.
+- Nếu dùng Redis, dùng `INCR` + TTL hoặc Lua script atomic; không lưu list timestamp bằng read-modify-write.
+- Chỉ tin `X-Forwarded-For` từ proxy nằm trong allowlist.
+- Rate limiter lỗi không được âm thầm bypass trong production; phải có alert và policy fail-closed cho auth/upload.
 
-    def __init__(self, get_response):
-        self.get_response = get_response
+### 1.5 Input Validation & CSV Export Safety
 
-    def _get_category(self, path):
-        if '/auth/' in path:
-            return 'auth'
-        elif '/upload' in path or '/ingestion/upload' in path:
-            return 'upload'
-        elif '/export/' in path:
-            return 'export'
-        elif '/analytics/' in path or '/risk/' in path:
-            return 'analytics'
-        return 'default'
+Không escape HTML toàn bộ CSV lúc ingest vì sẽ làm hỏng dữ liệu nghiệp vụ và
+không bảo vệ các output khác. Validate type/size ở input boundary, encode lúc
+render HTML, và chỉ prefix các ô bắt đầu bằng `=`, `+`, `-`, `@` khi **export**
+CSV/XLSX hoặc khi hiển thị trong spreadsheet.
 
-    def _get_client_key(self, request):
-        user_id = getattr(request, 'user_id', None)
-        if user_id:
-            return f"user:{user_id}"
-        ip = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
-        return f"ip:{ip or request.META.get('REMOTE_ADDR', '127.0.0.1')}"
-
-    def __call__(self, request):
-        if request.path.startswith('/health/') or request.path == '/api/v1/ping':
-            return self.get_response(request)
-
-        category = self._get_category(request.path)
-        limit = self.RATE_LIMITS[category]
-        client_key = self._get_client_key(request)
-        cache_key = f"sf_ratelimit:{category}:{client_key}"
-
-        try:
-            from django.core.cache import cache
-            now = time.time()
-            window = limit['window']
-            max_requests = limit['requests']
-
-            timestamps = cache.get(cache_key, [])
-            timestamps = [t for t in timestamps if now - t < window]
-
-            if len(timestamps) >= max_requests:
-                retry_after = int(window - (now - timestamps[0]))
-                return JsonResponse({
-                    'error': 'Too Many Requests',
-                    'message': f'Bạn đã vượt quá giới hạn {max_requests} request/{window}s. Vui lòng thử lại sau {retry_after} giây.',
-                    'code': 'RATE_LIMIT_EXCEEDED',
-                    'retry_after': retry_after
-                }, status=429, headers={'Retry-After': str(retry_after)})
-
-            timestamps.append(now)
-            cache.set(cache_key, timestamps, timeout=window)
-        except Exception as e:
-            logger.warning(f"Rate limiter error (non-blocking): {e}")
-
-        return self.get_response(request)
-```
-
-### 1.4 Input Validation & CSV Injection Prevention
-
-#### [NEW] backend/supplyforge/services/input_sanitizer.py
-
-```python
-"""
-Input Sanitization & CSV Injection Prevention.
-Prevents formula injection, XSS, SQL injection via CSV data.
-"""
-import re
-import html
-
-# CSV injection characters (OWASP)
-CSV_INJECTION_PATTERNS = re.compile(r'^[=+\-@\t\r\n|]')
-XSS_PATTERN = re.compile(r'<script[^>]*>.*?</script>', re.IGNORECASE | re.DOTALL)
-
-def sanitize_csv_cell(value: str) -> str:
-    """Prevent CSV injection by escaping formula-triggering characters."""
-    if not isinstance(value, str):
-        return value
-    value = value.strip()
-    if CSV_INJECTION_PATTERNS.match(value):
-        value = "'" + value  # Prefix with single quote
-    return html.escape(value)
-
-def sanitize_user_input(value: str, max_length: int = 1000) -> str:
-    """Sanitize general user input."""
-    if not isinstance(value, str):
-        return value
-    value = value.strip()[:max_length]
-    value = XSS_PATTERN.sub('', value)
-    value = html.escape(value)
-    return value
-```
-
-### 1.5 Fix Silent Auth Failures
+### 1.6 Fix Silent Auth Failures & Tenant Context
 
 #### [MODIFY] backend/supplyforge/middleware.py
 
-```diff
-             except Exception as e:
--                pass
-+                logger.warning(f"[TenantMiddleware] JWT decode failed: {type(e).__name__}")
+```python
+from django.http import JsonResponse
 
-         if not workspace_id:
-             raw_ws = request.headers.get('X-Workspace-ID') or request.headers.get('X-Tenant-ID') or request.GET.get('workspaceId')
-             if raw_ws and str(raw_ws).replace('T', '').replace('W', '').isdigit():
-                 workspace_id = int(str(raw_ws).replace('T', '').replace('W', ''))
-             else:
--                workspace_id = 1
-+                workspace_id = None  # Don't default — force explicit workspace
+def _auth_error(code, message):
+    return JsonResponse({'error': message, 'code': code}, status=401)
+
+# Inside __call__:
+if auth_header:
+    if not auth_header.startswith('Bearer '):
+        return _auth_error('INVALID_AUTH_HEADER', 'Yêu cầu xác thực không hợp lệ.')
+    try:
+        payload = jwt.decode(
+            auth_header[7:].strip(),
+            settings.SECRET_KEY,
+            algorithms=['HS256'],
+        )
+    except jwt.ExpiredSignatureError:
+        logger.warning('JWT rejected: expired token')
+        return _auth_error('TOKEN_EXPIRED', 'Phiên đăng nhập đã hết hạn.')
+    except jwt.InvalidTokenError:
+        logger.warning('JWT rejected: invalid token')
+        return _auth_error('INVALID_TOKEN', 'Yêu cầu xác thực không hợp lệ.')
+
+    user_id = payload.get('user_id')
+    workspace_id = payload.get('workspace_id')
+    if not user_id or not workspace_id:
+        return _auth_error('INVALID_TOKEN', 'Yêu cầu xác thực không hợp lệ.')
+else:
+    user_id = None
+    workspace_id = None
+    role = None
+
+tenant_id = f"T{workspace_id:03d}" if workspace_id else None
+permissions = get_user_permissions(role) if role else []
+
+# Không lấy workspace từ header/query và không có fallback workspace_id = 1.
+# Không dùng role mặc định OWNER cho request chưa xác thực; permissions phải rỗng.
+# Public endpoints giữ tenant context = None; protected endpoints phải dùng
+# IsAuthenticated/guard tương ứng và trả 401 nếu thiếu context.
 ```
 
-### 1.6 Remove Information Disclosure
+Ngoài middleware, mọi endpoint đọc dữ liệu tenant phải yêu cầu authenticated
+context. Không cho client chọn workspace bằng query/header rồi dùng giá trị đó
+để truy vấn database.
+
+### 1.7 Remove Information Disclosure
 
 #### [MODIFY] backend/supplyforge/views/ingestion.py
 
-```diff
-     except Exception as e:
--        import traceback
--        print("REAL UPLOAD EXCEPTION:", e)
--        traceback.print_exc()
-         logger.exception('Ingestion profiling failed for session %s', session.id)
-         session.status = 'FAILED'
-         session.error_message = str(e)
-         session.save(update_fields=['status', 'error_message', 'updated_at'])
-         return Response(
-             {'error': f'Profiling thất bại: {str(e)}', 'sessionId': str(session.id)},
-             status=status.HTTP_500_INTERNAL_SERVER_ERROR
-         )
+```python
+    except Exception:
+        logger.exception('Ingestion profiling failed for session %s', session.id)
+        session.status = 'FAILED'
+        session.error_message = 'INGESTION_FAILED'
+        session.save(update_fields=['status', 'error_message', 'updated_at'])
+        return Response(
+            {
+                'error': 'Không thể xử lý file. Vui lòng thử lại hoặc liên hệ hỗ trợ.',
+                'code': 'INGESTION_FAILED',
+                'sessionId': str(session.id),
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
-# And for clear_data view:
-         return Response({
-             "error": str(exc),
--            "traceback": traceback.format_exc(),
-             "code": "INTERNAL_SERVER_ERROR"
-         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+# For clear_data:
+    except Exception:
+        logger.exception('Tenant data deletion failed')
+        return Response({
+            "error": "Không thể hoàn tất thao tác.",
+            "code": "INTERNAL_SERVER_ERROR"
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 ```
 
-### 1.7 Production Dockerfile
+Áp dụng cùng nguyên tắc cho các `except` trong `auth.py`: log exception ở server
+nhưng chỉ trả message generic và error code ổn định; không trả `str(e)`.
+
+`_serialize_session()` cũng chỉ được trả error code/message đã được sanitize;
+không serialize raw exception từ database. Log server giữ stack trace qua
+`logger.exception()` và gắn request/session ID để điều tra.
+
+### 1.8 Production Dockerfile
 
 #### [MODIFY] backend/Dockerfile
 
-```diff
--CMD python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8080
-+# Non-root user for security
-+RUN addgroup --system django && adduser --system --ingroup django django
-+
-+# Create necessary directories
-+RUN mkdir -p /app/uploads /app/tmp && chown -R django:django /app
-+
-+USER django
-+
-+# Production-grade WSGI server
-+CMD python manage.py migrate --noinput && \
-+    gunicorn config.wsgi:application \
-+      --bind 0.0.0.0:8080 \
-+      --workers ${GUNICORN_WORKERS:-4} \
-+      --threads ${GUNICORN_THREADS:-2} \
-+      --timeout ${GUNICORN_TIMEOUT:-120} \
-+      --max-requests ${GUNICORN_MAX_REQUESTS:-1000} \
-+      --max-requests-jitter 50 \
-+      --access-logfile - \
-+      --error-logfile - \
-+      --log-level info
+```dockerfile
+# Create runtime user before switching away from root.
+RUN addgroup --system django \
+    && adduser --system --ingroup django django \
+    && mkdir -p /app/uploads /app/tmp \
+    && chown -R django:django /app
+
+USER django
+
+# Web process only. Do not run migrations from every web replica.
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8080", "--workers", "4", "--threads", "2", "--timeout", "120", "--max-requests", "1000", "--max-requests-jitter", "50", "--access-logfile", "-", "--error-logfile", "-", "--log-level", "info"]
 ```
+
+Chạy migration như release job trước khi traffic chuyển sang release mới:
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm backend python manage.py migrate --noinput
+docker compose -f docker-compose.prod.yml up -d backend
+```
+
+Nếu vẫn giữ `backend/docker-compose.yml`, phải đổi WSGI module thành
+`config.wsgi:application` và không dùng các credential literal trong file này.
 
 ---
 
@@ -1075,9 +1126,13 @@ def stream_job_progress(request, job_id):
 
 ```bash
 # Phase 1: Security
+APP_ENV=production python manage.py check --deploy
 python manage.py test supplyforge.tests.test_sec_auth_001 -v 2
 python manage.py test supplyforge.tests.test_sec_auth_002 -v 2
+python manage.py test supplyforge.tests.test_sec_auth_003_004 -v 2
 python manage.py test supplyforge.tests.test_phase3_security_pyramid -v 2
+# Add regression tests for invalid JWT -> 401, no default tenant, and
+# registration response not containing verification_code.
 
 # Phase 2: Database & Performance
 python manage.py showmigrations
@@ -1093,10 +1148,14 @@ python manage.py test supplyforge.tests -v 2 --parallel
 | Check | How | Expected |
 |:------|:----|:---------|
 | CORS blocked | `curl -H "Origin: https://evil.com" http://localhost:8080/api/v1/ping` | Missing CORS headers |
-| Rate limiting | Send 101 requests in 60s to any API | HTTP 429 after 100th |
+| Production config fails closed | Start with `APP_ENV=production` and omit one required secret/origin | Startup/check fails; no insecure fallback |
+| Invalid JWT | Call a protected endpoint with a malformed/expired bearer token | HTTP 401; no workspace/tenant is attached |
+| Verification token privacy | Register a user and inspect the JSON response | No `verification_code` field |
 | No debug info | Trigger 500 error | No traceback in response |
 | Gunicorn | `docker exec backend ps aux` | gunicorn processes visible |
 | Non-root container | `docker exec backend whoami` | `django` (not root) |
+| Migration safety | Scale web service to 2+ replicas during deploy | Migration runs once as release job; web containers only start Gunicorn |
+| Database exposure | `docker compose -f docker-compose.prod.yml config` | No host ports for MySQL/Redis; no password literal/default |
 | DB indexes | `SHOW INDEX FROM products;` | Expected indexes present |
 | Response compression | `curl -H "Accept-Encoding: gzip" ... \| wc -c` | Compressed response smaller |
 
