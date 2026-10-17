@@ -1,9 +1,9 @@
-<div class="space-y-6 max-w-7xl mx-auto pb-16 font-sans">
+<div sfPageMotion class="operations-page space-y-6 max-w-7xl mx-auto pb-16 font-sans">
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 1. TIÊU ĐỀ TRANG                                                   -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  <div data-motion="header" class="operations-hero bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div class="space-y-1">
       <h1 class="font-bold text-2xl sm:text-3xl text-slate-900 tracking-tight">
         Đánh Giá Vốn Tồn Đọng Trong Kho
@@ -30,7 +30,7 @@
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 2. TỔNG QUAN CHỈ SỐ VỐN TỒN (KPI METRICS GRID)                     -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  <div data-motion="priority" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
     <!-- KPI 1: Tổng vốn tồn đọng -->
     <div class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2">
@@ -78,7 +78,7 @@
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
     <!-- Khối 1: Phân rã vốn theo mức rủi ro -->
-    <div class="bg-white border border-slate-200 p-6 rounded-2xl space-y-4">
+    <div data-motion="panel" class="bg-white border border-slate-200 p-6 rounded-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div>
           <h3 class="font-bold text-base text-slate-900">Phân bố vốn theo mức rủi ro</h3>
@@ -108,7 +108,7 @@
     </div>
 
     <!-- Khối 2: Phân rã vốn theo thời gian nằm kho -->
-    <div class="bg-white border border-slate-200 p-6 rounded-2xl space-y-4">
+    <div data-motion="panel" class="bg-white border border-slate-200 p-6 rounded-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div>
           <h3 class="font-bold text-base text-slate-900">Phân bố vốn theo thời gian nằm kho</h3>
@@ -139,7 +139,7 @@
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 4. BẢNG CHI TIẾT VỐN TỒN THEO TỪNG SẢN PHẨM                          -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="bg-white border border-slate-200 p-6 rounded-2xl space-y-5">
+  <div data-motion="table" class="bg-white border border-slate-200 p-6 rounded-2xl space-y-5">
 
     <!-- Thanh lọc & Công cụ nâng cao (SEARCH-001, FILTER-001, SORT-001, EXPORT-001) -->
     <div class="space-y-4 border-b border-slate-100 pb-4">

@@ -1,7 +1,7 @@
 /* SupplyForge AI — Job Queue Executive Design System */
 
 .job-queue-page {
-  padding: 2rem;
+  padding: 2rem 0;
   max-width: 1200px;
   margin: 0 auto;
   font-family: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
@@ -13,8 +13,13 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 2rem;
+  background: linear-gradient(135deg, #ffffff, #f7fbff);
+  border: 1px solid #dce4ee;
+  border-radius: 1rem;
+  box-shadow: 0 16px 32px -30px rgba(15, 35, 63, 0.65);
+  margin-bottom: 1.5rem;
   gap: 1rem;
+  padding: 1.5rem;
 }
 
 .page-title {
@@ -35,7 +40,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #0f172a;
+  background: #1d5fd1;
   color: #ffffff;
   font-weight: 600;
   font-size: 0.9rem;
@@ -47,7 +52,7 @@
 }
 
 .btn-primary-action:hover {
-  background: #1e293b;
+  background: #164b9d;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
   transform: translateY(-1px);
 }
@@ -189,8 +194,8 @@
 }
 
 .active-job-border {
-  border-left: 4px solid #2563eb;
-  background: #fafafa;
+  border-left: 4px solid #1d5fd1;
+  background: linear-gradient(90deg, #f8fbff, #ffffff 64%);
 }
 
 .job-item-header {
@@ -290,7 +295,7 @@
   height: 100%;
   background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%);
   border-radius: 9999px;
-  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  width: 0;
 }
 
 /* 6 Pipeline Stage Stepper Pills */

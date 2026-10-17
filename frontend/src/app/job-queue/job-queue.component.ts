@@ -1,24 +1,28 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { AfterViewChecked, Component, ElementRef, OnDestroy, OnInit, QueryList, ViewChildren } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { JobQueueService, BackgroundJobDto } from '../services/job-queue.service';
 import { Subscription, interval } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
+import { PageMotionDirective } from '../core/motion/page-motion.directive';
+import { PageMotionService } from '../core/motion/page-motion.service';
 
 @Component({
   selector: 'app-job-queue',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, PageMotionDirective],
   templateUrl: './job-queue.component.html',
   styleUrls: ['./job-queue.component.css']
 })
-export class JobQueueComponent implements OnInit, OnDestroy {
+export class JobQueueComponent implements OnInit, OnDestroy, AfterViewChecked {
+  @ViewChildren('progressFill') progressFills!: QueryList<ElementRef<HTMLElement>>;
   jobs: BackgroundJobDto[] = [];
   activeJobs: BackgroundJobDto[] = [];
   completedJobs: BackgroundJobDto[] = [];
   isLoading = false;
   errorMessage: string | null = null;
   private pollSub?: Subscription;
+  private readonly progressValues = new WeakMap<HTMLElement, number>();
 
   stageLabels: { [key: string]: string } = {
     'PARSING': 'Đọc & kiểm tra file',
@@ -29,7 +33,10 @@ export class JobQueueComponent implements OnInit, OnDestroy {
     'FINALIZING': 'Hoàn tất & Cập nhật báo cáo'
   };
 
-  constructor(private jobQueueService: JobQueueService) {}
+  constructor(
+    private jobQueueService: JobQueueService,
+    private motion: PageMotionService,
+  ) {}
 
   ngOnInit(): void {
     this.loadJobs();
@@ -40,6 +47,16 @@ export class JobQueueComponent implements OnInit, OnDestroy {
     if (this.pollSub) {
       this.pollSub.unsubscribe();
     }
+  }
+
+  ngAfterViewChecked(): void {
+    this.progressFills?.forEach(({ nativeElement }) => {
+      const nextValue = Number(nativeElement.dataset['progress'] || 0);
+      if (this.progressValues.get(nativeElement) !== nextValue) {
+        this.progressValues.set(nativeElement, nextValue);
+        this.motion.animateProgress(nativeElement, nextValue);
+      }
+    });
   }
 
   loadJobs(): void {
@@ -118,4 +135,3 @@ export class JobQueueComponent implements OnInit, OnDestroy {
     return this.stageLabels[stage] || stage || 'Đang xử lý';
   }
 }
-

@@ -5,6 +5,7 @@ import { ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { ApiService } from '../api.service';
 import { DashboardStateService } from '../core/state/dashboard-state.service';
+import { PageMotionDirective } from '../core/motion/page-motion.directive';
 
 export interface DecisionItem {
   decision_id: string;
@@ -46,7 +47,7 @@ export interface DecisionItem {
 @Component({
   selector: 'app-decision-support-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PageMotionDirective],
   templateUrl: './decision-support-dashboard.component.html',
   styleUrls: ['./decision-support-dashboard.component.css']
 })

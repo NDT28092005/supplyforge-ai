@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../api.service';
 import { DashboardStateService } from '../core/state/dashboard-state.service';
+import { PageMotionDirective } from '../core/motion/page-motion.directive';
 
 export interface ShapFactorItem {
   label: string;
@@ -48,7 +49,7 @@ export interface SkuRiskItem {
 @Component({
   selector: 'app-slow-moving-risk-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PageMotionDirective],
   templateUrl: './slow-moving-risk-dashboard.component.html',
   styleUrls: ['./slow-moving-risk-dashboard.component.css']
 })

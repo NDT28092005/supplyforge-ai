@@ -1,9 +1,9 @@
-<div class="space-y-6 max-w-7xl mx-auto pb-16 font-sans">
+<div sfPageMotion class="operations-page space-y-6 max-w-7xl mx-auto pb-16 font-sans">
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 1. TIÊU ĐỀ TRANG                                                   -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div
+  <div data-motion="header" class="operations-hero"
     class="bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div class="space-y-1">
       <h1 class="font-bold text-2xl sm:text-3xl text-slate-900 tracking-tight">
@@ -43,7 +43,7 @@
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 2. TỔNG QUAN CHỈ SỐ VỐN & THU HỒI (KPI METRICS)                    -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  <div data-motion="priority" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
     <!-- Card 1: Số sản phẩm cần xử lý -->
     <div class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2">
@@ -86,7 +86,7 @@
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 3. TIẾN TRÌNH THU HỒI VỐN TỔNG THỂ                                  -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="bg-white border border-slate-200 p-6 rounded-2xl space-y-4" *ngIf="totalCapitalExposure > 0">
+  <div data-motion="panel" class="bg-white border border-slate-200 p-6 rounded-2xl space-y-4" *ngIf="totalCapitalExposure > 0">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
       <div>
         <h3 class="font-bold text-base text-slate-900">Tiến trình thu hồi tiền mặt từ kho</h3>
@@ -121,7 +121,7 @@
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 4. BẢNG DANH SÁCH KHUYẾN NGHỊ                                       -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="bg-white border border-slate-200 p-6 rounded-2xl space-y-5">
+  <div data-motion="table" class="bg-white border border-slate-200 p-6 rounded-2xl space-y-5">
 
     <!-- Bộ lọc & Công cụ tìm kiếm nâng cao (SEARCH-001, FILTER-001, SORT-001, EXPORT-001) -->
     <div class="space-y-4 border-b border-slate-100 pb-4">
@@ -273,7 +273,7 @@
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 4.5. QUẢN LÝ KẾ HOẠCH & QUY TRÌNH DUYỆT THỰC THI (ACT-003 & ACT-004) -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="bg-white border border-slate-200 p-6 rounded-2xl space-y-5">
+  <div data-motion="panel" class="bg-white border border-slate-200 p-6 rounded-2xl space-y-5">
 
     <!-- Header section -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">

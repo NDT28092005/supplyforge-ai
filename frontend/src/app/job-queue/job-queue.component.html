@@ -1,6 +1,6 @@
-<div class="job-queue-page fade-in">
+<div sfPageMotion class="job-queue-page operations-page">
   <!-- Page Header -->
-  <div class="page-header">
+  <div data-motion="header" class="page-header">
     <div class="header-titles">
       <h1 class="page-title">Hàng Chờ Xử Lý Ngầm</h1>
       <p class="page-subtitle">Theo dõi tiến trình nạp dữ liệu và đánh giá rủi ro tồn kho tự động</p>
@@ -13,7 +13,7 @@
   </div>
 
   <!-- Summary Statistics KPI Bar -->
-  <div class="kpi-grid">
+  <div data-motion="priority" class="kpi-grid">
     <div class="kpi-card accent-card">
       <div class="kpi-header">
         <span class="kpi-label">Đang xử lý ngầm</span>
@@ -54,7 +54,7 @@
   </div>
 
   <!-- Section 1: Active Jobs -->
-  <div class="content-section">
+  <div data-motion="panel" class="content-section">
     <div class="section-header">
       <h2 class="section-heading">
         Tiến trình đang xử lý ({{ activeJobs.length }})
@@ -95,7 +95,7 @@
           <span class="percentage-label">{{ job.progressPct }}%</span>
         </div>
         <div class="progress-track">
-          <div class="progress-fill" [style.width.%]="job.progressPct"></div>
+        <div #progressFill class="progress-fill" [attr.data-progress]="job.progressPct" [attr.aria-valuenow]="job.progressPct"></div>
         </div>
       </div>
 
@@ -144,7 +144,7 @@
   </div>
 
   <!-- Section 2: Completed & History -->
-  <div class="content-section mt-8">
+  <div data-motion="panel" class="content-section mt-8">
     <div class="section-header">
       <h2 class="section-heading">
         Lịch sử xử lý ngầm ({{ completedJobs.length }})

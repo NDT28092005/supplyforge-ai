@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiService } from '../api.service';
 import { IngestionStateService } from '../core/state/ingestion-state.service';
+import { PageMotionDirective } from '../core/motion/page-motion.directive';
 
 export interface ProfileResponse {
   sessionId: string;
@@ -48,7 +49,7 @@ export interface ProfileResponse {
 @Component({
   selector: 'app-csv-upload',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PageMotionDirective],
   templateUrl: './csv-upload.component.html',
   styleUrls: ['./csv-upload.component.css']
 })

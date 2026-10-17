@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiService } from '../api.service';
+import { PageMotionDirective } from '../core/motion/page-motion.directive';
 
 export interface CapitalSkuItem {
   sku: string;
@@ -36,7 +37,7 @@ export interface CapitalSkuItem {
 @Component({
   selector: 'app-capital-exposure-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PageMotionDirective],
   templateUrl: './capital-exposure-dashboard.component.html',
   styleUrls: ['./capital-exposure-dashboard.component.css']
 })

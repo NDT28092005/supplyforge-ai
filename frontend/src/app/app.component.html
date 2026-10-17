@@ -4,7 +4,7 @@
 </app-header>
 
 <!-- Main Container (hidden on auth page) -->
-<div class="min-h-[calc(100vh-61px)] flex bg-background text-primary">
+<div class="app-shell min-h-[calc(100vh-61px)] flex text-primary">
 
   <!-- Fixed Left Sidebar (Active in App Dashboards) -->
   <app-sidebar *ngIf="showSidebar" (importIncremental)="startIncrementalImport()"
@@ -12,8 +12,8 @@
   </app-sidebar>
 
   <!-- Main Content Stage -->
-  <main class="flex-1 transition-all" [ngClass]="{'pl-64': showSidebar}">
-    <div class="max-w-[1440px] mx-auto w-full">
+  <main class="app-main flex-1 transition-all" [ngClass]="{'pl-64': showSidebar}">
+    <div class="app-stage max-w-[1440px] mx-auto w-full">
 
       <!-- Ingestion Pipeline Stepper Bar (Active during Data Ingestion & Profiling) -->
       <div *ngIf="isImportRoute" class="max-w-4xl mx-auto px-4 pt-6 pb-2 animate-fade-in">

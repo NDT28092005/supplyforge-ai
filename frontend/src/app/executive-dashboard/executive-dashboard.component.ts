@@ -17,6 +17,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiService } from '../api.service';
 import { DashboardStateService } from '../core/state/dashboard-state.service';
+import { PageMotionDirective } from '../core/motion/page-motion.directive';
 
 declare var echarts: any;
 
@@ -30,7 +31,7 @@ export interface TopPrioritySku {
 @Component({
   selector: 'app-executive-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PageMotionDirective],
   templateUrl: './executive-dashboard.component.html',
   styleUrls: ['./executive-dashboard.component.css']
 })

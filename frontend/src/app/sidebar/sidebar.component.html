@@ -1,11 +1,12 @@
 <aside
-  class="w-64 bg-surface border-r border-border-base fixed inset-y-0 left-0 z-30 flex flex-col justify-between p-6 pt-24 transition-all">
+  class="operations-sidebar w-64 bg-surface border-r border-border-base fixed inset-y-0 left-0 z-30 flex flex-col justify-between p-6 pt-24 transition-all">
   <div>
     <!-- Navigation Links — 4 Tabs: "Tổng quan", "Rủi ro", "Đánh giá vốn", "Khuyến nghị xả hàng" -->
-    <nav class="space-y-1.5">
+    <p class="sidebar-kicker">Không gian vận hành</p>
+    <nav class="sidebar-nav space-y-1.5">
       <!-- Tab 1: Tổng quan -->
       <a routerLink="/app/dashboard" routerLinkActive="bg-indigo-50 text-indigo-700 border-indigo-200 font-bold active-link"
-        class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
+        class="sidebar-link w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
         <svg class="w-4 h-4 transition-transform group-hover:scale-105 text-slate-500" viewBox="0 0 24 24"
           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="7" height="7" rx="1"></rect>
@@ -18,7 +19,7 @@
 
       <!-- Tab 2: Rủi ro -->
       <a routerLink="/app/risk" routerLinkActive="bg-indigo-50 text-indigo-700 border-indigo-200 font-bold active-link"
-        class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
+        class="sidebar-link w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
         <svg class="w-4 h-4 transition-transform group-hover:scale-105 text-slate-500"
           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
           stroke-linejoin="round">
@@ -31,7 +32,7 @@
 
       <!-- Tab 3: Đánh giá vốn -->
       <a routerLink="/app/capital" routerLinkActive="bg-indigo-50 text-indigo-700 border-indigo-200 font-bold active-link"
-        class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
+        class="sidebar-link w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
         <svg class="w-4 h-4 transition-transform group-hover:scale-105 text-slate-500" viewBox="0 0 24 24"
           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="1" x2="12" y2="23"></line>
@@ -42,7 +43,7 @@
 
       <!-- Tab 4: Khuyến nghị xả hàng -->
       <a routerLink="/app/decisions" routerLinkActive="bg-indigo-50 text-indigo-700 border-indigo-200 font-bold active-link"
-        class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
+        class="sidebar-link w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
         <svg class="w-4 h-4 transition-transform group-hover:scale-105 text-slate-500" viewBox="0 0 24 24"
           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
@@ -53,7 +54,7 @@
 
       <!-- Tab 5: Hàng chờ xử lý -->
       <a routerLink="/app/queue" routerLinkActive="bg-indigo-50 text-indigo-700 border-indigo-200 font-bold active-link"
-        class="w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
+        class="sidebar-link w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
         <svg class="w-4 h-4 transition-transform group-hover:scale-105 text-slate-500" viewBox="0 0 24 24"
           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="8" y1="6" x2="21" y2="6"></line>

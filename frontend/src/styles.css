@@ -2,16 +2,18 @@
 @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-  /* Slate Industrial Palette */
-  --background: #F8FAFC;
+  /* Operational palette: a quiet control-room surface around live inventory data. */
+  --background: #F4F7FB;
   --surface: #FFFFFF;
   --surface-hover: #F1F5F9;
-  --primary: #0F172A;
+  --primary: #102033;
   --secondary: #475569;
-  --accent: #2563EB;
-  --accent-hover: #1D4ED8;
-  --border-base: #E2E8F0;
+  --accent: #1D5FD1;
+  --accent-hover: #164B9D;
+  --border-base: #DCE4EE;
   --border-subtle: #F1F5F9;
+  --signal-cyan: #12A9C4;
+  --signal-ink: #0A1628;
   
   /* Risk Severity Color System (Strict Requirement) */
   --risk-severe: #EF4444;
@@ -41,11 +43,87 @@
 
 body {
   font-family: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
-  background-color: var(--background);
+  background:
+    radial-gradient(circle at 88% -12%, rgba(29, 95, 209, 0.09), transparent 29rem),
+    linear-gradient(180deg, #f9fbfd 0%, var(--background) 60%, #edf3f8 100%);
   color: var(--primary);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+button, a, select, input {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible {
+  outline: 3px solid rgba(29, 95, 209, 0.24);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Shared visual language for the inventory operations workspace. */
+.operations-page {
+  isolation: isolate;
+}
+
+.operations-page .operations-hero {
+  position: relative;
+  overflow: hidden;
+  border-color: #d8e2ee;
+  box-shadow: 0 16px 36px -32px rgba(15, 35, 63, 0.55);
+}
+
+.operations-page .operations-hero::after {
+  background: linear-gradient(90deg, #1d5fd1, #12a9c4 52%, transparent 74%);
+  content: '';
+  height: 3px;
+  left: 1.5rem;
+  position: absolute;
+  top: 0;
+  width: min(15rem, 42%);
+}
+
+.operations-page .operations-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.operations-page .bg-white.border {
+  border-color: #dce4ee;
+  box-shadow: 0 12px 28px -28px rgba(15, 35, 63, 0.6);
+}
+
+.operations-page .bg-white.border:hover {
+  border-color: #cbd8e7;
+}
+
+.operations-page .font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.operations-page table thead tr {
+  background: #f1f5f9 !important;
+}
+
+.operations-page table tbody tr {
+  transition: background-color 160ms ease;
+}
+
+.operations-page table tbody tr:hover {
+  background: #f5f9fd !important;
+}
+
+.upload-hero {
+  background: linear-gradient(135deg, #ffffff 0%, #f7fbff 100%);
 }
 
 /* Global High Contrast Text Selection */
@@ -221,4 +299,3 @@ h1, h2, h3, h4, h5, h6 {
 .animate-scale-up {
   animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
-

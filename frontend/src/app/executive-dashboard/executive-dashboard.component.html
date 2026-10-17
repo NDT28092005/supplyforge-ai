@@ -1,9 +1,9 @@
-<div class="space-y-6 animate-fade-in pb-16 max-w-7xl mx-auto font-sans">
+<div sfPageMotion class="operations-page space-y-6 pb-16 max-w-7xl mx-auto font-sans">
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 1. TIÊU ĐỀ TRANG TỔNG QUAN                                         -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+  <div data-motion="header" class="operations-hero bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-6">
     <div class="space-y-1">
       <h1 class="font-bold text-2xl sm:text-3xl text-slate-900 tracking-tight">
         Tổng Quan Cửa Hàng
@@ -57,7 +57,7 @@
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 2. LUỒNG PHÂN TÍCH TỪNG BƯỚC (DRILL DOWN STEPPER BANNER)           -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs space-y-3">
+  <div data-motion="panel" class="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs space-y-3">
     <div class="flex items-center justify-between border-b border-slate-100 pb-3">
       <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">
         Luồng phân tích từng bước
@@ -88,7 +88,7 @@
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 3. CÂU TRẢ LỜI TRỰC DIỆN: "CỬA HÀNG ĐANG THẾ NÀO?"                  -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="bg-white border border-slate-200 p-6 sm:p-7 rounded-2xl shadow-xs space-y-4">
+  <div data-motion="panel" class="bg-white border border-slate-200 p-6 sm:p-7 rounded-2xl shadow-xs space-y-4">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
       <div class="flex items-center gap-3">
         <h2 class="text-base font-bold text-slate-900 uppercase tracking-wider">
@@ -132,7 +132,7 @@
     </div>
 
     <!-- 5 KPI Cards Grid (Consistent Clean White Style) -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div data-motion="priority" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
 
       <!-- Chỉ số 1: Sản phẩm đang theo dõi -->
       <div (click)="onNavigateToStage('slow-moving-risk')" title="Xem danh sách sản phẩm theo dõi"
@@ -215,7 +215,7 @@
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 5. TỶ LỆ PHÂN BỔ KHO HÀNG & NỔI BẬT CẦN CHÚ Ý                        -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-visible">
+  <div data-motion="panel" class="grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-visible">
 
     <!-- CỘT TRÁI: TỶ LỆ PHÂN BỔ KHO HÀNG -->
     <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-xs space-y-4 overflow-visible">

@@ -1,9 +1,9 @@
-<div class="max-w-5xl mx-auto w-full px-4 py-6 space-y-6 animate-fade-in font-sans">
+<div sfPageMotion class="operations-page max-w-5xl mx-auto w-full px-4 py-6 space-y-6 font-sans">
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 1. HEADER HERO BANNER                                               -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <header class="bg-white border border-slate-200/90 rounded-3xl shadow-xs overflow-hidden relative group">
+  <header data-motion="header" class="upload-hero bg-white border border-slate-200/90 rounded-3xl shadow-xs overflow-hidden relative group">
     <!-- Top Gradient Accent Bar -->
     <div class="h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 via-pink-500 to-indigo-600"></div>
 
@@ -73,7 +73,7 @@
   <!-- 2. HIGH-END DROPZONE AREA (IDLE STATE)                             -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <div *ngIf="uploadStatus === 'idle'" class="space-y-4">
-    <div (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)" (drop)="onDrop($event)" [ngClass]="{
+    <div data-motion="priority" (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)" (drop)="onDrop($event)" [ngClass]="{
         'border-indigo-500 bg-indigo-50/50 scale-[1.005] shadow-lg': isDragging,
         'border-slate-300/90 bg-white hover:border-indigo-400 hover:bg-slate-50/60 shadow-xs': !isDragging
       }"
