@@ -118,6 +118,11 @@ def ingestion_upload(request):
         )
 
     session_type = request.data.get('sessionType', 'INITIAL')
+    if session_type not in {'INITIAL', 'INCREMENTAL'}:
+        return Response(
+            {'error': 'sessionType không hợp lệ.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     import hashlib
 
@@ -377,17 +382,39 @@ def process_file(request):
     session_id = request.data.get('sessionId') or request.GET.get('sessionId')
     user_id = request.user_id
     storage_context = None
+    session = None
+    session_type = request.data.get('sessionType') or request.GET.get('sessionType', 'INITIAL')
+    force_reset = str(request.data.get('forceReset') or request.GET.get('forceReset', 'false')).lower() == 'true'
 
-    if not file_obj and session_id:
+    if session_type not in {'INITIAL', 'INCREMENTAL'}:
+        return Response({
+            'error': 'sessionType không hợp lệ.',
+            'code': 'INVALID_SESSION_TYPE',
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    if session_id:
         try:
             session = IngestionSession.objects.get(
                 id=session_id,
                 workspace_id=workspace.id,
             )
+        except IngestionSession.DoesNotExist:
+            return Response({
+                'error': 'Không tìm thấy phiên ingestion trong workspace hiện tại.',
+                'code': 'SESSION_NOT_FOUND',
+            }, status=status.HTTP_404_NOT_FOUND)
+        if session.session_type != session_type:
+            return Response({
+                'error': 'Chế độ import không khớp với phiên ingestion.',
+                'code': 'SESSION_TYPE_MISMATCH',
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    if not file_obj and session:
+        try:
             if session.storage_path:
                 storage_context = StorageBackend.localize(session.storage_path)
                 file_obj = open(storage_context.__enter__(), 'rb')
-        except (IngestionSession.DoesNotExist, OSError):
+        except OSError:
             if storage_context:
                 storage_context.__exit__(None, None, None)
                 storage_context = None
@@ -406,12 +433,15 @@ def process_file(request):
         elif isinstance(mapping_rule_raw, dict):
             mapping_rule = mapping_rule_raw
 
-    session_type = request.data.get('sessionType') or request.GET.get('sessionType', 'INITIAL')
-    force_reset = str(request.data.get('forceReset') or request.GET.get('forceReset', 'false')).lower() == 'true'
-
     try:
         res = DynamicFileImportService.process_batch_import(
-            file_obj, mapping_rule, user_id, session_type=session_type, force_reset=force_reset
+            file_obj,
+            mapping_rule,
+            user_id,
+            session_type=session_type,
+            force_reset=force_reset,
+            session_id=session_id,
+            workspace_id=workspace.id,
         )
     except ValueError as ve:
         logger.info("Import validation rejected for user %s: %s", user_id, ve)
@@ -464,9 +494,12 @@ def clear_data(request):
         workspace_id = workspace.id
         user_id = request.user_id
 
-        from supplyforge.services.tenant_data_deletion import TenantDataDeletionService
-        res = TenantDataDeletionService.purge_tenant_data(workspace_id=workspace_id, user_id=user_id)
-        return Response(res, status=status.HTTP_200_OK)
+        archive = DynamicFileImportService.clear_data(user_id, workspace_id=workspace_id)
+        return Response({
+            'status': 'SUCCESS',
+            'message': 'Đã thay bộ dữ liệu đang hiển thị. Bản snapshot lịch sử được lưu cho huấn luyện mô hình.',
+            'training_archive_id': str(archive.id) if archive else None,
+        }, status=status.HTTP_200_OK)
     except Exception:
         logger.exception("[clear_data ERROR]")
         return Response({

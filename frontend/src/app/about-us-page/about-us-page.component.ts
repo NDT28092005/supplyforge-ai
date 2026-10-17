@@ -2,11 +2,12 @@ import { Component, OnInit, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { ApiService } from '../api.service';
+import { PageMotionDirective } from '../core/motion/page-motion.directive';
 
 @Component({
   selector: 'app-about-us-page',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, PageMotionDirective],
   templateUrl: './about-us-page.component.html',
   styleUrls: ['./about-us-page.component.css']
 })

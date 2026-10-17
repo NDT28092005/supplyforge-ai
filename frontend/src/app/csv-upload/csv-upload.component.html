@@ -34,7 +34,7 @@
       <div
         class="bg-slate-100/80 p-1.5 rounded-2xl shrink-0 border border-slate-200/70 space-y-1 sm:space-y-0 flex flex-col sm:flex-row gap-1">
         <!-- Option 1: Initial Import -->
-        <button type="button" (click)="sessionType = 'INITIAL'; resetUpload()"
+        <button type="button" (click)="setSessionType('INITIAL')"
           [class.bg-white]="sessionType === 'INITIAL'" [class.text-indigo-700]="sessionType === 'INITIAL'"
           [class.shadow-sm]="sessionType === 'INITIAL'" [class.border-indigo-200]="sessionType === 'INITIAL'"
           [class.text-slate-600]="sessionType !== 'INITIAL'"
@@ -50,7 +50,7 @@
         </button>
 
         <!-- Option 2: Incremental Import -->
-        <button type="button" (click)="sessionType = 'INCREMENTAL'; resetUpload()"
+        <button type="button" (click)="setSessionType('INCREMENTAL')"
           [class.bg-white]="sessionType === 'INCREMENTAL'" [class.text-indigo-700]="sessionType === 'INCREMENTAL'"
           [class.shadow-sm]="sessionType === 'INCREMENTAL'" [class.border-indigo-200]="sessionType === 'INCREMENTAL'"
           [class.text-slate-600]="sessionType !== 'INCREMENTAL'"
@@ -581,6 +581,10 @@
 
       <!-- Action Footer -->
       <div class="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2 border-t border-slate-100">
+        <button type="button" (click)="returnToDashboard()"
+          class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-all cursor-pointer">
+          Quay lại dashboard
+        </button>
         <button type="button" (click)="showIdempotentModal = false; resetUpload()"
           class="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-200 hover:border-slate-300 text-slate-700 font-bold text-xs transition-all cursor-pointer">
           Chọn tệp khác

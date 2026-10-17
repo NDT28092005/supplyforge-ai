@@ -104,6 +104,7 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
 
   ngOnInit(): void {
     this.applyInitialInputs();
+    this.sessionType = this.ingestionState.state.sessionType;
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -169,6 +170,7 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
     }
 
     this.selectedFile = file;
+    this.ingestionState.setSessionType(this.sessionType);
     this.ingestionState.setFile(file);
     this.errorMessage = '';
     this.ingestionState.setErrorMessage('');
@@ -223,7 +225,7 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
   enqueueBackgroundJob(): void {
     if (!this.selectedFile) return;
     this.uploadStatus = 'uploading';
-    this.apiService.enqueueUploadJob(this.selectedFile).subscribe({
+    this.apiService.enqueueUploadJob(this.selectedFile, 1, this.sessionType).subscribe({
       next: (res: any) => {
         this.router.navigate(['/app/queue']);
       },
@@ -254,6 +256,17 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
     this.uploadProgress = 0;
     this.showIdempotentModal = false;
     this.ingestionState.reset();
+    this.ingestionState.setSessionType(this.sessionType);
+  }
+
+  setSessionType(sessionType: 'INITIAL' | 'INCREMENTAL'): void {
+    this.sessionType = sessionType;
+    this.resetUpload();
+  }
+
+  returnToDashboard(): void {
+    this.resetUpload();
+    this.router.navigate(['/app/dashboard']);
   }
 
   proceedMapping(): void {

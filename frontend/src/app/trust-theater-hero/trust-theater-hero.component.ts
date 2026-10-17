@@ -3,11 +3,12 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { ApiService } from '../api.service';
 import { IngestionStateService } from '../core/state/ingestion-state.service';
+import { PageMotionDirective } from '../core/motion/page-motion.directive';
 
 @Component({
   selector: 'app-trust-theater-hero',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, PageMotionDirective],
   templateUrl: './trust-theater-hero.component.html',
   styleUrls: ['./trust-theater-hero.component.css']
 })
@@ -19,6 +20,7 @@ export class TrustTheaterHeroComponent {
 
   localFile: File | null = null;
   showUploadBox = false;
+  showDuplicateFileModal = false;
   isUploading = false;
 
   constructor(
@@ -47,20 +49,37 @@ export class TrustTheaterHeroComponent {
     this.localFile = null;
   }
 
+  returnToDashboardFromDuplicate(): void {
+    this.showDuplicateFileModal = false;
+    this.localFile = null;
+    this.ingestionState.reset();
+    this.ingestionState.setSessionType('INITIAL');
+    this.router.navigate(['/app/dashboard']);
+  }
+
+  chooseAnotherFile(): void {
+    this.showDuplicateFileModal = false;
+    this.localFile = null;
+  }
+
   onUpload(): void {
     if (!this.localFile) return;
 
     this.upload.emit({ file: this.localFile });
     this.isUploading = true;
+    this.ingestionState.setSessionType('INITIAL');
     this.ingestionState.setFile(this.localFile);
     this.ingestionState.setErrorMessage('');
-
-    // Navigate to processing screen immediately so user sees step progress
-    this.router.navigate(['/app/import/processing']);
 
     this.apiService.uploadCsvV2(this.localFile, 1, 'INITIAL').subscribe({
       next: (res: any) => {
         this.isUploading = false;
+
+        if (res?.idempotent_retry) {
+          this.showDuplicateFileModal = true;
+          return;
+        }
+
         if (res?.sessionId) {
           this.ingestionState.setSessionId(res.sessionId);
         }
@@ -84,6 +103,7 @@ export class TrustTheaterHeroComponent {
             }
           };
           this.ingestionState.setMappingData(mappingData);
+          this.router.navigate(['/app/import/processing']);
         } else {
           this.ingestionState.setErrorMessage('Không nhận diện được cấu trúc tệp CSV.');
           this.router.navigate(['/app/import']);

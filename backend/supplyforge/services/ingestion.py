@@ -5,11 +5,11 @@ import uuid
 import logging
 import requests
 from decimal import Decimal
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Min, Max
-from supplyforge.models import Product, Order, OrderItem, ArchivedDataSet
+from supplyforge.models import ArchivedDataSet, IngestionSession, Order, OrderItem, Product
 from supplyforge.metrics import record_ingestion
 from supplyforge.services.storage_backend import StorageBackend
 
@@ -155,7 +155,15 @@ class DynamicFileImportService:
 
     @staticmethod
     @transaction.atomic
-    def process_batch_import(file_obj, mapping_rule, user_id, session_type='INITIAL', force_reset=False, session_id=None):
+    def process_batch_import(
+        file_obj,
+        mapping_rule,
+        user_id,
+        session_type='INITIAL',
+        force_reset=False,
+        session_id=None,
+        workspace_id=None,
+    ):
         """Execute IR-003, IR-004, IR-007 & IR-008 Import pipeline with Prometheus Telemetry instrumentation."""
         import time
         start_time = time.monotonic()
@@ -166,7 +174,8 @@ class DynamicFileImportService:
                 user_id=user_id,
                 session_type=session_type,
                 force_reset=force_reset,
-                session_id=session_id
+                session_id=session_id,
+                workspace_id=workspace_id,
             )
             duration = time.monotonic() - start_time
             record_ingestion(
@@ -188,7 +197,15 @@ class DynamicFileImportService:
             raise exc
 
     @staticmethod
-    def _process_batch_import_impl(file_obj, mapping_rule, user_id, session_type='INITIAL', force_reset=False, session_id=None):
+    def _process_batch_import_impl(
+        file_obj,
+        mapping_rule,
+        user_id,
+        session_type='INITIAL',
+        force_reset=False,
+        session_id=None,
+        workspace_id=None,
+    ):
         """Execute IR-003, IR-004, IR-007 & IR-008 Import pipeline:
         Upload → Validate → Schema Mapping → Data Cleaning → Deduplication / Data Correction Upsert → Persist → DATA_READY
         """
@@ -197,19 +214,27 @@ class DynamicFileImportService:
         if val_res.status == ValidationStatus.REJECT:
             raise ValueError(f"CSV Validation Rejected: {'; '.join(val_res.errors)}")
 
-        # Detect existing dataset for IR-004, IR-005, IR-006, IR-007 & IR-008 Incremental Ingestion
+        if session_type not in {'INITIAL', 'INCREMENTAL'}:
+            raise ValueError('session_type must be INITIAL or INCREMENTAL.')
+
+        if force_reset and session_type != 'INITIAL':
+            raise ValueError('Chỉ Import mới mới được thay thế bộ dữ liệu hiện tại.')
+
+        # INITIAL replaces the operational dataset. INCREMENTAL is the only mode
+        # permitted to merge with it, so user intent is never inferred from DB state.
         existing_orders = Order.objects.filter(user_id=user_id)
         existing_products = Product.objects.filter(user_id=user_id)
         existing_orders_count = existing_orders.count()
-
-        is_incremental = (session_type == 'INCREMENTAL' or existing_orders_count > 0) and not force_reset
+        existing_products_count = existing_products.count()
+        should_replace_dataset = session_type == 'INITIAL'
+        is_incremental = session_type == 'INCREMENTAL'
         
         e_start = None
         e_end = None
         existing_order_ids = set()
         existing_items_map = {}
         existing_orders_map = {}
-        before_sku_count = Product.objects.filter(user_id=user_id).count()
+        before_sku_count = existing_products_count if is_incremental else 0
 
         if is_incremental:
             e_start = existing_orders.aggregate(Min('created_at'))['created_at__min']
@@ -218,10 +243,6 @@ class DynamicFileImportService:
             existing_orders_map = {o.order_id: o for o in existing_orders}
             for item in OrderItem.objects.filter(order__user_id=user_id).select_related('order'):
                 existing_items_map[(item.order.order_id, item.sku)] = item
-        elif force_reset:
-            # Clear & Archive previous data when merchant explicitly requested complete reset
-            DynamicFileImportService.clear_data(user_id)
-
         if hasattr(file_obj, 'seek'):
             file_obj.seek(0)
             
@@ -598,6 +619,19 @@ class DynamicFileImportService:
                 'buyer': buyer_val
             })
 
+        # A replacement must never erase a usable operational dataset for an
+        # invalid or header-only file. Archive and reset only after strict row
+        # validation has produced at least one canonical order item.
+        if should_replace_dataset:
+            if not order_rows:
+                raise ValueError('Không có dòng dữ liệu hợp lệ để thay thế bộ dữ liệu hiện tại.')
+            if existing_orders_count or existing_products_count:
+                DynamicFileImportService.clear_data(
+                    user_id,
+                    workspace_id=workspace_id,
+                    current_session_id=session_id,
+                )
+
         # IR-006: Partial Temporal Overlap Detection
         inc_start = min(incoming_dates) if incoming_dates else None
         inc_end = max(incoming_dates) if incoming_dates else None
@@ -909,33 +943,66 @@ class DynamicFileImportService:
 
     @staticmethod
     @transaction.atomic
-    def clear_data(user_id):
-        """Soft-delete / Archival Backup mechanism for merchant data reset.
-        Preserves active products and orders in ArchivedDataSet snapshot for future AI model training.
+    def clear_data(user_id, workspace_id=None, current_session_id=None):
+        """Archive a tenant's active operational dataset, then reset only that view.
+
+        Training history is append-only in ``ArchivedDataSet``. The destructive
+        tenant-erasure service is intentionally not used here because an import
+        replacement must never remove prior training snapshots or other tenants.
         """
-        active_products = list(Product.objects.filter(user_id=user_id).values())
-        active_orders = list(Order.objects.filter(user_id=user_id).values())
+        user_key = str(user_id)
+        active_products = list(Product.objects.filter(user_id=user_key).values())
+        active_orders = list(Order.objects.filter(user_id=user_key).values())
+        active_order_items = list(
+            OrderItem.objects.filter(order__user_id=user_key).values()
+        )
 
-        from supplyforge.services.tenant_data_deletion import TenantDataDeletionService
-        TenantDataDeletionService.purge_tenant_data(workspace_id=1, user_id=user_id)
+        def json_safe(record):
+            return {
+                key: value.isoformat() if isinstance(value, (date, datetime))
+                else str(value) if isinstance(value, Decimal)
+                else value
+                for key, value in record.items()
+            }
 
-        if active_products or active_orders:
-            ArchivedDataSet.objects.create(
-                user_id=user_id,
-                reason='MERCHANT_CLEAR_DATA',
+        archive = None
+        if active_products or active_orders or active_order_items:
+            archive = ArchivedDataSet.objects.create(
+                user_id=user_key,
+                reason='INITIAL_IMPORT_REPLACED',
                 product_count=len(active_products),
                 order_count=len(active_orders),
                 snapshot_json={
-                    "products": [
-                        {k: str(v) if isinstance(v, (datetime, Decimal)) else v for k, v in p.items()}
-                        for p in active_products
-                    ],
-                    "orders": [
-                        {k: str(v) if isinstance(v, (datetime, Decimal)) else v for k, v in o.items()}
-                        for o in active_orders
-                    ]
-                }
+                    'workspace_id': workspace_id,
+                    'replaced_by_session_id': str(current_session_id) if current_session_id else None,
+                    'products': [json_safe(record) for record in active_products],
+                    'orders': [json_safe(record) for record in active_orders],
+                    'order_items': [json_safe(record) for record in active_order_items],
+                },
             )
+
+        # Operational facts are scoped by the authenticated user, never globally.
+        OrderItem.objects.filter(order__user_id=user_key).delete()
+        Order.objects.filter(user_id=user_key).delete()
+        Product.objects.filter(user_id=user_key).delete()
+
+        # Derived records are invalid after a replacement. Keep the raw ingestion
+        # sessions and feature/archive history for reproducibility and training.
+        if workspace_id:
+            from supplyforge.models import (
+                RiskExplanationRecord,
+                RiskMonitoringRun,
+                SlowMovingRiskAssessment,
+            )
+
+            previous_sessions = IngestionSession.objects.filter(workspace_id=workspace_id)
+            if current_session_id:
+                previous_sessions = previous_sessions.exclude(id=current_session_id)
+            SlowMovingRiskAssessment.objects.filter(session__in=previous_sessions).delete()
+            RiskExplanationRecord.objects.filter(session__in=previous_sessions).delete()
+            RiskMonitoringRun.objects.filter(session__in=previous_sessions).delete()
+
+        return archive
 
     @staticmethod
     def read_csv_in_chunks(file_path_or_stream, chunk_size=50000):
@@ -970,7 +1037,7 @@ class DynamicFileImportService:
                 f.close()
 
     @staticmethod
-    def process_file_in_chunks(file_path, mapping_rule, user_id, session_type='INITIAL', force_reset=False, session_id=None, chunk_size=50000):
+    def process_file_in_chunks(file_path, mapping_rule, user_id, session_type='INITIAL', force_reset=False, session_id=None, workspace_id=None, chunk_size=50000):
         """
         Requirement #24 & NFR-IMP-002: Bounded memory chunked streaming processing engine.
         Processes large CSV files in 50,000 row batches (CHUNK_ROW_SIZE), garbage collecting
@@ -991,7 +1058,8 @@ class DynamicFileImportService:
                 chunk_io, mapping_rule, user_id,
                 session_type=chunk_session_type,
                 force_reset=chunk_force_reset,
-                session_id=session_id
+                session_id=session_id,
+                workspace_id=workspace_id,
             )
             total_result = res
 

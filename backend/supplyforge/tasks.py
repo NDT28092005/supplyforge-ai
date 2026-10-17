@@ -177,7 +177,9 @@ def _stage_import(job: BackgroundJob, context: dict) -> dict:
                 mapping_rule=mapping_rule,
                 user_id=job.workspace.owner_id or job.workspace_id,
                 session_type=session.session_type,
-                session_id=str(session.id)
+                session_id=str(session.id),
+                workspace_id=job.workspace_id,
+                force_reset=session.session_type == 'INITIAL',
             )
 
     context['import_result'] = import_res

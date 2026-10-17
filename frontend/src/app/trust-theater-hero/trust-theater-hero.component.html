@@ -1,188 +1,81 @@
-<main class="space-y-20 py-12 px-6 md:px-16 lg:px-24 bg-slate-50/50 min-h-screen">
-  <!-- 1. Hero & Ingestion Box Section -->
-  <section class="max-w-4xl mx-auto text-center space-y-10 animate-fade-in" aria-labelledby="main-heading">
-    <header class="space-y-3 flex flex-col items-center">
-      <span class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3.5 py-1 rounded-full">
-        Quản lý tồn kho &amp; Dòng vốn
-      </span>
-      <!-- Logged-in welcome -->
-      <div *ngIf="user"
-        class="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-full shadow-xs">
-        <svg class="w-4 h-4 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-          stroke-linecap="round" stroke-linejoin="round">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-          <polyline points="22 4 12 14.01 9 11.01"></polyline>
-        </svg>
-        <span class="text-xs text-emerald-800 font-semibold">Xin chào, {{ user.name }}! Tải dữ liệu lên để bắt đầu phân
-          tích.</span>
-      </div>
-      <!-- Not logged-in prompt -->
-      <button *ngIf="!user" (click)="openLogin.emit()"
-        class="text-xs text-slate-600 hover:text-indigo-600 font-semibold transition-colors flex items-center gap-1 bg-white px-4 py-2 rounded-full border border-slate-200/80 shadow-xs cursor-pointer">
-        <span>Đã có tài khoản cửa hàng?</span>
-        <span class="text-indigo-600 font-bold">Đăng nhập ngay →</span>
+<main sfPageMotion class="public-page public-home">
+  <section data-motion="header" class="home-hero" aria-labelledby="main-heading">
+    <div class="hero-copy">
+      <div class="eyebrow"><span></span> Điều hành tồn kho &amp; dòng vốn</div>
+      <div *ngIf="user" class="signed-in-note">Phiên làm việc của {{ user.name }} đang sẵn sàng để nạp dữ liệu.</div>
+      <button *ngIf="!user" type="button" (click)="openLogin.emit()" class="sign-in-link">
+        Đã có tài khoản? <strong>Đăng nhập</strong>
       </button>
-    </header>
-
-    <div class="space-y-5">
-      <h1 id="main-heading"
-        class="font-sans font-black tracking-tight text-slate-900 text-4xl sm:text-6xl leading-tight">
-        Giải phóng tiền vốn
-        <br />
-        <span class="text-slate-500 font-bold">bị kẹt trong kho hàng.</span>
-      </h1>
-      <p class="text-slate-600 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed font-medium">
-        Tự động phát hiện các sản phẩm bán chậm, đo lường chi phí gánh vốn và gợi ý phương án giảm giá thu hồi tiền mặt
-        nhanh cho nhà bán hàng.
+      <h1 id="main-heading">Biến dữ liệu đơn hàng thành quyết định cho kho hàng.</h1>
+      <p class="hero-summary">
+        SupplyForge xác định hàng bán chậm, lượng vốn đang bị giữ lại và thứ tự hành động để chủ kho xử lý từng SKU có căn cứ.
       </p>
-    </div>
-
-    <!-- SaaS Call-to-Action Buttons -->
-    <div *ngIf="!showUploadBox"
-      class="pt-2 flex flex-col sm:flex-row justify-center items-center gap-4 animate-fade-in">
-      <button (click)="enableUpload()"
-        class="bg-indigo-600 text-white font-bold text-sm px-8 py-4 rounded-2xl hover:bg-indigo-700 transition-all active:scale-95 shadow-xs flex items-center gap-2 cursor-pointer">
-        <span>Bắt đầu phân tích kho hàng</span>
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-          stroke-linecap="round" stroke-linejoin="round">
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-          <polyline points="12 5 19 12 12 19"></polyline>
-        </svg>
-      </button>
-      <button (click)="onContactSupport()"
-        class="bg-white border border-slate-200 text-slate-800 font-bold text-sm px-8 py-4 rounded-2xl hover:bg-slate-50 transition-all active:scale-95 cursor-pointer shadow-xs">
-        Tìm hiểu về chúng tôi
-      </button>
-    </div>
-
-    <!-- Upload Box -->
-    <div *ngIf="showUploadBox"
-      class="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 max-w-2xl mx-auto relative overflow-hidden transition-all shadow-xs animate-fade-in">
-      <div class="flex items-center justify-between mb-6 pb-3 border-b border-slate-100">
-        <div class="flex gap-1.5">
-          <div class="w-2.5 h-2.5 rounded-full bg-slate-300"></div>
-          <div class="w-2.5 h-2.5 rounded-full bg-slate-300"></div>
-          <div class="w-2.5 h-2.5 rounded-full bg-slate-300"></div>
-        </div>
-        <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">
-          Tải tệp CSV dữ liệu bán hàng
-        </span>
-      </div>
-
-      <!-- Upload State -->
-      <div *ngIf="!localFile"
-        class="flex flex-col items-center justify-center py-12 border-2 border-dashed border-slate-300 rounded-2xl hover:border-indigo-400 hover:bg-indigo-50/20 transition-all relative cursor-pointer group">
-        <input type="file" (change)="fileSelected($event)" class="absolute inset-0 opacity-0 cursor-pointer"
-          accept=".csv" />
-        <div
-          class="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 mb-4 group-hover:scale-105 transition-transform">
-          <svg class="w-6 h-6 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="16 16 12 12 8 16"></polyline>
-            <line x1="12" y1="12" x2="12" y2="21"></line>
-            <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
-          </svg>
-        </div>
-        <p class="text-sm font-bold text-slate-900 mb-1">
-          Kéo thả hoặc nhấp để chọn tệp CSV bán hàng
-        </p>
-        <p class="text-xs text-slate-500 font-medium">
-          Hỗ trợ tệp xuất từ Shopee, Lazada, TikTok Shop, Haravan, KiotViet
-        </p>
-      </div>
-
-      <!-- File Selected State -->
-      <div *ngIf="localFile" class="py-4 space-y-6">
-        <div class="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-200">
-          <div class="flex items-center gap-3.5">
-            <svg class="w-5 h-5 text-indigo-600 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-            </svg>
-            <div class="text-left">
-              <div class="text-xs font-bold text-slate-900 max-w-[220px] sm:max-w-[350px] truncate">{{ localFile.name }}
-              </div>
-              <div class="text-[11px] font-mono text-slate-500 mt-0.5">{{ getFileSizeKb(localFile) }} KB</div>
-            </div>
-          </div>
-          <button (click)="removeFile()"
-            class="text-rose-600 hover:text-rose-700 text-xs font-bold transition-colors cursor-pointer">
-            Gỡ bỏ
-          </button>
-        </div>
-
-        <button (click)="onUpload()"
-          class="w-full bg-indigo-600 text-white font-bold text-xs py-4 rounded-xl hover:bg-indigo-700 transition-all active:scale-95 cursor-pointer shadow-xs">
-          Bắt đầu phân tích tệp dữ liệu →
+      <div class="hero-actions">
+        <button type="button" (click)="enableUpload()" class="button-primary">
+          Nạp dữ liệu kho hàng
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
         </button>
+        <button type="button" (click)="onContactSupport()" class="button-secondary">Cách hệ thống hoạt động</button>
+      </div>
+    </div>
+
+    <aside class="signal-board" aria-label="Các tín hiệu hệ thống theo dõi">
+      <div class="board-heading"><span class="board-light"></span><span>Luồng điều hành kho</span></div>
+      <div class="signal-route">
+        <div class="route-node active"><i>01</i><div><strong>Nạp dữ liệu</strong><small>CSV đơn hàng và tồn kho</small></div></div>
+        <div class="route-line"></div>
+        <div class="route-node"><i>02</i><div><strong>Đo rủi ro</strong><small>SKU, tồn, tốc độ bán</small></div></div>
+        <div class="route-line"></div>
+        <div class="route-node"><i>03</i><div><strong>Ưu tiên hành động</strong><small>Vốn cần giải phóng trước</small></div></div>
+      </div>
+      <div class="board-footer">Dữ liệu của bạn chỉ được xử lý trong workspace hiện tại.</div>
+    </aside>
+  </section>
+
+  <section *ngIf="showUploadBox" data-motion="priority" class="upload-dock" aria-labelledby="upload-heading">
+    <div class="dock-header">
+      <div><span class="section-kicker">Bắt đầu từ dữ liệu thực tế</span><h2 id="upload-heading">Nạp tệp bán hàng</h2></div>
+      <button type="button" class="dock-close" (click)="showUploadBox = false" aria-label="Đóng vùng nạp tệp">Đóng</button>
+    </div>
+    <label *ngIf="!localFile" class="file-dropzone">
+      <input type="file" accept=".csv" (change)="fileSelected($event)" />
+      <span class="file-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 20h14" /></svg></span>
+      <strong>Kéo tệp CSV vào đây hoặc chọn từ máy</strong>
+      <small>Tệp xuất từ Shopee, Lazada, TikTok Shop, Haravan hoặc KiotViet đều có thể được đối chiếu cột.</small>
+    </label>
+    <div *ngIf="localFile" class="selected-file">
+      <div class="file-summary"><span class="csv-stamp">CSV</span><div><strong>{{ localFile.name }}</strong><small>{{ getFileSizeKb(localFile) }} KB</small></div></div>
+      <div class="file-actions">
+        <button type="button" class="text-button" (click)="removeFile()">Chọn tệp khác</button>
+        <button type="button" class="button-primary" [disabled]="isUploading" (click)="onUpload()">{{ isUploading ? 'Đang kiểm tra tệp...' : 'Kiểm tra và tiếp tục' }}</button>
       </div>
     </div>
   </section>
 
-  <!-- 2. Core Features Section -->
-  <section class="max-w-5xl mx-auto space-y-10" aria-labelledby="features-heading">
-    <div class="text-center space-y-2">
-      <h2 id="features-heading" class="font-sans font-black text-slate-900 text-3xl sm:text-4xl">
-        Tính năng chính
-      </h2>
-      <p class="text-slate-600 text-sm max-w-xl mx-auto leading-relaxed font-medium">
-        Đồng hành cùng chủ cửa hàng và nhà quản lý tối ưu kho hàng và giải phóng dòng tiền.
-      </p>
+  <section data-motion="panel" class="operating-principles" aria-labelledby="principles-heading">
+    <div class="section-intro">
+      <span class="section-kicker">Một bảng điều hành, ba câu trả lời</span>
+      <h2 id="principles-heading">Ưu tiên thứ cần xử lý trước.</h2>
+      <p>Không thêm một dashboard để xem cho đẹp. Mỗi khu vực trả lời một câu hỏi vận hành rõ ràng.</p>
     </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <article class="bg-white border border-slate-200/80 p-6 rounded-3xl space-y-3 shadow-xs">
-        <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-          <svg class="w-5 h-5 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="20" x2="18" y2="10"></line>
-            <line x1="12" y1="20" x2="12" y2="4"></line>
-            <line x1="6" y1="20" x2="6" y2="14"></line>
-          </svg>
-        </div>
-        <h3 class="text-base font-bold text-slate-900">Phát hiện hàng bán chậm</h3>
-        <p class="text-slate-600 text-xs leading-relaxed font-medium">
-          Tự động thống kê số ngày ngưng phát sinh đơn hàng, phân nhóm rủi ro tồn kho để cảnh báo kịp thời trước khi quá
-          trễ.
-        </p>
-      </article>
-
-      <article class="bg-white border border-slate-200/80 p-6 rounded-3xl space-y-3 shadow-xs">
-        <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-          <svg class="w-5 h-5 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-            <line x1="2" y1="10" x2="22" y2="10"></line>
-          </svg>
-        </div>
-        <h3 class="text-base font-bold text-slate-900">Tính toán tiền vốn bị kẹt</h3>
-        <p class="text-slate-600 text-xs leading-relaxed font-medium">
-          Đo lường chính xác lượng tiền nhập hàng đang nằm trong kho và ước tính chi phí cơ hội đọng vốn theo thời gian.
-        </p>
-      </article>
-
-      <article class="bg-white border border-slate-200/80 p-6 rounded-3xl space-y-3 shadow-xs">
-        <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-          <svg class="w-5 h-5 stroke-current" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-            <polyline points="17 6 23 6 23 12"></polyline>
-          </svg>
-        </div>
-        <h3 class="text-base font-bold text-slate-900">Phương án giải phóng vốn</h3>
-        <p class="text-slate-600 text-xs leading-relaxed font-medium">
-          Gợi ý mức giảm giá hợp lý cho từng sản phẩm để nhanh chóng xả tồn và thu hồi tiền mặt về ví quay vòng kinh
-          doanh.
-        </p>
-      </article>
+    <div class="principle-grid">
+      <article><span class="principle-mark">A</span><h3>Hàng nào đang chậm?</h3><p>Nhìn SKU theo chuỗi ngày không có đơn, tốc độ bán và xác suất rủi ro.</p></article>
+      <article><span class="principle-mark">B</span><h3>Vốn bị kẹt ở đâu?</h3><p>Đặt giá trị tồn, tuổi hàng và chi phí cơ hội vào cùng một bức tranh.</p></article>
+      <article><span class="principle-mark">C</span><h3>Nên làm gì tiếp?</h3><p>Xếp thứ tự phương án giảm giá, bán kèm hoặc theo dõi để người quản lý duyệt.</p></article>
     </div>
   </section>
 
-  <!-- 3. Footer Section -->
-  <footer class="border-t border-slate-200 pt-8 text-center space-y-2">
-    <p class="text-xs text-slate-500 font-medium">
-      SupplyForge AI — Hệ thống hỗ trợ quản lý rủi ro tồn kho &amp; dòng tiền.
-    </p>
-  </footer>
+  <footer class="public-footer">SupplyForge AI · Quản trị tồn kho bằng dữ liệu vận hành</footer>
+
+  <div *ngIf="showDuplicateFileModal" class="duplicate-backdrop" role="dialog" aria-modal="true" aria-labelledby="duplicate-file-title">
+    <section class="duplicate-dialog">
+      <span class="dialog-label">Tệp đã tồn tại</span>
+      <h2 id="duplicate-file-title">Tệp này đã được nạp trong workspace hiện tại.</h2>
+      <p>Hệ thống không chạy lại để tránh tạo dữ liệu trùng. Bạn có thể tiếp tục làm việc trên dashboard hoặc chọn một tệp khác.</p>
+      <div class="dialog-actions">
+        <button type="button" class="button-primary" (click)="returnToDashboardFromDuplicate()">Quay lại dashboard</button>
+        <button type="button" class="button-secondary" (click)="chooseAnotherFile()">Chọn tệp khác</button>
+      </div>
+    </section>
+  </div>
 </main>

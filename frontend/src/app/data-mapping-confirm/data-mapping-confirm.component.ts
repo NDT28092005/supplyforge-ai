@@ -236,7 +236,14 @@ export class DataMappingConfirmComponent implements OnInit, OnDestroy, OnChanges
         );
 
         const process$ = targetFile
-          ? this.apiService.processFile(targetFile, this.finalMapping, 'user_default_001', 'INITIAL').pipe(
+          ? this.apiService.processFile(
+              targetFile,
+              this.finalMapping,
+              'user_default_001',
+              state.sessionType,
+              state.sessionType === 'INITIAL',
+              activeSessionId,
+            ).pipe(
               catchError(err => {
                 console.warn('Process file error:', err);
                 return of(null);
@@ -253,7 +260,14 @@ export class DataMappingConfirmComponent implements OnInit, OnDestroy, OnChanges
           }
         });
       } else if (targetFile) {
-        this.apiService.processFile(targetFile, this.finalMapping, 'user_default_001', 'INITIAL').subscribe({
+        this.apiService.processFile(
+          targetFile,
+          this.finalMapping,
+          'user_default_001',
+          state.sessionType,
+          state.sessionType === 'INITIAL',
+          activeSessionId,
+        ).subscribe({
           next: (processRes) => onComplete(null, processRes),
           error: () => {
             this.isProcessing = false;

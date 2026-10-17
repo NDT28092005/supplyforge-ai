@@ -115,12 +115,15 @@ export class ApiService {
     return this.http.get(`${this.apiUrl}/api/v1/ingestion/sessions/${sessionId}/sku-profiles`, { params });
   }
 
-  processFile(file: File, mappingRule: any, userId = 'user_default_001', sessionType = 'INITIAL', forceReset = false): Observable<any> {
+  processFile(file: File, mappingRule: any, userId = 'user_default_001', sessionType = 'INITIAL', forceReset = false, sessionId = ''): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('mappingRule', JSON.stringify(mappingRule));
     formData.append('userId', userId);
     formData.append('sessionType', sessionType);
+    if (sessionId) {
+      formData.append('sessionId', sessionId);
+    }
     if (forceReset) {
       formData.append('forceReset', 'true');
     }
@@ -200,10 +203,11 @@ export class ApiService {
     });
   }
 
-  enqueueUploadJob(file: File, workspaceId: number = 1): Observable<any> {
+  enqueueUploadJob(file: File, workspaceId: number = 1, sessionType: 'INITIAL' | 'INCREMENTAL' = 'INITIAL'): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('workspaceId', workspaceId.toString());
+    formData.append('sessionType', sessionType);
     return this.http.post(`${this.apiUrl}/api/v2/jobs/upload`, formData);
   }
 
@@ -690,5 +694,4 @@ export class ApiService {
     return this.http.patch(`${this.apiUrl}/api/v1/action-plans/${planId}/outcome/`, outcome);
   }
 }
-
 

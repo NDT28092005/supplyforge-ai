@@ -1,7 +1,7 @@
 import io
 from django.test import TestCase
 from supplyforge.services.ingestion import DynamicFileImportService
-from supplyforge.models import Product, Order, ArchivedDataSet
+from supplyforge.models import ArchivedDataSet, Order, OrderItem, Product
 
 
 class IncrementalImportTestCase(TestCase):
@@ -76,3 +76,69 @@ class IncrementalImportTestCase(TestCase):
         self.assertEqual(archive.order_count, 1)
         self.assertIn("products", archive.snapshot_json)
         self.assertIn("orders", archive.snapshot_json)
+
+    def test_initial_import_replaces_operational_data_and_retains_training_snapshot(self):
+        """INITIAL must replace only this user's active data while retaining lineage."""
+        user_id = 'user_replace_dataset_001'
+        other_user_id = 'user_other_tenant_001'
+        old_csv = (
+            "order_id,sku,product_name,selling_price,quantity,order_date\n"
+            "OLD-001,OLD-SKU,Hàng cũ,100000,2,2026-01-10\n"
+        )
+        new_csv = (
+            "order_id,sku,product_name,selling_price,quantity,order_date\n"
+            "NEW-001,NEW-SKU,Hàng mới,200000,1,2026-02-10\n"
+        )
+        other_csv = (
+            "order_id,sku,product_name,selling_price,quantity,order_date\n"
+            "OTHER-001,OTHER-SKU,Hàng tenant khác,50000,1,2026-02-01\n"
+        )
+
+        DynamicFileImportService.process_batch_import(
+            io.BytesIO(old_csv.encode('utf-8')), {}, user_id, session_type='INITIAL'
+        )
+        DynamicFileImportService.process_batch_import(
+            io.BytesIO(other_csv.encode('utf-8')), {}, other_user_id, session_type='INITIAL'
+        )
+
+        result = DynamicFileImportService.process_batch_import(
+            io.BytesIO(new_csv.encode('utf-8')), {}, user_id, session_type='INITIAL'
+        )
+
+        self.assertEqual(result['import_type'], 'INITIAL')
+        self.assertEqual(list(Order.objects.filter(user_id=user_id).values_list('order_id', flat=True)), ['NEW-001'])
+        self.assertEqual(list(Product.objects.filter(user_id=user_id).values_list('item_sku', flat=True)), ['NEW-SKU'])
+        self.assertEqual(Order.objects.filter(user_id=other_user_id).count(), 1)
+
+        archive = ArchivedDataSet.objects.filter(user_id=user_id).latest('archived_at')
+        self.assertEqual(archive.reason, 'INITIAL_IMPORT_REPLACED')
+        self.assertEqual(archive.snapshot_json['orders'][0]['order_id'], 'OLD-001')
+        self.assertEqual(len(archive.snapshot_json['order_items']), 1)
+        self.assertEqual(OrderItem.objects.filter(order__user_id=user_id).count(), 1)
+
+    def test_invalid_initial_import_preserves_current_operational_data(self):
+        """A malformed replacement must not leave the operational dataset empty."""
+        user_id = 'user_invalid_replacement_001'
+        valid_csv = (
+            "order_id,sku,product_name,selling_price,quantity,order_date\n"
+            "OLD-001,OLD-SKU,Hàng cũ,100000,2,2026-01-10\n"
+        )
+        invalid_csv = (
+            "order_id,sku,product_name,selling_price,quantity,order_date\n"
+            "INVALID-001,INVALID-SKU,Hàng lỗi,100000,0,2026-02-10\n"
+        )
+
+        DynamicFileImportService.process_batch_import(
+            io.BytesIO(valid_csv.encode('utf-8')), {}, user_id, session_type='INITIAL'
+        )
+
+        with self.assertRaisesMessage(ValueError, 'Không có dòng dữ liệu hợp lệ'):
+            DynamicFileImportService.process_batch_import(
+                io.BytesIO(invalid_csv.encode('utf-8')), {}, user_id, session_type='INITIAL'
+            )
+
+        self.assertEqual(
+            list(Order.objects.filter(user_id=user_id).values_list('order_id', flat=True)),
+            ['OLD-001'],
+        )
+        self.assertFalse(ArchivedDataSet.objects.filter(user_id=user_id).exists())

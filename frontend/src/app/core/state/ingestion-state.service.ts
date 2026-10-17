@@ -8,6 +8,7 @@ export interface IngestionState {
   datasetProfileData: any | null;
   uploadErrorMessage: string;
   isProcessingBatch: boolean;
+  sessionType: 'INITIAL' | 'INCREMENTAL';
 }
 
 const initialState: IngestionState = {
@@ -16,7 +17,8 @@ const initialState: IngestionState = {
   mappingData: null,
   datasetProfileData: null,
   uploadErrorMessage: '',
-  isProcessingBatch: false
+  isProcessingBatch: false,
+  sessionType: 'INITIAL'
 };
 
 const STORAGE_KEY = 'supplyforge_ingestion_state';
@@ -31,6 +33,7 @@ function getPersistedState(): IngestionState {
         activeSessionId: parsed.activeSessionId || '',
         mappingData: parsed.mappingData || null,
         datasetProfileData: parsed.datasetProfileData || null,
+        sessionType: parsed.sessionType === 'INCREMENTAL' ? 'INCREMENTAL' : 'INITIAL',
       };
     }
   } catch (e) {
@@ -58,7 +61,8 @@ export class IngestionStateService {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
         activeSessionId: newState.activeSessionId,
         mappingData: newState.mappingData,
-        datasetProfileData: newState.datasetProfileData
+        datasetProfileData: newState.datasetProfileData,
+        sessionType: newState.sessionType
       }));
     } catch (e) {}
     this.state$.next(newState);
@@ -86,6 +90,10 @@ export class IngestionStateService {
 
   setProcessingBatch(isProcessing: boolean) {
     this.persist({ ...this.state, isProcessingBatch: isProcessing });
+  }
+
+  setSessionType(sessionType: 'INITIAL' | 'INCREMENTAL') {
+    this.persist({ ...this.state, sessionType });
   }
 
   reset() {

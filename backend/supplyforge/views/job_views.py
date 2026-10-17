@@ -91,6 +91,10 @@ def enqueue_upload_job(request):
             'code': 'UNAUTHENTICATED',
         }, status=status.HTTP_401_UNAUTHORIZED)
 
+    session_type = request.data.get('sessionType', 'INITIAL')
+    if session_type not in {'INITIAL', 'INCREMENTAL'}:
+        return Response({'error': 'sessionType không hợp lệ.'}, status=status.HTTP_400_BAD_REQUEST)
+
     # Compute SHA256 file fingerprint
     hasher = hashlib.sha256()
     for chunk in file_obj.chunks():
@@ -131,7 +135,7 @@ def enqueue_upload_job(request):
         original_filename=file_obj.name,
         file_hash=file_hash,
         idempotency_key=idempotency_key,
-        session_type=request.data.get('sessionType', 'INITIAL'),
+        session_type=session_type,
         storage_path=storage_path,
         raw_storage_path=storage_path,
         file_size_bytes=file_size,

@@ -1,68 +1,31 @@
-<main class="min-h-screen bg-slate-50/50 py-12 px-6 md:px-16 lg:px-24 font-sans animate-fade-in">
-  <div class="max-w-5xl mx-auto space-y-12">
+<main sfPageMotion class="services-page">
+  <div *ngIf="loading" class="services-loading"><span></span>Đang tải các mô-đun vận hành</div>
+  <ng-container *ngIf="!loading">
+    <section data-motion="header" class="services-hero">
+      <div><span class="services-kicker">Bộ công cụ cho chủ kho</span><h1>Không chỉ báo cáo tồn kho. Là một quy trình xử lý vốn đọng.</h1></div>
+      <p>Đưa file đơn hàng vào, xác định rủi ro theo SKU, sau đó chuyển khuyến nghị thành kế hoạch có người phê duyệt.</p>
+    </section>
 
-    <!-- Loading Skeleton -->
-    <div *ngIf="loading" class="text-center py-20 space-y-4">
-      <div class="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-      <p class="text-xs font-bold text-slate-500">Đang tải dữ liệu từ API /api/v1/services...</p>
-    </div>
+    <section data-motion="priority" class="workflow-strip" aria-label="Luồng dịch vụ">
+      <article><span class="font-mono">01</span><strong>Nạp &amp; kiểm tra</strong><small>Đọc cấu trúc file, xác nhận cột và kiểm tra trùng dữ liệu.</small></article>
+      <article><span class="font-mono">02</span><strong>Phân tích tồn kho</strong><small>Đánh giá tốc độ bán, tuổi hàng và mức độ chôn vốn.</small></article>
+      <article><span class="font-mono">03</span><strong>Duyệt hành động</strong><small>Biến kết quả thành kế hoạch giảm giá hoặc bán kèm có thể theo dõi.</small></article>
+    </section>
 
-    <!-- Main Content View -->
-    <div *ngIf="!loading" class="space-y-10">
-
-      <!-- Header Page Card -->
-      <header class="bg-white border border-slate-200/80 p-8 sm:p-12 rounded-3xl shadow-xs text-center space-y-4">
-        <span
-          class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-4 py-1.5 rounded-full inline-block">
-          Bộ Giải pháp &amp; Dịch vụ
-        </span>
-        <h1 class="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
-          Giải pháp Quản trị Tồn kho &amp; Dòng vốn Toàn diện
-        </h1>
-        <p class="text-slate-600 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed font-medium">
-          Đồng hành cùng chủ cửa hàng và nhà bán hàng đa sàn loại bỏ rủi ro tồn kho đọng và tối đa hóa hiệu quả sử dụng
-          nguồn vốn.
-        </p>
-      </header>
-
-      <!-- Services Grid (Rendered from API) -->
-      <section class="grid grid-cols-1 sm:grid-cols-2 gap-6" aria-label="Danh sách dịch vụ">
-        <article *ngFor="let srv of services"
-          class="bg-white border border-slate-200/80 p-7 sm:p-8 rounded-3xl shadow-xs space-y-4 hover:border-indigo-300 transition-all">
-          <div class="flex items-center justify-between">
-            <div class="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-              <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-                <line x1="2" y1="10" x2="22" y2="10"></line>
-              </svg>
-            </div>
-            <span
-              class="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full uppercase tracking-wider font-mono">
-              {{ srv.badge }}
-            </span>
-          </div>
-
-          <div class="space-y-2">
-            <h2 class="text-lg font-bold text-slate-900 leading-snug">{{ srv.title }}</h2>
-            <p class="text-xs sm:text-sm text-slate-600 leading-relaxed font-medium">{{ srv.desc }}</p>
-          </div>
+    <section data-motion="panel" class="services-catalog" aria-labelledby="catalog-heading">
+      <header><span class="services-kicker">Các mô-đun trong hệ thống</span><h2 id="catalog-heading">Từng dịch vụ đứng đúng vị trí trong luồng công việc.</h2></header>
+      <div class="service-grid">
+        <article *ngFor="let srv of services; let index = index" class="service-card">
+          <div class="service-card-top"><span class="service-index font-mono">0{{ index + 1 }}</span><span class="service-badge">{{ srv.badge }}</span></div>
+          <h3>{{ srv.title }}</h3><p>{{ srv.desc }}</p>
         </article>
-      </section>
+        <article *ngIf="services.length === 0" class="service-card service-empty"><h3>Danh mục dịch vụ đang được cập nhật</h3><p>Hãy quay lại sau hoặc bắt đầu bằng việc nạp tệp dữ liệu kho hàng.</p></article>
+      </div>
+    </section>
 
-      <!-- CTA Banner -->
-      <section
-        class="bg-indigo-600 text-white p-8 sm:p-10 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xs">
-        <div class="space-y-1 text-center sm:text-left">
-          <h3 class="text-xl font-bold">Bắt đầu áp dụng giải pháp cho kho hàng của bạn</h3>
-          <p class="text-xs text-indigo-100 font-medium">Không tốn phí dùng thử, tự động nhận diện file CSV ngay lập
-            tức.</p>
-        </div>
-        <button (click)="onAction('csv-upload')"
-          class="bg-white text-indigo-700 hover:bg-indigo-50 px-6 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-xs shrink-0">
-          Nạp file bán hàng ngay →
-        </button>
-      </section>
-
-    </div>
-  </div>
+    <section data-motion="panel" class="services-cta">
+      <div><span class="services-kicker">Dữ liệu đầu vào</span><h2>Bắt đầu bằng một tệp CSV lịch sử bán hàng.</h2><p>Hệ thống sẽ dẫn bạn qua kiểm tra cấu trúc, xác nhận cột và phân tích rủi ro.</p></div>
+      <button type="button" (click)="onAction('csv-upload')">Nạp tệp CSV</button>
+    </section>
+  </ng-container>
 </main>
