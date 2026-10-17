@@ -19,7 +19,6 @@ export class TrustTheaterHeroComponent {
   @Input() user: any = null;
 
   localFile: File | null = null;
-  showUploadBox = false;
   showDuplicateFileModal = false;
   isUploading = false;
 
@@ -30,12 +29,8 @@ export class TrustTheaterHeroComponent {
   ) {}
 
   onContactSupport(): void {
-    this.navigateStage.emit('about_us');
-    this.router.navigate(['/about']);
-  }
-
-  enableUpload(): void {
-    this.showUploadBox = true;
+    this.navigateStage.emit('services');
+    this.router.navigate(['/services']);
   }
 
   fileSelected(event: Event): void {

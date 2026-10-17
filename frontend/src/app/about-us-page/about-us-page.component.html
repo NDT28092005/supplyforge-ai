@@ -1,37 +1,69 @@
 <main sfPageMotion class="about-page">
   <div *ngIf="loading" class="public-loading"><span></span>Đang tải thông tin hệ thống</div>
+
   <ng-container *ngIf="!loading && data">
-    <section data-motion="header" class="about-hero">
-      <div>
-        <span class="about-kicker">Về SupplyForge</span>
-        <h1>{{ data.title }}</h1>
+    <section data-motion="header" class="about-hero" aria-labelledby="about-heading">
+      <div class="about-intro">
+        <p class="page-mark"><span></span> Vì sao SupplyForge tồn tại</p>
+        <h1 id="about-heading">{{ data.title }}</h1>
         <p>{{ data.description }}</p>
+        <button type="button" class="hero-link" (click)="onAction('services')">Xem hệ thống làm được gì</button>
       </div>
-      <aside class="about-record">
-        <span>Nguyên tắc vận hành</span>
-        <strong>Quyết định kho phải truy được về dữ liệu, không về cảm tính.</strong>
-        <p>Hệ thống giữ lại nguồn dữ liệu, phiên phân tích và phiên bản mô hình để đội ngũ có thể kiểm tra lại kết quả.</p>
+      <aside class="about-brief" aria-label="Bối cảnh vận hành">
+        <span class="brief-label">Bài toán của merchant</span>
+        <strong>Hàng chậm thường được phát hiện sau khi vốn đã nằm yên quá lâu.</strong>
+        <p>SupplyForge biến lịch sử bán hàng thành một thứ tự xử lý để đội ngũ không phải dò từng file hoặc quyết định theo cảm giác.</p>
       </aside>
     </section>
 
-    <section data-motion="priority" class="stats-strip" aria-label="Chỉ số hệ thống">
-      <article *ngFor="let stat of data.stats"><strong class="font-mono">{{ stat.value }}</strong><span>{{ stat.label }}</span><small>{{ stat.desc }}</small></article>
+    <section data-motion="priority" class="merchant-context" aria-labelledby="context-heading">
+      <div class="section-title">
+        <span class="section-index">01</span>
+        <div><p>Điểm xuất phát</p><h2 id="context-heading">Từ dữ liệu rời rạc đến một cuộc trao đổi rõ ràng về kho.</h2></div>
+      </div>
+      <div class="context-list">
+        <article><span>File bán hàng</span><strong>Nhiều nguồn, nhiều cách đặt cột</strong><p>Đầu vào được kiểm tra trước khi dùng để phân tích.</p></article>
+        <article><span>Danh mục SKU</span><strong>Quá dài để rà thủ công mỗi ngày</strong><p>Rủi ro được đặt cạnh nhịp bán và giá trị tồn.</p></article>
+        <article><span>Quyết định vận hành</span><strong>Cần lý do để hành động</strong><p>Mỗi ưu tiên có dữ liệu nguồn để kiểm tra lại.</p></article>
+      </div>
     </section>
 
-    <section data-motion="panel" class="about-body" aria-labelledby="values-heading">
-      <div class="about-section-title"><span class="about-kicker">Cách chúng tôi thiết kế hệ thống</span><h2 id="values-heading">Rõ dữ liệu. Rõ ưu tiên. Rõ người chịu trách nhiệm.</h2></div>
-      <div class="value-list">
+    <section data-motion="panel" class="operating-principles" aria-labelledby="principles-heading">
+      <div class="section-title">
+        <span class="section-index">02</span>
+        <div><p>Nguyên tắc hệ thống</p><h2 id="principles-heading">Tín hiệu tốt phải dẫn đến một hành động có thể giải thích.</h2></div>
+      </div>
+      <div class="principle-rail">
         <article *ngFor="let val of data.core_values; let index = index">
-          <span class="value-index font-mono">0{{ index + 1 }}</span>
+          <span class="rail-index font-mono">0{{ index + 1 }}</span>
           <div><h3>{{ val.title }}</h3><p>{{ val.desc }}</p></div>
         </article>
       </div>
     </section>
 
+    <section data-motion="panel" class="evidence-strip" aria-labelledby="evidence-heading">
+      <div class="evidence-intro">
+        <span class="section-index">03</span>
+        <p>Bằng chứng hiệu quả</p>
+        <h2 id="evidence-heading">Hiệu quả được đo ở phần việc merchant không còn phải làm thủ công.</h2>
+      </div>
+      <div class="stats-grid" aria-label="Các chỉ số hệ thống">
+        <article *ngFor="let stat of data.stats">
+          <strong class="font-mono">{{ stat.value }}</strong>
+          <span>{{ stat.label }}</span>
+          <small>{{ stat.desc }}</small>
+        </article>
+      </div>
+    </section>
+
     <section data-motion="panel" class="about-cta">
-      <div><span class="about-kicker">Bắt đầu với dữ liệu thật</span><h2>Đưa kho hàng vào một quy trình có thể kiểm tra.</h2></div>
-      <div class="about-actions"><button type="button" (click)="onAction('csv-upload')">Nạp tệp CSV</button><button type="button" (click)="onAction('executive-dashboard')">Xem dashboard</button></div>
+      <div><p>Đã có file bán hàng?</p><h2>Bắt đầu từ dữ liệu đang có trong kho.</h2></div>
+      <div class="about-actions">
+        <button type="button" (click)="onAction('csv-upload')">Nạp tệp CSV</button>
+        <button type="button" (click)="onAction('services')">Xem tính năng</button>
+      </div>
     </section>
   </ng-container>
+
   <section *ngIf="!loading && !data" class="public-empty"><h1>Không thể tải thông tin giới thiệu.</h1><button type="button" (click)="onAction('hero')">Quay lại trang chủ</button></section>
 </main>

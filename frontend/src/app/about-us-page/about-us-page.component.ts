@@ -39,6 +39,8 @@ export class AboutUsPageComponent implements OnInit {
     this.navigateAction.emit(target);
     if (target === 'csv-upload' || target === 'hero') {
       this.router.navigate(['/app/import']);
+    } else if (target === 'services') {
+      this.router.navigate(['/services']);
     } else if (target === 'executive-dashboard') {
       this.router.navigate(['/app/dashboard']);
     } else {

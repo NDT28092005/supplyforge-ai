@@ -1,30 +1,53 @@
 <main sfPageMotion class="services-page">
-  <div *ngIf="loading" class="services-loading"><span></span>Đang tải các mô-đun vận hành</div>
+  <div *ngIf="loading" class="services-loading"><span></span>Đang tải các khả năng hệ thống</div>
+
   <ng-container *ngIf="!loading">
-    <section data-motion="header" class="services-hero">
-      <div><span class="services-kicker">Bộ công cụ cho chủ kho</span><h1>Không chỉ báo cáo tồn kho. Là một quy trình xử lý vốn đọng.</h1></div>
-      <p>Đưa file đơn hàng vào, xác định rủi ro theo SKU, sau đó chuyển khuyến nghị thành kế hoạch có người phê duyệt.</p>
+    <section data-motion="header" class="services-hero" aria-labelledby="services-heading">
+      <div>
+        <p class="page-mark"><span></span> Khả năng của SupplyForge</p>
+        <h1 id="services-heading">Một hệ thống để nhìn, ưu tiên và xử lý hàng chậm.</h1>
+      </div>
+      <div class="services-intro">
+        <p>SupplyForge không thay merchant ra quyết định. Hệ thống chuẩn bị dữ liệu và bối cảnh để mỗi quyết định về kho có căn cứ hơn.</p>
+        <button type="button" (click)="onAction('csv-upload')">Nạp tệp CSV</button>
+      </div>
     </section>
 
-    <section data-motion="priority" class="workflow-strip" aria-label="Luồng dịch vụ">
-      <article><span class="font-mono">01</span><strong>Nạp &amp; kiểm tra</strong><small>Đọc cấu trúc file, xác nhận cột và kiểm tra trùng dữ liệu.</small></article>
-      <article><span class="font-mono">02</span><strong>Phân tích tồn kho</strong><small>Đánh giá tốc độ bán, tuổi hàng và mức độ chôn vốn.</small></article>
-      <article><span class="font-mono">03</span><strong>Duyệt hành động</strong><small>Biến kết quả thành kế hoạch giảm giá hoặc bán kèm có thể theo dõi.</small></article>
-    </section>
+    <section data-motion="priority" class="feature-index" aria-labelledby="feature-heading">
+      <header class="feature-header">
+        <div class="section-title">
+          <span class="section-index">01</span>
+          <div><p>Hệ thống làm được gì</p><h2 id="feature-heading">Bốn việc chính, cùng một mục tiêu: đưa vốn về đúng chỗ.</h2></div>
+        </div>
+        <p class="feature-summary">Mỗi khả năng được thiết kế để thay một phần việc thủ công trong quy trình quản lý tồn kho.</p>
+      </header>
 
-    <section data-motion="panel" class="services-catalog" aria-labelledby="catalog-heading">
-      <header><span class="services-kicker">Các mô-đun trong hệ thống</span><h2 id="catalog-heading">Từng dịch vụ đứng đúng vị trí trong luồng công việc.</h2></header>
-      <div class="service-grid">
-        <article *ngFor="let srv of services; let index = index" class="service-card">
-          <div class="service-card-top"><span class="service-index font-mono">0{{ index + 1 }}</span><span class="service-badge">{{ srv.badge }}</span></div>
-          <h3>{{ srv.title }}</h3><p>{{ srv.desc }}</p>
+      <div class="feature-labels" aria-hidden="true"><span>Khả năng</span><span>Merchant nhận được gì</span></div>
+      <div class="feature-list">
+        <article *ngFor="let srv of services; let index = index">
+          <span class="feature-number font-mono">0{{ index + 1 }}</span>
+          <div><h3>{{ srv.title }}</h3><p>{{ srv.desc }}</p></div>
+          <strong>{{ srv.result || srv.badge }}</strong>
         </article>
-        <article *ngIf="services.length === 0" class="service-card service-empty"><h3>Danh mục dịch vụ đang được cập nhật</h3><p>Hãy quay lại sau hoặc bắt đầu bằng việc nạp tệp dữ liệu kho hàng.</p></article>
+        <article *ngIf="services.length === 0" class="feature-empty"><div><h3>Danh mục khả năng đang được cập nhật</h3><p>Bắt đầu bằng việc nạp tệp dữ liệu kho hàng để xem các mô-đun hiện có.</p></div></article>
+      </div>
+    </section>
+
+    <section data-motion="panel" class="result-panel" aria-labelledby="result-heading">
+      <div class="result-intro">
+        <span class="section-index">02</span>
+        <p>Đầu ra cho đội vận hành</p>
+        <h2 id="result-heading">Một cuộc họp kho có thể bắt đầu bằng ba câu trả lời.</h2>
+      </div>
+      <div class="result-list">
+        <article><span>Cần xem gì trước?</span><strong>Danh sách SKU được ưu tiên</strong></article>
+        <article><span>Vì sao phải xử lý?</span><strong>Dữ liệu bán, tồn và vốn liên quan</strong></article>
+        <article><span>Làm gì tiếp theo?</span><strong>Hướng xử lý để đội ngũ duyệt</strong></article>
       </div>
     </section>
 
     <section data-motion="panel" class="services-cta">
-      <div><span class="services-kicker">Dữ liệu đầu vào</span><h2>Bắt đầu bằng một tệp CSV lịch sử bán hàng.</h2><p>Hệ thống sẽ dẫn bạn qua kiểm tra cấu trúc, xác nhận cột và phân tích rủi ro.</p></div>
+      <div><p>Không cần thay quy trình ngay từ đầu</p><h2>Bắt đầu với file bán hàng bạn đang có.</h2></div>
       <button type="button" (click)="onAction('csv-upload')">Nạp tệp CSV</button>
     </section>
   </ng-container>

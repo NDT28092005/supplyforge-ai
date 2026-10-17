@@ -15,9 +15,9 @@ from rest_framework import status
 def about_us_api(request):
     """GET /api/v1/about_us - Returns company mission, vision, core values and platform stats."""
     data = {
-        "title": "Sứ mệnh Khơi thông Dòng vốn & Tối ưu Tồn kho",
-        "tagline": "Giải pháp AI quản trị rủi ro tồn kho chuyên sâu cho nhà bán lẻ & E-commerce Việt Nam",
-        "description": "SupplyForge AI được phát triển nhằm giải quyết triệt để bài toán tồn kho chết (Dead Stock) và đọng vốn — rủi ro hàng đầu đe dọa sự sống còn của dòng tiền cửa hàng.",
+        "title": "Kho không thiếu dữ liệu. Kho thiếu thứ tự để xử lý.",
+        "tagline": "Hệ thống điều hành rủi ro tồn kho cho nhà bán lẻ và e-commerce Việt Nam",
+        "description": "SupplyForge giúp merchant nhìn rõ hàng bán chậm, vốn đang nằm ở đâu và việc nào cần được đưa lên trước trong kế hoạch xử lý kho.",
         "stats": [
             {"label": "Tỷ lệ tiết kiệm thời gian", "value": "95%", "desc": "Chuẩn hóa SKU tự động thay vì rà soát Excel thủ công"},
             {"label": "Tỷ lệ giải phóng dòng tiền", "value": "30%", "desc": "Thu hồi dòng vốn kẹt ở hàng cận date & bán chậm"},
@@ -26,18 +26,18 @@ def about_us_api(request):
         "core_values": [
             {
                 "id": "val-1",
-                "title": "Minh bạch dữ liệu",
-                "desc": "Đo lường chính xác số ngày ngưng phát sinh đơn hàng, phân tích chi phí cơ hội đọng vốn thực tế."
+                "title": "Dữ liệu có căn cứ",
+                "desc": "Mỗi tín hiệu được đặt cạnh lịch sử bán, tồn và nguồn dữ liệu để đội ngũ kiểm tra lại."
             },
             {
                 "id": "val-2",
-                "title": "Hành động tức thì",
-                "desc": "Tự động đề xuất kịch bản mức giảm giá xả hàng phù hợp giúp nhà bán thu hồi tiền mặt về ví nhanh nhất."
+                "title": "Ưu tiên có lý do",
+                "desc": "Danh mục được sắp theo mức cần xử lý để merchant không phải dò từng mã hàng bằng tay."
             },
             {
                 "id": "val-3",
-                "title": "Tự động hóa đơn giản",
-                "desc": "Đọc và ánh xạ file dữ liệu bán hàng đa sàn (Shopee, Lazada, TikTok Shop, KiotViet, Haravan) chỉ trong vài giây."
+                "title": "Hành động có thể theo dõi",
+                "desc": "Khuyến nghị được đưa về các phương án cụ thể để đội ngũ bàn bạc, duyệt và theo dõi."
             }
         ]
     }
@@ -51,31 +51,35 @@ def services_api(request):
     services = [
         {
             "id": "srv-1",
-            "title": "1. Chẩn đoán Rủi ro Bán chậm",
-            "desc": "Tự động phân loại danh mục SKU theo 3 cấp độ: Rủi ro cao (cần xử lý gấp), Cần chú ý (bắt đầu bán chậm) và An toàn (bán đều).",
+            "title": "Nhận diện hàng bán chậm",
+            "desc": "Đặt SKU vào mức ưu tiên dựa trên nhịp bán và tín hiệu rủi ro.",
             "icon": "alert-triangle",
-            "badge": "Phân tích tự động"
+            "badge": "Phân tích tự động",
+            "result": "Biết mã nào cần xem trước"
         },
         {
             "id": "srv-2",
-            "title": "2. Đo lường & Đánh giá Vốn đọng",
-            "desc": "Xác định tổng số tiền vốn đang bị kẹt ở từng mã hàng và tính toán chi phí cơ hội đọng vốn hàng tháng của kho.",
+            "title": "Nhìn rõ vốn đang bị giữ",
+            "desc": "Nối giá trị tồn với mức độ bán chậm theo từng SKU.",
             "icon": "credit-card",
-            "badge": "Đo lường tài chính"
+            "badge": "Đo lường tài chính",
+            "result": "Thấy phần vốn cần quan tâm"
         },
         {
             "id": "srv-3",
-            "title": "3. Đề xuất Giải phóng Vốn & Thu hồi Tiền mặt",
-            "desc": "Gợi ý các kịch bản chiết khấu giảm giá (Flash Sale, Bundle combo) để tối đa hóa số tiền mặt thu hồi về ví cửa hàng.",
+            "title": "Chuẩn bị hướng xử lý",
+            "desc": "Đưa các phương án hành động vào cùng bối cảnh dữ liệu kho.",
             "icon": "trending-up",
-            "badge": "Tối ưu dòng tiền"
+            "badge": "Hỗ trợ quyết định",
+            "result": "Có phương án để đội ngũ duyệt"
         },
         {
             "id": "srv-4",
-            "title": "4. Tự động Chuẩn hóa & Ánh xạ Dữ liệu Đa sàn",
-            "desc": "Hỗ trợ nạp file CSV xuất từ Shopee, Lazada, TikTok Shop, Haravan, KiotViet... tự động lọc đơn hủy/trả và khớp cột thông tin.",
+            "title": "Kiểm tra và chuẩn hóa file nhập",
+            "desc": "Đọc tệp CSV từ nhiều nguồn, đối chiếu cột và chặn dữ liệu trùng.",
             "icon": "layers",
-            "badge": "Đa nền tảng"
+            "badge": "Dữ liệu đầu vào",
+            "result": "Bắt đầu phân tích từ dữ liệu sạch"
         }
     ]
     return Response({"services": services}, status=status.HTTP_200_OK)
