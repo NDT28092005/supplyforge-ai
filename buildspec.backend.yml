@@ -1,0 +1,13 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - export ECR_REGISTRY="${ECR_REPOSITORY_URL%%/*}"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+  build:
+    commands:
+      - docker build --pull --tag "$ECR_REPOSITORY_URL:$IMAGE_TAG" --file backend/Dockerfile .
+  post_build:
+    commands:
+      - docker push "$ECR_REPOSITORY_URL:$IMAGE_TAG"
