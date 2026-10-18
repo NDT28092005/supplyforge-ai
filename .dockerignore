@@ -1,0 +1,43 @@
+# Source control and local tooling
+.git/
+.github/
+.idea/
+.vscode/
+*.iml
+
+# Python and Node build artefacts
+**/__pycache__/
+**/*.py[cod]
+.venv/
+venv/
+env/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+
+# Secrets and developer-only configuration
+.env
+.env.*
+!.env.example
+!backend/.env.example
+
+# Generated runtime data and local databases
+data/
+uploads/
+tmp/
+reports/
+predictions/
+*.sqlite3
+*.db
+*.log
+backend/media/
+backend/staticfiles/
+
+# Unrelated deliverables
+notebooks/
+docs/
+ops/
+test-data/
+skills/
+tasks/

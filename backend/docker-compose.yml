@@ -29,7 +29,9 @@ services:
       start_period: 5s
 
   migrate:
-    build: .
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
     command: ["python", "manage.py", "migrate", "--noinput"]
     restart: "no"
     environment: &backend-environment
@@ -65,7 +67,9 @@ services:
         condition: service_healthy
 
   backend:
-    build: .
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     stop_grace_period: 45s
     command: ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8080", "--workers", "3", "--graceful-timeout", "30", "--timeout", "120", "--keep-alive", "5", "--max-requests", "1000", "--max-requests-jitter", "50", "--access-logfile", "-", "--error-logfile", "-"]
@@ -83,7 +87,9 @@ services:
       start_period: 15s
 
   celery_worker:
-    build: .
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     stop_grace_period: 45s
     command: ["celery", "-A", "config", "worker", "--loglevel=info"]

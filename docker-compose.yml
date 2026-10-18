@@ -31,8 +31,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     stop_grace_period: 45s
     ports:
@@ -84,8 +84,8 @@ services:
   # Run schema migrations once per release before web replicas start.
   migrate:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     command: ["python", "manage.py", "migrate", "--noinput"]
     restart: "no"
     environment:
@@ -120,8 +120,8 @@ services:
 
   celery_data:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     command: celery -A config worker -l info -Q data_worker,celery -n data_worker@%h
     restart: unless-stopped
     stop_grace_period: 45s
@@ -163,8 +163,8 @@ services:
 
   celery_ml:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     command: celery -A config worker -l info -Q ml_worker,celery -n ml_worker@%h
     restart: unless-stopped
     stop_grace_period: 45s
@@ -206,8 +206,8 @@ services:
 
   celery_decision:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     command: celery -A config worker -l info -Q decision_worker,celery -n decision_worker@%h
     restart: unless-stopped
     stop_grace_period: 45s

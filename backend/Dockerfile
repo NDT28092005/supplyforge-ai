@@ -15,12 +15,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
+# This Dockerfile is built from the repository root so the runtime image also
+# contains the shared `src` package used by Django services.
 # Install Python dependencies
-COPY requirements.txt /app/
+COPY backend/requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy project files
-COPY . /app/
+COPY backend/ /app/
+COPY src/ /app/src/
 
 # Do not run the application as root inside the container.
 RUN addgroup --system supplyforge && \
