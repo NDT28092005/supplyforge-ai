@@ -9,9 +9,11 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(_
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from supplyforge.models import Workspace, IngestionSession, SlowMovingRiskAssessment
+from supplyforge.models import User, Workspace, IngestionSession, SlowMovingRiskAssessment
 from supplyforge.services.cache_policy import CachePolicy
 from supplyforge.services.query_service import DashboardQueryService
+from supplyforge.services.lakehouse_ingestion import LakehouseIngestionService
+from supplyforge.views.auth import generate_access_token
 
 
 class QueryServiceTestCase(TestCase):
@@ -20,8 +22,16 @@ class QueryServiceTestCase(TestCase):
     def setUp(self):
         cache.clear()
         self.client = APIClient()
-        self.workspace1 = Workspace.objects.create(name="WS 1", slug="ws-1")
+        self.user = User.objects.create(
+            email='query-service@example.com',
+            status=User.STATUS_ACTIVE,
+            is_email_verified=True,
+        )
+        self.workspace1 = Workspace.objects.create(name="WS 1", slug="ws-1", owner=self.user)
         self.workspace2 = Workspace.objects.create(name="WS 2", slug="ws-2")
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer {generate_access_token(self.user, self.workspace1.id)}'
+        )
 
         self.session1 = IngestionSession.objects.create(
             workspace=self.workspace1,
@@ -33,6 +43,8 @@ class QueryServiceTestCase(TestCase):
             original_filename="orders2.csv",
             status="SUCCESS"
         )
+        version = LakehouseIngestionService.prepare_version(self.session1)
+        LakehouseIngestionService.promote(version)
 
         # Populate 10 assessments for WS 1
         for i in range(1, 11):
@@ -56,6 +68,8 @@ class QueryServiceTestCase(TestCase):
         self.assertIn(status1, ['MISS', 'HIT', 'REFRESHED'])
         self.assertTrue(summary1['hasData'])
         self.assertEqual(summary1['totalSkus'], 10)
+        self.assertEqual(summary1['datasetVersion'], 'v1.0')
+        self.assertFalse(summary1['isStale'])
 
         summary2, status2 = DashboardQueryService.get_executive_summary(self.workspace1.id)
         self.assertEqual(status2, 'HIT')
@@ -101,6 +115,30 @@ class QueryServiceTestCase(TestCase):
         self.assertEqual(sum1['totalSkus'], 10)
         self.assertEqual(sum2['totalSkus'], 1)
 
+    def test_dashboard_uses_active_gold_read_model_without_orm_scan(self):
+        version = self.session1.dataset_version_record
+        with patch(
+            'supplyforge.services.lakehouse_ingestion.StorageBackend.save_processed_bytes',
+            return_value='/lake/gold/dashboard.json',
+        ) as save_dashboard:
+            LakehouseIngestionService.materialize_dashboard_gold(version)
+            cache.clear()
+
+            with patch(
+                'supplyforge.services.query_service.SlowMovingRiskAssessment.objects.filter',
+                side_effect=AssertionError('dashboard should use the gold read model'),
+            ):
+                summary, cache_status = DashboardQueryService.get_executive_summary(
+                    self.workspace1.id,
+                )
+
+        save_dashboard.assert_called_once()
+        self.assertEqual(cache_status, 'MISS')
+        self.assertTrue(summary['hasData'])
+        self.assertEqual(summary['totalSkus'], 10)
+        self.assertEqual(summary['datasetVersion'], 'v1.0')
+        self.assertFalse(summary['isStale'])
+
     def test_failopen_on_redis_error(self):
         """Verify failopen behavior direct to MySQL when cache.get raises Exception."""
         with patch.object(cache, 'get', side_effect=RuntimeError("Redis connection dropped")):
@@ -126,4 +164,3 @@ class QueryServiceTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['status'], 'SUCCESS')
         self.assertEqual(response.headers.get('X-Cache-Status'), 'REFRESHED')
-

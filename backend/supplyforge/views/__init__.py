@@ -118,10 +118,17 @@ from .export_views import (
 )
 from .job_views import (
     enqueue_upload_job, list_jobs, get_job_status,
-    cancel_job, retry_job, delete_job
+    cancel_job, retry_job, delete_job,
+    initiate_s3_multipart_upload, complete_s3_multipart_upload,
 )
 from .query_views import (
     get_cached_dashboard_summary, refresh_workspace_cache
+)
+from .mlops_governance import (
+    model_candidates, evaluate_model_candidate, approve_model_candidate,
+    record_model_drift, start_model_canary, promote_model_candidate,
+    rollback_model_candidate, training_manifests, label_feature_snapshot,
+    set_training_data_opt_in,
 )
 
 __all__ = [
@@ -133,7 +140,12 @@ __all__ = [
     'analyze_file', 'process_file', 'clear_data', 'process_file_async', 'get_ingestion_progress', 'cancel_ingestion_session', 'get_record_lineage', 'get_error_matrix',
     'tenant_delete_data', 'verify_tenant_context',
     'enqueue_upload_job', 'list_jobs', 'get_job_status', 'cancel_job', 'retry_job', 'delete_job',
+    'initiate_s3_multipart_upload', 'complete_s3_multipart_upload',
     'get_cached_dashboard_summary', 'refresh_workspace_cache',
+    'model_candidates', 'evaluate_model_candidate', 'approve_model_candidate',
+    'record_model_drift', 'start_model_canary', 'promote_model_candidate',
+    'rollback_model_candidate', 'training_manifests', 'label_feature_snapshot',
+    'set_training_data_opt_in',
     'refresh_dead_stock', 'get_dead_stock', 'get_aging',
     'get_portfolio_command', 'get_financial_analysis',
     'get_sku_xai',
@@ -190,6 +202,4 @@ __all__ = [
     'ExportRiskReportView', 'ExportCapitalReportView',
     'ExportDecisionReportView', 'ExportActionPlanReportView'
 ]
-
-
 

@@ -1,4 +1,3 @@
-import tempfile
 from unittest.mock import patch
 from pathlib import Path
 
@@ -16,7 +15,7 @@ from supplyforge.middleware import (
 from supplyforge.models import CopilotConversation, IngestionSession, Product, User, Workspace
 from supplyforge.request_identity import get_client_ip
 from supplyforge.db_router import ReadReplicaRouter
-from supplyforge.services.storage_backend import StorageBackend
+from supplyforge.services.storage_backend import S3StorageBackend, StorageBackend
 
 
 class HighSecurityTests(SimpleTestCase):
@@ -107,9 +106,19 @@ class HighSecurityTests(SimpleTestCase):
         self.assertEqual(get_client_ip(trusted), '198.51.100.20')
         self.assertEqual(get_client_ip(untrusted), '198.51.100.30')
 
+    @override_settings(TRUSTED_PROXY_IPS=('10.0.0.0/16',))
+    def test_forwarded_ip_is_accepted_from_configured_proxy_cidr(self):
+        factory = RequestFactory()
+        request = factory.get(
+            '/api/v1/ping',
+            REMOTE_ADDR='10.0.22.17',
+            HTTP_X_FORWARDED_FOR='198.51.100.99, 10.0.22.17',
+        )
+        self.assertEqual(get_client_ip(request), '198.51.100.99')
+
     @override_settings(
         STORAGE_BACKEND='local',
-        INGESTION_UPLOAD_DIR=tempfile.gettempdir(),
+        INGESTION_UPLOAD_DIR='/tmp',
     )
     def test_local_storage_round_trip_isolated_from_upload_name(self):
         content = b'order_id,sku\norder-1,sku-1\n'
@@ -173,6 +182,46 @@ class HighSecurityTests(SimpleTestCase):
 
         StorageBackend.delete(path)
         self.assertFalse(StorageBackend.exists(path))
+
+    @override_settings(
+        STORAGE_BACKEND='s3',
+        S3_AUTH_MODE='auto',
+        S3_BUCKET='supplyforge-test',
+        S3_ENDPOINT_URL='',
+        S3_ACCESS_KEY='',
+        S3_SECRET_KEY='',
+        S3_REGION='ap-southeast-1',
+    )
+    @patch('boto3.client')
+    def test_s3_auto_auth_uses_aws_sdk_credential_chain(self, client_factory):
+        S3StorageBackend()
+
+        client_factory.assert_called_once_with(
+            's3',
+            endpoint_url=None,
+            region_name='ap-southeast-1',
+        )
+
+    @override_settings(
+        STORAGE_BACKEND='s3',
+        S3_AUTH_MODE='static',
+        S3_BUCKET='supplyforge-test',
+        S3_ENDPOINT_URL='http://minio:9000',
+        S3_ACCESS_KEY='access',
+        S3_SECRET_KEY='secret',
+        S3_REGION='us-east-1',
+    )
+    @patch('boto3.client')
+    def test_s3_static_auth_passes_explicit_credentials(self, client_factory):
+        S3StorageBackend()
+
+        client_factory.assert_called_once_with(
+            's3',
+            endpoint_url='http://minio:9000',
+            region_name='us-east-1',
+            aws_access_key_id='access',
+            aws_secret_access_key='secret',
+        )
 
 
 class HighSecurityDatabaseTests(TestCase):

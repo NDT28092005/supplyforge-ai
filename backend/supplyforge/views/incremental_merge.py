@@ -19,7 +19,7 @@ from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 
-from supplyforge.models import IngestionSession
+from supplyforge.models import DatasetVersion, IngestionSession
 from supplyforge.services.storage_backend import StorageBackend
 
 # Add project root to sys.path
@@ -122,23 +122,33 @@ def get_merge_report(request, session_id):
 
 @api_view(['GET'])
 def get_dataset_versions(request, session_id):
-    """Retrieve dataset versions and historical mutation audit log."""
-    reports_dir = os.path.join(PROJECT_ROOT, 'reports')
-    version_file = os.path.join(reports_dir, 'dataset_version.json')
-    audit_file = os.path.join(reports_dir, 'dataset_audit_log.json')
+    """Return tenant-scoped immutable lake versions, never shared report files."""
+    if not (
+        getattr(request, 'tenant_context_validated', False)
+        and getattr(request, 'workspace_id', None)
+    ):
+        return Response({'error': 'Yêu cầu cần Authorization Bearer token.'}, status=status.HTTP_401_UNAUTHORIZED)
+    try:
+        session = IngestionSession.objects.get(id=session_id, workspace_id=request.workspace_id)
+    except IngestionSession.DoesNotExist:
+        return Response({'error': 'Không tìm thấy phiên ingestion.'}, status=status.HTTP_404_NOT_FOUND)
 
-    version_info = {}
-    audit_log = []
-
-    if os.path.exists(version_file):
-        with open(version_file, 'r', encoding='utf-8') as f:
-            version_info = json.load(f)
-
-    if os.path.exists(audit_file):
-        with open(audit_file, 'r', encoding='utf-8') as f:
-            audit_log = json.load(f)
-
+    versions = DatasetVersion.objects.filter(workspace_id=session.workspace_id).order_by('-version_number')
     return Response({
-        'versionInfo': version_info,
-        'auditLog': audit_log,
+        'currentVersion': next((item.version_label for item in versions if item.status == DatasetVersion.STATUS_ACTIVE), None),
+        'versions': [
+            {
+                'id': str(item.id),
+                'version': item.version_label,
+                'parentVersion': item.parent_version.version_label if item.parent_version else None,
+                'importType': item.import_type,
+                'status': item.status,
+                'rows': item.row_count,
+                'validRows': item.valid_row_count,
+                'rejectedRows': item.rejected_row_count,
+                'dataAsOf': item.data_as_of.isoformat() if item.data_as_of else None,
+                'createdAt': item.created_at.isoformat(),
+            }
+            for item in versions
+        ],
     })

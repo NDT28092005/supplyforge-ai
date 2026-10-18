@@ -163,6 +163,8 @@ class DynamicFileImportService:
         force_reset=False,
         session_id=None,
         workspace_id=None,
+        run_post_import_hooks=True,
+        source_line_offset=0,
     ):
         """Execute IR-003, IR-004, IR-007 & IR-008 Import pipeline with Prometheus Telemetry instrumentation."""
         import time
@@ -176,6 +178,8 @@ class DynamicFileImportService:
                 force_reset=force_reset,
                 session_id=session_id,
                 workspace_id=workspace_id,
+                run_post_import_hooks=run_post_import_hooks,
+                source_line_offset=source_line_offset,
             )
             duration = time.monotonic() - start_time
             record_ingestion(
@@ -205,6 +209,8 @@ class DynamicFileImportService:
         force_reset=False,
         session_id=None,
         workspace_id=None,
+        run_post_import_hooks=True,
+        source_line_offset=0,
     ):
         """Execute IR-003, IR-004, IR-007 & IR-008 Import pipeline:
         Upload → Validate → Schema Mapping → Data Cleaning → Deduplication / Data Correction Upsert → Persist → DATA_READY
@@ -231,7 +237,6 @@ class DynamicFileImportService:
         
         e_start = None
         e_end = None
-        existing_order_ids = set()
         existing_items_map = {}
         existing_orders_map = {}
         before_sku_count = existing_products_count if is_incremental else 0
@@ -239,10 +244,6 @@ class DynamicFileImportService:
         if is_incremental:
             e_start = existing_orders.aggregate(Min('created_at'))['created_at__min']
             e_end = existing_orders.aggregate(Max('created_at'))['created_at__max']
-            existing_order_ids = set(existing_orders.values_list('order_id', flat=True))
-            existing_orders_map = {o.order_id: o for o in existing_orders}
-            for item in OrderItem.objects.filter(order__user_id=user_id).select_related('order'):
-                existing_items_map[(item.order.order_id, item.sku)] = item
         if hasattr(file_obj, 'seek'):
             file_obj.seek(0)
             
@@ -317,6 +318,33 @@ class DynamicFileImportService:
         order_id_idx = find_index('orderId', ['mã đơn hàng', 'mã đơn', 'order id', 'order no', 'order'])
         buyer_idx = find_index('buyerUsername', ['buyer username', 'khách hàng', 'buyer'])
         expiry_idx = find_index('expirationDate', ['expiration date', 'hạn sử dụng', 'expiry', 'hsd'])
+
+        # Only hydrate existing facts that can collide with this bounded batch.
+        # Loading every historical order/item turns an incremental import into
+        # unbounded memory as a merchant's history grows.
+        if is_incremental and order_id_idx is not None:
+            candidate_order_ids = {
+                row[order_id_idx].strip()
+                for row in (
+                    DynamicFileImportService.parse_csv_line(line)
+                    for line in lines[1:]
+                    if line.strip()
+                )
+                if order_id_idx < len(row) and row[order_id_idx].strip()
+            }
+            if candidate_order_ids:
+                matching_orders = Order.objects.filter(
+                    user_id=user_id,
+                    order_id__in=candidate_order_ids,
+                )
+                existing_orders_map = {order.order_id: order for order in matching_orders}
+                for item in (
+                    OrderItem.objects.filter(
+                        order__user_id=user_id,
+                        order__order_id__in=candidate_order_ids,
+                    ).select_related('order')
+                ):
+                    existing_items_map[(item.order.order_id, item.sku)] = item
 
         # --- Stage 4: Data Cleaning Helpers ---
         from django.utils import timezone
@@ -495,7 +523,10 @@ class DynamicFileImportService:
             sku_val = raw_sku.upper()
             name_val = get_col(name_idx) or sku_val
             stock_val = parse_int(get_col(stock_idx)) if stock_idx is not None else None
-            order_id_val = get_col(order_id_idx) or f"ORD_{len(order_rows)+1}"
+            # ``idx`` is local to one bounded CSV batch. Include the source
+            # offset so fallback keys remain stable and unique across batches.
+            source_line_number = source_line_offset + idx
+            order_id_val = get_col(order_id_idx) or f"AUTO-{session_id or import_time}-{source_line_number}"
             buyer_val = get_col(buyer_idx) or "shopee_buyer"
             exp_date_val = parse_date(get_col(expiry_idx))
 
@@ -691,7 +722,11 @@ class DynamicFileImportService:
         }
 
         existing_products_dict = {
-            p.item_sku: p for p in Product.objects.filter(user_id=user_id)
+            p.item_sku: p
+            for p in Product.objects.filter(
+                user_id=user_id,
+                item_sku__in=list(sku_catalog),
+            )
         }
         products_to_create = []
         products_to_update = []
@@ -810,43 +845,46 @@ class DynamicFileImportService:
         if items_to_create:
             OrderItem.objects.bulk_create(items_to_create, batch_size=2000)
 
-        # IR-016: Export processed canonical snapshot to /processed directory
-        try:
-            processed_filename = f"{session_id or uuid.uuid4().hex}_processed.json"
+        # Derived artifacts and expensive analytics run once after the final
+        # bounded batch, not once per chunk.
+        if run_post_import_hooks:
+            try:
+                processed_filename = f"{session_id or uuid.uuid4().hex}_processed.json"
 
-            processed_payload = {
-                "import_id": import_id_str,
-                "session_id": str(session_id) if session_id else None,
-                "original_filename": file_name_str,
-                "processed_at": datetime.now().isoformat(),
-                "summary": {
-                    "total_products_created": len(products_to_create),
-                    "total_orders_created": len(orders_to_create),
-                    "total_order_items": len(items_to_create),
-                    "duplicate_rows": duplicate_rows_count,
-                    "updated_rows": updated_rows_count,
-                    "rejected_rows": rows_rejected_count
-                },
-                "canonical_skus": list(sku_catalog.keys()),
-                "data_corrections": data_corrections_log
-            }
+                processed_payload = {
+                    "import_id": import_id_str,
+                    "session_id": str(session_id) if session_id else None,
+                    "original_filename": file_name_str,
+                    "processed_at": datetime.now().isoformat(),
+                    "summary": {
+                        "total_products_created": len(products_to_create),
+                        "total_orders_created": len(orders_to_create),
+                        "total_order_items": len(items_to_create),
+                        "duplicate_rows": duplicate_rows_count,
+                        "updated_rows": updated_rows_count,
+                        "rejected_rows": rows_rejected_count
+                    },
+                    "canonical_skus": list(sku_catalog.keys()),
+                    "data_corrections": data_corrections_log
+                }
 
-            processed_filepath = StorageBackend.save_bytes(
-                json.dumps(
-                    processed_payload,
-                    ensure_ascii=False,
-                    indent=2,
-                ).encode('utf-8'),
-                f"processed/{processed_filename}",
-            )
+                processed_workspace_id = session_obj.workspace_id if session_obj else workspace_id
+                processed_filepath = StorageBackend.save_processed_bytes(
+                    json.dumps(
+                        processed_payload,
+                        ensure_ascii=False,
+                        indent=2,
+                    ).encode('utf-8'),
+                    f"gold/workspace-{processed_workspace_id}/sessions/{session_id or 'legacy'}/{processed_filename}",
+                )
 
-            if session_obj:
-                session_obj.processed_storage_path = processed_filepath
-        except Exception as proc_err:
-            logger.exception('[Import Pipeline] Processed storage dump failed')
+                if session_obj:
+                    session_obj.processed_storage_path = processed_filepath
+            except Exception:
+                logger.exception('[Import Pipeline] Processed storage dump failed')
 
         # Update IngestionSession history if session_id is provided or session exists
-        if session_obj:
+        if session_obj and run_post_import_hooks:
             try:
                 session_obj.incremental_merge_json = {
                     "duplicate_rows": duplicate_rows_count,
@@ -859,8 +897,6 @@ class DynamicFileImportService:
                 hist['audit_trail'] = hist.get('audit_trail', []) + data_corrections_log
                 hist['rejected_rows'] = hist.get('rejected_rows', []) + rejected_rows_log
                 session_obj.ingestion_history_json = hist
-                if updated_rows_count > 0:
-                    session_obj.dataset_version = f"v{1.0 + updated_rows_count * 0.1:.1f}"
                 session_obj.save()
             except Exception as exc:
                 print(f"[Import Pipeline] IngestionSession audit update warning: {exc}")
@@ -869,23 +905,25 @@ class DynamicFileImportService:
         new_rows_count = len(items_to_create)
         rows_valid_count = new_rows_count
 
-        from supplyforge.services.dataset_consistency import DatasetConsistencyValidator
-        import_stats = {
-            'total_rows': rows_received,
-            'processed_rows': new_rows_count,
-            'new_sku_count': len(products_to_create),
-            'updated_sku_count': updated_rows_count,
-            'duplicate_rows': duplicate_rows_count,
-            'rejected_rows': rows_rejected_count,
-            'min_date': inc_start_d,
-            'max_date': inc_end_d
-        }
-        consistency_report = DatasetConsistencyValidator.validate_post_import(
-            user_id, session_obj, before_sku_count, import_stats
-        )
+        consistency_report = None
+        if run_post_import_hooks:
+            from supplyforge.services.dataset_consistency import DatasetConsistencyValidator
+            import_stats = {
+                'total_rows': rows_received,
+                'processed_rows': new_rows_count,
+                'new_sku_count': len(products_to_create),
+                'updated_sku_count': updated_rows_count,
+                'duplicate_rows': duplicate_rows_count,
+                'rejected_rows': rows_rejected_count,
+                'min_date': inc_start_d,
+                'max_date': inc_end_d
+            }
+            consistency_report = DatasetConsistencyValidator.validate_post_import(
+                user_id, session_obj, before_sku_count, import_stats
+            )
 
         # IR-018: Dequeue next session if available for workspace
-        if session_obj and session_obj.workspace:
+        if run_post_import_hooks and session_obj and session_obj.workspace:
             try:
                 from supplyforge.services.concurrency_manager import ImportConcurrencyManager
                 ImportConcurrencyManager.dequeue_next_session(session_obj.workspace.id)
@@ -893,14 +931,16 @@ class DynamicFileImportService:
                 print(f"[Import Pipeline] Dequeue warning: {dq_err}")
 
         # Trigger Analytics Pre-computations (Module 03-06)
-        try:
-            from supplyforge.services.financial import InventoryFinancialEngineService
-            from supplyforge.views.risk_assessment_api import _auto_populate_assessments_from_products
+        if run_post_import_hooks:
+            try:
+                from supplyforge.services.financial import InventoryFinancialEngineService
+                from supplyforge.views.risk_assessment_api import _auto_populate_assessments_from_products
 
-            InventoryFinancialEngineService.calculate_aging_and_hidden_costs(user_id)
-            _auto_populate_assessments_from_products()
-        except Exception as exc:
-            print(f"[Import Pipeline] Auto-run analytics warning: {exc}")
+                InventoryFinancialEngineService.calculate_aging_and_hidden_costs(user_id)
+                if session_obj:
+                    _auto_populate_assessments_from_products(str(session_obj.id))
+            except Exception as exc:
+                print(f"[Import Pipeline] Auto-run analytics warning: {exc}")
 
         temporal_range = {
             "existing_start": e_start_d.strftime("%Y-%m-%d") if (is_incremental and e_start_d) else None,
@@ -951,11 +991,12 @@ class DynamicFileImportService:
         replacement must never remove prior training snapshots or other tenants.
         """
         user_key = str(user_id)
-        active_products = list(Product.objects.filter(user_id=user_key).values())
-        active_orders = list(Order.objects.filter(user_id=user_key).values())
-        active_order_items = list(
-            OrderItem.objects.filter(order__user_id=user_key).values()
-        )
+        active_products = Product.objects.filter(user_id=user_key)
+        active_orders = Order.objects.filter(user_id=user_key)
+        active_order_items = OrderItem.objects.filter(order__user_id=user_key)
+        product_count = active_products.count()
+        order_count = active_orders.count()
+        item_count = active_order_items.count()
 
         def json_safe(record):
             return {
@@ -965,19 +1006,34 @@ class DynamicFileImportService:
                 for key, value in record.items()
             }
 
+        snapshot_limit = settings.INGESTION_ARCHIVE_SNAPSHOT_ROW_LIMIT
+
+        def snapshot_rows(queryset):
+            # The complete trainable history is immutable in lake versions.
+            # Keep only a bounded audit sample in transactional MySQL.
+            return [
+                json_safe(record)
+                for record in queryset.values()[:snapshot_limit]
+            ]
+
         archive = None
-        if active_products or active_orders or active_order_items:
+        if product_count or order_count or item_count:
             archive = ArchivedDataSet.objects.create(
                 user_id=user_key,
                 reason='INITIAL_IMPORT_REPLACED',
-                product_count=len(active_products),
-                order_count=len(active_orders),
+                product_count=product_count,
+                order_count=order_count,
                 snapshot_json={
                     'workspace_id': workspace_id,
                     'replaced_by_session_id': str(current_session_id) if current_session_id else None,
-                    'products': [json_safe(record) for record in active_products],
-                    'orders': [json_safe(record) for record in active_orders],
-                    'order_items': [json_safe(record) for record in active_order_items],
+                    'snapshot_row_limit': snapshot_limit,
+                    'snapshot_truncated': any(
+                        count > snapshot_limit
+                        for count in (product_count, order_count, item_count)
+                    ),
+                    'products': snapshot_rows(active_products),
+                    'orders': snapshot_rows(active_orders),
+                    'order_items': snapshot_rows(active_order_items),
                 },
             )
 
@@ -1014,6 +1070,8 @@ class DynamicFileImportService:
         import io
         if isinstance(file_path_or_stream, str):
             f = io.open(file_path_or_stream, 'r', encoding='utf-8', errors='replace')
+        elif isinstance(file_path_or_stream, io.TextIOBase):
+            f = file_path_or_stream
         elif hasattr(file_path_or_stream, 'read'):
             f = io.TextIOWrapper(file_path_or_stream, encoding='utf-8', errors='replace')
         else:
@@ -1037,7 +1095,18 @@ class DynamicFileImportService:
                 f.close()
 
     @staticmethod
-    def process_file_in_chunks(file_path, mapping_rule, user_id, session_type='INITIAL', force_reset=False, session_id=None, workspace_id=None, chunk_size=50000):
+    def process_file_in_chunks(
+        file_path,
+        mapping_rule,
+        user_id,
+        session_type='INITIAL',
+        force_reset=False,
+        session_id=None,
+        workspace_id=None,
+        chunk_size=None,
+        run_post_import_hooks=True,
+        progress_callback=None,
+    ):
         """
         Requirement #24 & NFR-IMP-002: Bounded memory chunked streaming processing engine.
         Processes large CSV files in 50,000 row batches (CHUNK_ROW_SIZE), garbage collecting
@@ -1046,24 +1115,101 @@ class DynamicFileImportService:
         import io
         from supplyforge.services.nfr_manager import NFRManager
 
-        total_result = None
-        for idx, (header_line, chunk_lines) in enumerate(DynamicFileImportService.read_csv_in_chunks(file_path, chunk_size=chunk_size)):
-            chunk_csv = header_line + "".join(chunk_lines)
-            chunk_io = io.BytesIO(chunk_csv.encode('utf-8'))
+        chunk_size = chunk_size or settings.INGESTION_CHUNK_ROW_SIZE
+        iterator = iter(DynamicFileImportService.read_csv_in_chunks(file_path, chunk_size=chunk_size))
+        current = next(iterator, None)
+        if current is None:
+            return {"status": "REJECT", "error": "ERR_EMPTY_FILE"}
 
-            chunk_session_type = session_type if idx == 0 else 'INCREMENTAL'
-            chunk_force_reset = force_reset if idx == 0 else False
+        aggregate = None
 
-            res = DynamicFileImportService.process_batch_import(
-                chunk_io, mapping_rule, user_id,
-                session_type=chunk_session_type,
-                force_reset=chunk_force_reset,
-                session_id=session_id,
-                workspace_id=workspace_id,
-            )
-            total_result = res
+        def append_limited(current_rows, incoming_rows):
+            remaining = max(0, settings.INGESTION_MAX_REPORTED_ERRORS - len(current_rows))
+            if remaining:
+                current_rows.extend(incoming_rows[:remaining])
 
-            del chunk_csv, chunk_io, chunk_lines
-            NFRManager.release_chunk_memory()
+        def merge_result(total, result):
+            if total is None:
+                total = {
+                    'status': 'DATA_READY',
+                    'import_type': session_type,
+                    'schema_matched': True,
+                    'overlap_detected': False,
+                    'temporal_range': result.get('temporal_range', {}),
+                    'data_corrections': [],
+                    'rejected_rows': [],
+                    'dataset_consistency': None,
+                }
+                for field in (
+                    'rows_received', 'new_rows', 'rows_valid', 'rows_rejected',
+                    'rows_appended', 'duplicate_rows', 'updated_rows', 'warnings',
+                ):
+                    total[field] = 0
+            for field in (
+                'rows_received', 'new_rows', 'rows_valid', 'rows_rejected',
+                'rows_appended', 'duplicate_rows', 'updated_rows', 'warnings',
+            ):
+                total[field] += int(result.get(field) or 0)
+            append_limited(total['data_corrections'], result.get('data_corrections') or [])
+            append_limited(total['rejected_rows'], result.get('rejected_rows') or [])
+            total['overlap_detected'] = total['overlap_detected'] or bool(result.get('overlap_detected'))
+            if result.get('temporal_range'):
+                total['temporal_range'] = result['temporal_range']
+            if result.get('dataset_consistency') is not None:
+                total['dataset_consistency'] = result['dataset_consistency']
+            for field in ('products_count', 'orders_count', 'order_items_count'):
+                total[field] = result.get(field, total.get(field, 0))
+            return total
 
-        return total_result or {"status": "REJECT", "error": "ERR_EMPTY_FILE"}
+        # Keep one outer transaction so an INITIAL import cannot expose a
+        # partially replaced operational projection if a later batch fails.
+        with transaction.atomic():
+            batch_index = 0
+            source_line_offset = 0
+            while current is not None:
+                following = next(iterator, None)
+                header_line, chunk_lines = current
+                chunk_csv = header_line + ''.join(chunk_lines)
+                chunk_io = io.BytesIO(chunk_csv.encode('utf-8'))
+                is_last_batch = following is None
+                result = DynamicFileImportService.process_batch_import(
+                    chunk_io,
+                    mapping_rule,
+                    user_id,
+                    session_type=session_type if batch_index == 0 else 'INCREMENTAL',
+                    force_reset=force_reset if batch_index == 0 else False,
+                    session_id=session_id,
+                    workspace_id=workspace_id,
+                    run_post_import_hooks=is_last_batch and run_post_import_hooks,
+                    source_line_offset=source_line_offset,
+                )
+                aggregate = merge_result(aggregate, result)
+
+                source_line_offset += len(chunk_lines)
+                if progress_callback:
+                    progress_callback({
+                        'phase': 'OPERATIONAL_IMPORT',
+                        'rowsProcessed': source_line_offset,
+                        'batchNumber': batch_index + 1,
+                    })
+                del chunk_csv, chunk_io, chunk_lines
+                NFRManager.release_chunk_memory()
+                current = following
+                batch_index += 1
+
+            if session_id:
+                try:
+                    session = IngestionSession.objects.get(id=session_id)
+                    session.incremental_merge_json = {
+                        'duplicate_rows': aggregate['duplicate_rows'],
+                        'updated_rows': aggregate['updated_rows'],
+                        'new_rows': aggregate['new_rows'],
+                        'data_corrections': aggregate['data_corrections'],
+                        'rejected_rows': aggregate['rejected_rows'],
+                        'batch_count': batch_index,
+                    }
+                    session.save(update_fields=['incremental_merge_json', 'updated_at'])
+                except IngestionSession.DoesNotExist:
+                    pass
+
+        return aggregate

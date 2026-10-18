@@ -7,7 +7,6 @@ cancellation, retry, and upload job creation.
 
 import logging
 import hashlib
-import threading
 from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -15,7 +14,11 @@ from rest_framework import status
 
 from supplyforge.models import BackgroundJob, IngestionSession, Workspace
 from supplyforge.services.csv_profiler import StreamingCSVProfiler, humanize_bytes
-from supplyforge.tasks import run_import_pipeline
+from supplyforge.services.ingestion_jobs import create_or_get_import_job, dispatch_import_job
+from supplyforge.services.s3_multipart_ingestion import (
+    MultipartUploadError,
+    S3MultipartIngestionService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +28,38 @@ def _safe_job_error(job):
     if job.status == 'FAILED' and job.error_message:
         return 'Tiến trình import thất bại. Vui lòng thử lại.'
     return job.error_message
+
+
+def _dataset_metadata(session):
+    """Expose a safe freshness marker without leaking lake object paths."""
+    if not session:
+        return {'datasetVersion': None, 'dataAsOf': None, 'isStale': True}
+    try:
+        version = session.dataset_version_record
+    except Exception:
+        version = None
+    return {
+        'datasetVersion': version.version_label if version else session.dataset_version,
+        'dataAsOf': version.data_as_of.isoformat() if version and version.data_as_of else None,
+        'isStale': not bool(version and version.status == 'ACTIVE'),
+    }
+
+
+def _execution_metadata(job):
+    """Expose bounded worker progress without storage paths or internal errors."""
+    importing = (job.stages_json or {}).get('IMPORTING') or {}
+    return {
+        'estimatedTimeRemaining': importing.get('estimatedTimeRemainingSeconds'),
+        'estimatedCompletionAt': importing.get('estimatedCompletionAt'),
+        'partitionProgress': importing.get('partitionProgress'),
+        'checkpoint': importing.get('checkpoint'),
+        'importPhase': importing.get('phase'),
+    }
+
+
+def _import_is_published(job):
+    checkpoint = ((job.stages_json or {}).get('IMPORTING') or {}).get('checkpoint') or {}
+    return checkpoint.get('phase') == 'PUBLISHED'
 
 
 def _get_workspace_from_request(request):
@@ -47,14 +82,7 @@ def _dispatch_background_job(job_id: str) -> str:
     or falls back to background Thread execution if Celery/Redis is unavailable.
     Guarantees tasks run to completion in development and production environments.
     """
-    try:
-        async_res = run_import_pipeline.delay(str(job_id))
-        return str(async_res.id)
-    except Exception as e:
-        logger.warning(f"Celery dispatch notice for job {job_id}: {e}. Running via Threading fallback executor.")
-        t = threading.Thread(target=run_import_pipeline, args=(str(job_id),), daemon=True)
-        t.start()
-        return "thread-executor"
+    return dispatch_import_job(BackgroundJob.objects.get(id=job_id))
 
 
 @api_view(['POST'])
@@ -142,29 +170,10 @@ def enqueue_upload_job(request):
         status='QUEUED',
     )
 
-    # Create BackgroundJob record
-    job = BackgroundJob.objects.create(
-        workspace=workspace,
-        job_type='CSV_IMPORT',
-        ingestion_session=session,
-        idempotency_key=idempotency_key,
-        status='PENDING',
-        current_stage='PARSING',
-        progress_pct=0,
-        stages_json={
-            'PARSING': {'status': 'PENDING', 'progress': 0},
-            'PROFILING': {'status': 'PENDING', 'progress': 0},
-            'MAPPING': {'status': 'PENDING', 'progress': 0},
-            'IMPORTING': {'status': 'PENDING', 'progress': 0},
-            'ML_INFERENCE': {'status': 'PENDING', 'progress': 0},
-            'FINALIZING': {'status': 'PENDING', 'progress': 0},
-        }
-    )
+    job, _ = create_or_get_import_job(session, idempotency_key)
 
     # Dispatch background job task (Celery + Threading fallback)
-    task_id = _dispatch_background_job(str(job.id))
-    job.celery_task_id = task_id
-    job.save(update_fields=['celery_task_id', 'updated_at'])
+    _dispatch_background_job(str(job.id))
 
     return Response({
         'jobId': str(job.id),
@@ -177,6 +186,76 @@ def enqueue_upload_job(request):
             'fileHash': file_hash
         }
     }, status=status.HTTP_202_ACCEPTED)
+
+
+@api_view(['POST'])
+def initiate_s3_multipart_upload(request):
+    """Create a tenant-scoped multipart manifest without proxying the CSV."""
+    workspace = _get_workspace_from_request(request)
+    if workspace is None:
+        return Response({
+            'error': 'Yêu cầu cần Authorization Bearer token và workspace hợp lệ.',
+            'code': 'UNAUTHENTICATED',
+        }, status=status.HTTP_401_UNAUTHORIZED)
+
+    data = request.data
+    client_key = request.headers.get('Idempotency-Key') or data.get('idempotencyKey', '')
+    try:
+        payload = S3MultipartIngestionService.initiate(
+            workspace,
+            filename=data.get('filename', ''),
+            size_bytes=data.get('sizeBytes'),
+            content_type=data.get('contentType', 'text/csv'),
+            session_type=data.get('sessionType', 'INITIAL'),
+            client_idempotency_key=client_key,
+        )
+    except MultipartUploadError as exc:
+        return Response(
+            {'error': str(exc), 'code': 'S3_MULTIPART_INVALID'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except Exception:
+        logger.exception('Unable to initiate S3 multipart upload.')
+        return Response({
+            'error': 'Không thể khởi tạo cloud upload. Vui lòng thử lại.',
+            'code': 'S3_MULTIPART_INIT_FAILED',
+        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    response_status = status.HTTP_200_OK if payload['idempotentRetry'] else status.HTTP_201_CREATED
+    return Response(payload, status=response_status)
+
+
+@api_view(['POST'])
+def complete_s3_multipart_upload(request, session_id):
+    """Complete one upload and idempotently enqueue its import job."""
+    workspace = _get_workspace_from_request(request)
+    if workspace is None:
+        return Response({
+            'error': 'Yêu cầu cần Authorization Bearer token và workspace hợp lệ.',
+            'code': 'UNAUTHENTICATED',
+        }, status=status.HTTP_401_UNAUTHORIZED)
+
+    try:
+        payload, created = S3MultipartIngestionService.complete(
+            workspace,
+            str(session_id),
+            upload_id=request.data.get('uploadId', ''),
+            parts=request.data.get('parts'),
+        )
+    except MultipartUploadError as exc:
+        return Response(
+            {'error': str(exc), 'code': 'S3_MULTIPART_INVALID'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except Exception:
+        logger.exception('Unable to complete S3 multipart upload for session %s.', session_id)
+        return Response({
+            'error': 'Không thể hoàn tất cloud upload. Vui lòng thử lại.',
+            'code': 'S3_MULTIPART_COMPLETE_FAILED',
+        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    payload['idempotentRetry'] = not created
+    return Response(payload, status=status.HTTP_202_ACCEPTED)
 
 
 @api_view(['GET'])
@@ -199,18 +278,9 @@ def list_jobs(request):
     for job in jobs:
         sess = job.ingestion_session
 
-        # Auto-reconcile stale status:
-        # 1. CANCEL_REQUESTED -> CANCELLED
-        if job.status == 'CANCEL_REQUESTED':
-            job.status = 'CANCELLED'
-            job.completed_at = job.updated_at or now
-            job.save(update_fields=['status', 'completed_at', 'updated_at'])
-            if sess:
-                sess.status = 'CANCELLED'
-                sess.save(update_fields=['status', 'updated_at'])
-
-        # 2. PENDING or RUNNING stuck without updates for > 15 minutes (or without session)
-        elif job.status in ['PENDING', 'RUNNING']:
+        # Auto-reconcile only stale active workers. Cancellation remains
+        # requested until the worker reaches its next durable checkpoint.
+        if job.status in ['PENDING', 'RUNNING']:
             time_since_update = (now - (job.updated_at or job.created_at)).total_seconds()
             if time_since_update > 900 or not sess:  # 15 mins or missing session
                 job.status = 'FAILED'
@@ -223,7 +293,7 @@ def list_jobs(request):
         )
         filesize = sess.file_size_bytes if sess else 0
 
-        data.append({
+        job_payload = {
             'jobId': str(job.id),
             'jobType': job.job_type,
             'status': job.status,
@@ -240,7 +310,10 @@ def list_jobs(request):
             'completedAt': job.completed_at.isoformat() if job.completed_at else None,
             'errorMessage': _safe_job_error(job),
             'resultSummary': job.result_summary_json or {},
-        })
+        }
+        job_payload.update(_dataset_metadata(sess))
+        job_payload.update(_execution_metadata(job))
+        data.append(job_payload)
 
     return Response({'jobs': data}, status=status.HTTP_200_OK)
 
@@ -268,14 +341,13 @@ def get_job_status(request, job_id):
     )
     filesize = sess.file_size_bytes if sess else 0
 
-    return Response({
+    payload = {
         'jobId': str(job.id),
         'jobType': job.job_type,
         'status': job.status,
         'currentStage': job.current_stage,
         'progressPct': job.progress_pct,
         'stages': job.stages_json or {},
-        'estimatedTimeRemaining': None,
         'retryCount': job.retry_count,
         'file': {
             'originalFilename': filename,
@@ -286,14 +358,17 @@ def get_job_status(request, job_id):
         'completedAt': job.completed_at.isoformat() if job.completed_at else None,
         'errorMessage': _safe_job_error(job),
         'resultSummary': job.result_summary_json or {},
-    }, status=status.HTTP_200_OK)
+    }
+    payload.update(_dataset_metadata(sess))
+    payload.update(_execution_metadata(job))
+    return Response(payload, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
 def cancel_job(request, job_id):
     """
     POST /api/v2/jobs/<job_id>/cancel
-    Immediately cancels the background job and moves it to history.
+    Requests cooperative cancellation at the next durable worker checkpoint.
     """
     workspace = _get_workspace_from_request(request)
     if workspace is None:
@@ -313,18 +388,20 @@ def cancel_job(request, job_id):
             'message': f'Job đã ở trạng thái {job.status}, không thể hủy.'
         }, status=status.HTTP_400_BAD_REQUEST)
 
-    job.status = 'CANCELLED'
-    job.completed_at = timezone.now()
-    job.save(update_fields=['status', 'completed_at', 'updated_at'])
+    if _import_is_published(job):
+        return Response({
+            'jobId': str(job.id),
+            'status': job.status,
+            'message': 'Dataset đã được publish, không thể hủy mà không làm mất tính nhất quán.',
+        }, status=status.HTTP_409_CONFLICT)
 
-    if job.ingestion_session:
-        job.ingestion_session.status = 'CANCELLED'
-        job.ingestion_session.save(update_fields=['status', 'updated_at'])
+    job.status = 'CANCEL_REQUESTED'
+    job.save(update_fields=['status', 'updated_at'])
 
     return Response({
         'jobId': str(job.id),
-        'status': 'CANCELLED',
-        'message': 'Đã hủy công việc xử lý ngầm thành công.'
+        'status': 'CANCEL_REQUESTED',
+        'message': 'Đã yêu cầu hủy. Worker sẽ dừng tại checkpoint an toàn kế tiếp.'
     }, status=status.HTTP_200_OK)
 
 
@@ -391,12 +468,15 @@ def retry_job(request, job_id):
     }, status=status.HTTP_200_OK)
 
 
-@api_view(['DELETE'])
+@api_view(['GET', 'DELETE'])
 def delete_job(request, job_id):
     """
-    DELETE /api/v2/jobs/<job_id>
-    Delete background job record.
+    GET /api/v2/jobs/<job_id> returns the status contract.
+    DELETE /api/v2/jobs/<job_id> deletes the background job record.
     """
+    if request.method == 'GET':
+        return get_job_status(request, job_id)
+
     workspace = _get_workspace_from_request(request)
     if workspace is None:
         return Response({

@@ -78,6 +78,8 @@ class Workspace(models.Model):
     slug = models.CharField(max_length=80, unique=True, null=True, blank=True)
     owner = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, db_column='owner_user_id')
     gemini_api_key = models.CharField(max_length=255, null=True, blank=True)
+    # Cross-tenant research data is excluded unless every source workspace opts in.
+    training_data_opt_in = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

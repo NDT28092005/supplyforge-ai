@@ -6,6 +6,8 @@ Never loads the entire file into memory.
 """
 
 import csv
+import hashlib
+import math
 import os
 import re
 import uuid
@@ -103,6 +105,10 @@ class ProfileResult:
 class StreamingCSVProfiler:
     """Streaming CSV profiler that never loads the full file into RAM."""
 
+    # A fixed 128 KiB linear-counting sketch keeps distinct SKU estimation
+    # bounded even when a workspace has millions of products.
+    UNIQUE_COUNT_SKETCH_BITS = 1 << 20
+
     # ── File I/O ──────────────────────────────────────────────────────
 
     @staticmethod
@@ -183,9 +189,19 @@ class StreamingCSVProfiler:
         row_count = 0
         missing_counts: Dict[int, int] = defaultdict(int)
         type_samples: Dict[int, List[str]] = defaultdict(list)
-        date_values: List[str] = []
-        sku_values: set = set()
+        date_samples: List[str] = []
+        date_min: Optional[datetime] = None
+        date_max: Optional[datetime] = None
         date_format_cache: Optional[str] = None
+        sku_sketch = bytearray(StreamingCSVProfiler.UNIQUE_COUNT_SKETCH_BITS // 8)
+        sku_buckets_used = 0
+
+        def update_date_range(value: str):
+            nonlocal date_min, date_max
+            parsed = StreamingCSVProfiler._try_parse_date(value, date_format_cache)
+            if parsed:
+                date_min = parsed if date_min is None or parsed < date_min else date_min
+                date_max = parsed if date_max is None or parsed > date_max else date_max
 
         with open(storage_path, 'r', encoding=encoding, errors='replace') as f:
             reader = csv.reader(f)
@@ -214,20 +230,31 @@ class StreamingCSVProfiler:
                 if date_col_idx is not None and date_col_idx < len(row):
                     val = row[date_col_idx].strip()
                     if val:
-                        date_values.append(val)
+                        if date_format_cache:
+                            update_date_range(val)
+                        elif len(date_samples) < 50:
+                            date_samples.append(val)
+                            if len(date_samples) == 50:
+                                date_format_cache = StreamingCSVProfiler._detect_date_format(date_samples)
+                                if date_format_cache:
+                                    for sampled_value in date_samples:
+                                        update_date_range(sampled_value)
 
                 # SKU column extraction
                 if sku_col_idx is not None and sku_col_idx < len(row):
                     val = row[sku_col_idx].strip()
                     if val:
-                        sku_values.add(val)
+                        sku_buckets_used += StreamingCSVProfiler._add_to_unique_sketch(
+                            sku_sketch,
+                            val,
+                        )
 
         result.total_rows = row_count
 
-        # Quantified SLA Check for IR-011: Maximum 5,000,000 rows
-        MAX_ROWS_LIMIT = 5_000_000
-        if row_count > MAX_ROWS_LIMIT:
-            validation_res.add_error(f"Số lượng bản ghi quá lớn ({row_count:,} dòng, vượt quá giới hạn 5.000.000 dòng). Vui lòng chia nhỏ tệp CSV.")
+        # The local-first pipeline supports the planned 1-10 million-row range.
+        max_rows_limit = settings.INGESTION_MAX_ROWS
+        if row_count > max_rows_limit:
+            validation_res.add_error(f"Số lượng bản ghi quá lớn ({row_count:,} dòng, vượt quá giới hạn {max_rows_limit:,} dòng). Vui lòng chia nhỏ tệp CSV.")
             result.validation = validation_res.to_dict()
             return result
 
@@ -246,20 +273,17 @@ class StreamingCSVProfiler:
                 result.missing_values[col_name] = {'count': count, 'pct': pct}
 
         # Date range
-        if date_values:
-            date_format_cache = StreamingCSVProfiler._detect_date_format(date_values[:50])
+        if date_samples and not date_format_cache:
+            date_format_cache = StreamingCSVProfiler._detect_date_format(date_samples)
             if date_format_cache:
-                parsed_dates = []
-                for dv in date_values:
-                    d = StreamingCSVProfiler._try_parse_date(dv, date_format_cache)
-                    if d:
-                        parsed_dates.append(d)
-                if parsed_dates:
-                    result.date_range_start = min(parsed_dates).strftime('%Y-%m-%d')
-                    result.date_range_end = max(parsed_dates).strftime('%Y-%m-%d')
+                for sampled_value in date_samples:
+                    update_date_range(sampled_value)
+        if date_min and date_max:
+            result.date_range_start = date_min.strftime('%Y-%m-%d')
+            result.date_range_end = date_max.strftime('%Y-%m-%d')
 
         # SKU count
-        result.unique_sku_count = len(sku_values)
+        result.unique_sku_count = StreamingCSVProfiler._estimate_unique_count(sku_buckets_used)
 
         # If no SKU column was detected by keyword, try heuristic:
         # find the text column with the highest unique ratio
@@ -389,6 +413,29 @@ class StreamingCSVProfiler:
                 continue
         return None
 
+    @classmethod
+    def _add_to_unique_sketch(cls, sketch: bytearray, value: str) -> int:
+        """Mark a SKU in a fixed-memory linear-counting sketch."""
+        digest = hashlib.blake2b(value.encode('utf-8', errors='replace'), digest_size=8).digest()
+        index = int.from_bytes(digest, 'big') & (cls.UNIQUE_COUNT_SKETCH_BITS - 1)
+        byte_index, bit_index = divmod(index, 8)
+        bit_mask = 1 << bit_index
+        if sketch[byte_index] & bit_mask:
+            return 0
+        sketch[byte_index] |= bit_mask
+        return 1
+
+    @classmethod
+    def _estimate_unique_count(cls, buckets_used: int) -> int:
+        if buckets_used <= 0:
+            return 0
+        if buckets_used >= cls.UNIQUE_COUNT_SKETCH_BITS:
+            return cls.UNIQUE_COUNT_SKETCH_BITS
+        estimate = -cls.UNIQUE_COUNT_SKETCH_BITS * math.log(
+            1 - (buckets_used / cls.UNIQUE_COUNT_SKETCH_BITS)
+        )
+        return int(round(estimate))
+
     # ── Helper: heuristic SKU detection ───────────────────────────────
 
     @staticmethod
@@ -430,8 +477,9 @@ class StreamingCSVProfiler:
 
     @staticmethod
     def _count_unique_column(path: str, encoding: str, col_idx: int) -> int:
-        """Stream-count unique values in a specific column."""
-        unique_vals: set = set()
+        """Estimate unique values in a specific column with bounded memory."""
+        sketch = bytearray(StreamingCSVProfiler.UNIQUE_COUNT_SKETCH_BITS // 8)
+        buckets_used = 0
         with open(path, 'r', encoding=encoding, errors='replace') as f:
             reader = csv.reader(f)
             next(reader, None)
@@ -439,8 +487,8 @@ class StreamingCSVProfiler:
                 if col_idx < len(row):
                     val = row[col_idx].strip()
                     if val:
-                        unique_vals.add(val)
-        return len(unique_vals)
+                        buckets_used += StreamingCSVProfiler._add_to_unique_sketch(sketch, val)
+        return StreamingCSVProfiler._estimate_unique_count(buckets_used)
 
 
 def humanize_bytes(size_bytes: int) -> str:

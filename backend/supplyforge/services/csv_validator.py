@@ -20,6 +20,8 @@ class ValidationStatus:
 class CSVValidationResult:
     """Container holding validation status and detailed findings."""
 
+    MAX_REPORTED_CORRUPTED_ROWS = 1000
+
     def __init__(self):
         self.status: str = ValidationStatus.VALIDATED
         self.encoding: str = "utf-8"
@@ -42,6 +44,13 @@ class CSVValidationResult:
             self.status = ValidationStatus.WARNING
 
     def add_corrupted_row(self, line_number: int, raw_content: str, reason: str):
+        if len(self.corrupted_rows) >= self.MAX_REPORTED_CORRUPTED_ROWS:
+            if len(self.corrupted_rows) == self.MAX_REPORTED_CORRUPTED_ROWS:
+                self.warnings.append(
+                    f"Chỉ lưu {self.MAX_REPORTED_CORRUPTED_ROWS} lỗi dòng đầu tiên."
+                )
+                self.corrupted_rows.append({'line_number': None, 'truncated': True})
+            return
         self.corrupted_rows.append({
             "line_number": line_number,
             "raw_content": raw_content[:200],  # truncate long raw lines for safety
@@ -110,14 +119,26 @@ class CSVFormatValidator:
             return result
         result.encoding = detected_encoding
 
-        # 3. Detect delimiter & quotation syntax
-        text_content = self._get_text_stream(file_path_or_obj, is_file_path, detected_encoding)
-        if text_content is None:
+        # 3. Detect delimiter & quotation syntax. Keep the CSV as a stream:
+        # profiler and importer can validate multi-million-row files without
+        # constructing one giant decoded string in memory.
+        stream_info = self._get_text_stream(file_path_or_obj, is_file_path, detected_encoding)
+        if stream_info is None:
             result.add_error("Không thể đọc dữ liệu văn bản từ file.")
             return result
+        text_stream, close_stream, detach_stream = stream_info
+
+        def release_stream():
+            try:
+                if close_stream:
+                    text_stream.close()
+                elif detach_stream:
+                    text_stream.detach()
+            finally:
+                if not is_file_path and hasattr(file_path_or_obj, 'seek'):
+                    file_path_or_obj.seek(0)
 
         first_lines = []
-        text_stream = io.StringIO(text_content)
         for _ in range(20):
             line = text_stream.readline()
             if not line:
@@ -126,6 +147,7 @@ class CSVFormatValidator:
 
         if not first_lines:
             result.add_error("File rỗng (không có dòng dữ liệu).")
+            release_stream()
             return result
 
         sample_str = "".join(first_lines)
@@ -140,10 +162,12 @@ class CSVFormatValidator:
             first_row = next(reader, None)
         except Exception as e:
             result.add_error(f"Không thể parse header CSV với delimiter '{delimiter}': {str(e)}")
+            release_stream()
             return result
 
         if not first_row or len(first_row) == 0 or all(not str(cell).strip() for cell in first_row):
             result.add_error("Không có header hợp lệ.")
+            release_stream()
             return result
 
         raw_headers = [str(col).strip() for col in first_row]
@@ -162,6 +186,7 @@ class CSVFormatValidator:
         if duplicates:
             dup_str = ", ".join([f"'{d}'" for d in sorted(list(duplicates))])
             result.add_error(f"Phát hiện cột trùng lặp trong header: {dup_str}.")
+            release_stream()
             return result
 
         result.headers = raw_headers
@@ -174,6 +199,7 @@ class CSVFormatValidator:
             missing_cols = [req for req in required_columns if req.lower() not in headers_lower]
             if missing_cols:
                 result.add_error(f"Thiếu các cột bắt buộc: {', '.join(missing_cols)}.")
+                release_stream()
                 return result
         else:
             # Keyword heuristic required group check
@@ -185,6 +211,7 @@ class CSVFormatValidator:
                     break
             if not has_sku:
                 result.add_error("Thiếu required column: Không tìm thấy cột định danh sản phẩm (SKU/Tên sản phẩm/Mã SP).")
+                release_stream()
                 return result
 
         # Check for unexpected extra columns
@@ -247,6 +274,7 @@ class CSVFormatValidator:
         if total_data_rows == 0:
             result.add_error("File rỗng (chỉ có header, không có dòng dữ liệu).")
 
+        release_stream()
         return result
 
     @classmethod
@@ -280,21 +308,16 @@ class CSVFormatValidator:
         return None, "File không khớp với các encoding hỗ trợ (UTF-8, ASCII, ISO-8859-1, CP1252)."
 
     @classmethod
-    def _get_text_stream(cls, file_path_or_obj: Any, is_file_path: bool, encoding: str) -> Optional[str]:
-        """Retrieve full text content decoded with the confirmed encoding."""
+    def _get_text_stream(cls, file_path_or_obj: Any, is_file_path: bool, encoding: str):
+        """Open a seekable text stream without decoding the full source eagerly."""
         try:
             if is_file_path:
-                with open(file_path_or_obj, 'r', encoding=encoding, errors='replace') as f:
-                    return f.read()
-            else:
-                if hasattr(file_path_or_obj, 'seek'):
-                    file_path_or_obj.seek(0)
-                raw = file_path_or_obj.read()
-                if hasattr(file_path_or_obj, 'seek'):
-                    file_path_or_obj.seek(0)
-                if isinstance(raw, bytes):
-                    return raw.decode(encoding, errors='replace')
-                return raw
+                return open(file_path_or_obj, 'r', encoding=encoding, errors='replace'), True, False
+            if hasattr(file_path_or_obj, 'seek'):
+                file_path_or_obj.seek(0)
+            if isinstance(file_path_or_obj, io.TextIOBase):
+                return file_path_or_obj, False, False
+            return io.TextIOWrapper(file_path_or_obj, encoding=encoding, errors='replace'), False, True
         except Exception:
             return None
 

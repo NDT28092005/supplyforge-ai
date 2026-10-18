@@ -6,6 +6,7 @@ from .product import Sku, InventoryRecord, Product, SkuMergeHistory, IgnoredSkuP
 from .order import Order, OrderItem
 from .data_source import DataSource
 from .ingestion_session import IngestionSession
+from .dataset_version import DatasetVersion
 from .risk_assessment import SlowMovingRiskAssessment
 from .risk_monitoring import RiskMonitoringRun
 from .risk_explanation import RiskExplanationRecord
@@ -28,7 +29,7 @@ from .action_plan import ActionPlanRecord
 from .archived_dataset import ArchivedDataSet
 from .notification import NotificationRecord
 from .background_job import BackgroundJob
-from .mlops import TenantFeatureSnapshot, ModelVersion
+from .mlops import TenantFeatureSnapshot, TrainingDatasetManifest, ModelVersion
 
 __all__ = [
     'User', 'RefreshToken', 'Workspace', 'WorkspaceMember',
@@ -36,6 +37,7 @@ __all__ = [
     'Order', 'OrderItem',
     'DataSource',
     'IngestionSession',
+    'DatasetVersion',
     'ArchivedDataSet',
     'SlowMovingRiskAssessment',
     'RiskMonitoringRun',
@@ -52,8 +54,7 @@ __all__ = [
     'NotificationRecord',
     'BackgroundJob',
     'TenantFeatureSnapshot',
+    'TrainingDatasetManifest',
     'ModelVersion',
 ]
-
-
 

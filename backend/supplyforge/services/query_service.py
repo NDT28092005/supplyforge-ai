@@ -7,7 +7,7 @@ Read-Through Caching layer ensuring <0.1s UI response time with Cache Stampede L
 import time
 import logging
 from django.core.cache import cache
-from supplyforge.models import SlowMovingRiskAssessment
+from supplyforge.models import DatasetVersion, SlowMovingRiskAssessment
 from supplyforge.services.cache_policy import CachePolicy
 from supplyforge.metrics import record_cache
 
@@ -39,6 +39,53 @@ def _release_redis_lock(lock_key: str) -> None:
 
 
 class DashboardQueryService:
+    @staticmethod
+    def _dataset_metadata(workspace_id: int) -> dict:
+        """Attach the exact dataset freshness used by the dashboard response."""
+        version = (
+            DatasetVersion.objects.filter(
+                workspace_id=workspace_id,
+                status=DatasetVersion.STATUS_ACTIVE,
+            )
+            .order_by('-version_number')
+            .first()
+        )
+        return {
+            'datasetVersion': version.version_label if version else None,
+            'dataAsOf': version.data_as_of.isoformat() if version and version.data_as_of else None,
+            'isStale': version is None,
+        }
+
+    @classmethod
+    def _active_gold_dashboard_summary(cls, workspace_id: int) -> dict | None:
+        """Return the compact gold read model for the current dataset version."""
+        version = (
+            DatasetVersion.objects.filter(
+                workspace_id=workspace_id,
+                status=DatasetVersion.STATUS_ACTIVE,
+            )
+            .only('version_label', 'data_as_of', 'manifest_json')
+            .order_by('-version_number')
+            .first()
+        )
+        if not version:
+            return None
+
+        dashboard = ((version.manifest_json or {}).get('gold') or {}).get('dashboard')
+        summary = dashboard.get('summary') if isinstance(dashboard, dict) else None
+        if not dashboard or not dashboard.get('completed') or not isinstance(summary, dict):
+            return None
+
+        payload = dict(summary)
+        payload.update({
+            'cacheVersion': str(CachePolicy.get_workspace_version(workspace_id)),
+            'calculatedAt': dashboard.get('generatedAt') or time.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'datasetVersion': version.version_label,
+            'dataAsOf': version.data_as_of.isoformat() if version.data_as_of else None,
+            'isStale': False,
+        })
+        return payload
+
     @classmethod
     def get_executive_summary(cls, workspace_id: int, force_refresh: bool = False) -> tuple[dict, str]:
         """
@@ -108,12 +155,16 @@ class DashboardQueryService:
     @classmethod
     def _calculate_executive_summary(cls, workspace_id: int) -> dict:
         """
-        CORRECTED Business Logic:
-        Calculates aggregates across ALL assessments in workspace,
-        then extracts top 5 priority SKUs separately.
+        Reads the active gold aggregate first. Legacy data without an aggregate
+        falls back to the ORM calculation until the next completed import.
         """
+        gold_summary = cls._active_gold_dashboard_summary(workspace_id)
+        if gold_summary is not None:
+            return gold_summary
+
         all_assessments = SlowMovingRiskAssessment.objects.filter(session__workspace_id=workspace_id)
         total_skus = all_assessments.count()
+        dataset_metadata = cls._dataset_metadata(workspace_id)
 
         if total_skus == 0:
             return {
@@ -129,7 +180,8 @@ class DashboardQueryService:
                 'capitalStatus': 'NO_DATA',
                 'topRiskSkus': [],
                 'cacheVersion': str(CachePolicy.get_workspace_version(workspace_id)),
-                'calculatedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ')
+                'calculatedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                **dataset_metadata,
             }
 
         critical_count = all_assessments.filter(risk_class='CRITICAL').count()
@@ -204,5 +256,6 @@ class DashboardQueryService:
             'capitalStatus': capital_status,
             'topRiskSkus': top_risk_skus,
             'cacheVersion': str(CachePolicy.get_workspace_version(workspace_id)),
-            'calculatedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ')
+            'calculatedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            **dataset_metadata,
         }

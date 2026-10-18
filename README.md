@@ -108,10 +108,53 @@ Hệ thống hỗ trợ 3 môi trường phát triển chính thông qua biến 
 Khai báo mẫu mặc định được lưu ở `backend/.env.example` và `.env.example` tại thư mục gốc. Phiên bản hệ thống được định nghĩa tại file [VERSION](file:///home/nguyen-dai-tung/supplyforge-ai/VERSION).
 
 Ở development/test, `STORAGE_BACKEND=local` dùng filesystem local. Staging và
-production bắt buộc `STORAGE_BACKEND=s3` với bucket S3/MinIO-compatible được
-cấu hình qua `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` và tùy chọn
-`S3_ENDPOINT_URL`/`S3_REGION`. SQLite chỉ được phép ngoài staging/production;
-test runner dùng database in-memory.
+production bắt buộc `STORAGE_BACKEND=s3`, `S3_BUCKET` (raw), `S3_LAKE_BUCKET`
+(bronze/gold) và `S3_REGION`.
+`S3_AUTH_MODE=auto` (mặc định) dùng AWS SDK credential chain khi hai biến key
+để trống, nên ECS task role là cách production được hỗ trợ và không cần access
+key trong biến môi trường.
+Chỉ đặt `S3_AUTH_MODE=static` cùng `S3_ACCESS_KEY`/`S3_SECRET_KEY` cho MinIO
+hoặc provider tương thích S3 cần credential tĩnh. `S3_ENDPOINT_URL` là tùy
+chọn. SQLite chỉ được phép ngoài staging/production; test runner dùng database
+in-memory.
+
+### Cloud Multipart Ingestion
+
+Khi bắt đầu bật luồng upload trực tiếp S3, cấu hình runtime gồm
+`S3_MULTIPART_PART_SIZE_BYTES=8388608`,
+`S3_PRESIGNED_UPLOAD_TTL_SECONDS=900` và `SQS_INGESTION_QUEUE_URL`. Giữ
+`STORAGE_BACKEND=local` trong lúc chưa dùng AWS; endpoint multipart sẽ từ chối
+an toàn và luồng upload cũ vẫn hoạt động.
+
+Trước khi frontend sử dụng presigned URL, bucket raw chỉ được phép CORS từ
+origin frontend chính xác, method `PUT`, header cần thiết và expose `ETag`.
+Không dùng wildcard origin. Worker ECS sau này chạy
+`python manage.py consume_s3_ingestion_events`; SQS/EventBridge chỉ là fallback
+cho lời gọi `upload/complete`, nên event trùng lặp không tạo thêm job.
+
+### Local Ingestion Benchmark
+
+Lệnh benchmark tạo workspace riêng và CSV tổng hợp theo streaming, sau đó chạy
+`profile -> bronze -> silver Parquet -> chunked operational import -> gold`.
+Nó chỉ chạy với `STORAGE_BACKEND=local` và từ chối MySQL/RDS trừ khi được xác
+nhận tường minh, nên không dùng để benchmark dữ liệu merchant.
+
+```bash
+# Chạy trên SQLite và thư mục tạm, không kết nối AWS/MySQL.
+USE_SQLITE=1 SQLITE_PATH=/tmp/supplyforge-benchmark.sqlite \
+  python backend/manage.py migrate --noinput
+
+USE_SQLITE=1 SQLITE_PATH=/tmp/supplyforge-benchmark.sqlite \
+  python backend/manage.py benchmark_ingestion \
+  --rows 100000 --sku-count 10000 --days 7 --chunk-size 20000 \
+  --output-dir /tmp/supplyforge-benchmark \
+  --report /tmp/supplyforge-benchmark/report-100k.json
+```
+
+Tăng `--rows` lên `1000000` sau khi benchmark 100K pass. Output JSON chứa thời
+gian mỗi stage, throughput, peak RSS và reconciliation giữa profile, silver,
+operational import và gold. Thêm `--trace-python-memory` khi cần peak Python
+allocation; tùy chọn này làm benchmark chậm hơn.
 
 ---
 

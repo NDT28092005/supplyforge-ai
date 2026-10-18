@@ -392,6 +392,39 @@ if SENTRY_DSN:
 # ── Ingestion File Storage (Module 01) ─────────────────────────────
 INGESTION_UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads', 'ingestion')
 INGESTION_MAX_FILE_SIZE_MB = int(os.getenv('INGESTION_MAX_FILE_SIZE_MB', '500'))
+INGESTION_CHUNK_ROW_SIZE = int(os.getenv('INGESTION_CHUNK_ROW_SIZE', '20000'))
+INGESTION_MAX_REPORTED_ERRORS = int(os.getenv('INGESTION_MAX_REPORTED_ERRORS', '1000'))
+INGESTION_ARCHIVE_SNAPSHOT_ROW_LIMIT = int(os.getenv('INGESTION_ARCHIVE_SNAPSHOT_ROW_LIMIT', '1000'))
+INGESTION_MAX_ROWS = int(os.getenv('INGESTION_MAX_ROWS', '10000000'))
+MLOPS_FEATURE_SNAPSHOT_BATCH_SIZE = int(
+    os.getenv('MLOPS_FEATURE_SNAPSHOT_BATCH_SIZE', '1000')
+)
+MLOPS_LABEL_OBSERVATION_DAYS = int(os.getenv('MLOPS_LABEL_OBSERVATION_DAYS', '90'))
+MLOPS_MIN_HIGH_RISK_RECALL = float(os.getenv('MLOPS_MIN_HIGH_RISK_RECALL', '0.80'))
+MLOPS_MIN_MACRO_F1 = float(os.getenv('MLOPS_MIN_MACRO_F1', '0.60'))
+MLOPS_MAX_ECE = float(os.getenv('MLOPS_MAX_ECE', '0.12'))
+MLOPS_MAX_MISSING_RATE = float(os.getenv('MLOPS_MAX_MISSING_RATE', '0.05'))
+MLOPS_MAX_METRIC_REGRESSION = float(os.getenv('MLOPS_MAX_METRIC_REGRESSION', '0.03'))
+if INGESTION_CHUNK_ROW_SIZE < 100:
+    raise ImproperlyConfigured('INGESTION_CHUNK_ROW_SIZE must be at least 100.')
+if INGESTION_MAX_REPORTED_ERRORS < 1:
+    raise ImproperlyConfigured('INGESTION_MAX_REPORTED_ERRORS must be positive.')
+if INGESTION_ARCHIVE_SNAPSHOT_ROW_LIMIT < 1:
+    raise ImproperlyConfigured('INGESTION_ARCHIVE_SNAPSHOT_ROW_LIMIT must be positive.')
+if INGESTION_MAX_ROWS < 1:
+    raise ImproperlyConfigured('INGESTION_MAX_ROWS must be positive.')
+if MLOPS_FEATURE_SNAPSHOT_BATCH_SIZE < 1:
+    raise ImproperlyConfigured('MLOPS_FEATURE_SNAPSHOT_BATCH_SIZE must be positive.')
+if MLOPS_LABEL_OBSERVATION_DAYS < 0:
+    raise ImproperlyConfigured('MLOPS_LABEL_OBSERVATION_DAYS cannot be negative.')
+if not all(0 <= value <= 1 for value in (
+    MLOPS_MIN_HIGH_RISK_RECALL,
+    MLOPS_MIN_MACRO_F1,
+    MLOPS_MAX_ECE,
+    MLOPS_MAX_MISSING_RATE,
+    MLOPS_MAX_METRIC_REGRESSION,
+)):
+    raise ImproperlyConfigured('MLOps quality-gate thresholds must be between 0 and 1.')
 STORAGE_BACKEND = os.getenv(
     'STORAGE_BACKEND',
     's3' if IS_DEPLOYED else 'local',
@@ -407,12 +440,46 @@ S3_ENDPOINT_URL = os.getenv('S3_ENDPOINT_URL', '').strip()
 S3_ACCESS_KEY = os.getenv('S3_ACCESS_KEY', '').strip()
 S3_SECRET_KEY = os.getenv('S3_SECRET_KEY', '').strip()
 S3_BUCKET = os.getenv('S3_BUCKET', '').strip()
+S3_LAKE_BUCKET = os.getenv('S3_LAKE_BUCKET', '').strip()
 S3_REGION = os.getenv('S3_REGION', '').strip()
+S3_AUTH_MODE = os.getenv('S3_AUTH_MODE', 'auto').strip().lower()
+S3_MULTIPART_PART_SIZE_BYTES = int(
+    os.getenv('S3_MULTIPART_PART_SIZE_BYTES', str(8 * 1024 * 1024))
+)
+S3_PRESIGNED_UPLOAD_TTL_SECONDS = int(
+    os.getenv('S3_PRESIGNED_UPLOAD_TTL_SECONDS', '900')
+)
+SQS_INGESTION_QUEUE_URL = os.getenv('SQS_INGESTION_QUEUE_URL', '').strip()
+if S3_AUTH_MODE not in {'auto', 'static'}:
+    raise ImproperlyConfigured('S3_AUTH_MODE must be either auto or static.')
+if S3_MULTIPART_PART_SIZE_BYTES < 5 * 1024 * 1024:
+    raise ImproperlyConfigured(
+        'S3_MULTIPART_PART_SIZE_BYTES must be at least 5 MiB.'
+    )
+if S3_MULTIPART_PART_SIZE_BYTES > 5 * 1024 * 1024 * 1024:
+    raise ImproperlyConfigured(
+        'S3_MULTIPART_PART_SIZE_BYTES must not exceed 5 GiB.'
+    )
+if not 60 <= S3_PRESIGNED_UPLOAD_TTL_SECONDS <= 3600:
+    raise ImproperlyConfigured(
+        'S3_PRESIGNED_UPLOAD_TTL_SECONDS must be between 60 and 3600.'
+    )
+
+if STORAGE_BACKEND == 's3':
+    if bool(S3_ACCESS_KEY) != bool(S3_SECRET_KEY):
+        raise ImproperlyConfigured(
+            'S3_ACCESS_KEY and S3_SECRET_KEY must be configured together.'
+        )
+    if S3_AUTH_MODE == 'static' and not S3_ACCESS_KEY:
+        raise ImproperlyConfigured(
+            'S3_ACCESS_KEY and S3_SECRET_KEY are required when S3_AUTH_MODE=static.'
+        )
+
 if STORAGE_BACKEND == 's3' and IS_DEPLOYED:
     for _name, _value in (
         ('S3_BUCKET', S3_BUCKET),
-        ('S3_ACCESS_KEY', S3_ACCESS_KEY),
-        ('S3_SECRET_KEY', S3_SECRET_KEY),
+        ('S3_LAKE_BUCKET', S3_LAKE_BUCKET),
+        ('S3_REGION', S3_REGION),
     ):
         if not _value:
             raise ImproperlyConfigured(

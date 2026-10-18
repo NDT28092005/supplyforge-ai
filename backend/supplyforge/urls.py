@@ -201,6 +201,8 @@ urlpatterns = [
     path('api/v1/ingestion/sessions/<uuid:session_id>/generate-quality-report', views.generate_quality_report, name='generate_quality_report_v1'),
     # ── Background Job Queue (Release 1: Queue v1.0) ──
     path('api/v2/jobs/upload', views.enqueue_upload_job, name='enqueue_upload_job'),
+    path('api/v2/jobs/upload/initiate', views.initiate_s3_multipart_upload, name='initiate_s3_multipart_upload'),
+    path('api/v2/jobs/<uuid:session_id>/upload/complete', views.complete_s3_multipart_upload, name='complete_s3_multipart_upload'),
     path('api/v2/jobs', views.list_jobs, name='list_jobs_no_slash'),
     path('api/v2/jobs/', views.list_jobs, name='list_jobs'),
     path('api/v2/jobs/<str:job_id>/status', views.get_job_status, name='get_job_status'),
@@ -211,6 +213,18 @@ urlpatterns = [
     # ── High-Speed Query & Redis Cache APIs (QUERY Layer) ──
     path('api/v2/query/dashboard-summary', views.get_cached_dashboard_summary, name='get_cached_dashboard_summary'),
     path('api/v2/query/cache-refresh', views.refresh_workspace_cache, name='refresh_workspace_cache'),
+
+    # ── MLOps Governance: frozen data manifests and manual model promotion ──
+    path('api/v2/ml/governance/models', views.model_candidates, name='mlops_model_candidates'),
+    path('api/v2/ml/governance/models/<str:version>/evaluate', views.evaluate_model_candidate, name='mlops_evaluate_model'),
+    path('api/v2/ml/governance/models/<str:version>/approve', views.approve_model_candidate, name='mlops_approve_model'),
+    path('api/v2/ml/governance/models/<str:version>/drift', views.record_model_drift, name='mlops_model_drift'),
+    path('api/v2/ml/governance/models/<str:version>/canary', views.start_model_canary, name='mlops_model_canary'),
+    path('api/v2/ml/governance/models/<str:version>/promote', views.promote_model_candidate, name='mlops_promote_model'),
+    path('api/v2/ml/governance/models/<str:version>/rollback', views.rollback_model_candidate, name='mlops_rollback_model'),
+    path('api/v2/ml/governance/manifests', views.training_manifests, name='mlops_training_manifests'),
+    path('api/v2/ml/governance/snapshots/<int:snapshot_id>/label', views.label_feature_snapshot, name='mlops_label_snapshot'),
+    path('api/v2/ml/governance/training-data-opt-in', views.set_training_data_opt_in, name='mlops_training_data_opt_in'),
 
     path('api/v2/ingestion/sessions/<uuid:session_id>/generate-quality-report', views.generate_quality_report, name='generate_quality_report'),
     path('api/v1/ingestion/sessions/<uuid:session_id>/quality-dashboard', views.get_quality_dashboard, name='get_quality_dashboard_v1'),
@@ -444,5 +458,3 @@ urlpatterns = [
     path('api/v1/export/action-plans', ExportActionPlanReportView.as_view(), name='export_action_plan_report'),
     path('api/v1/export/action-plans/', ExportActionPlanReportView.as_view()),
 ]
-
-

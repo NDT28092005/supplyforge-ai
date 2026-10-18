@@ -25,7 +25,8 @@ from supplyforge.models import (
     CapitalExposureAnalysisRecord, CapitalExposureItemRecord,
     DecisionRecord, DecisionExplanationRecord, DecisionEvidenceRecord, DecisionAuditEventRecord,
     CopilotConversation, CopilotMessage, CopilotToolCall, CopilotAuditLog,
-    ShopeeProduct, ShopeeVariation, ShopeeOrder, ShopeeOrderItem, SyncLog
+    ShopeeProduct, ShopeeVariation, ShopeeOrder, ShopeeOrderItem, SyncLog,
+    TenantFeatureSnapshot, TrainingDatasetManifest, ModelVersion,
 )
 from supplyforge.services.storage_backend import StorageBackend
 
@@ -110,6 +111,11 @@ class TenantDataDeletionService:
 
         # 3. Feature Snapshots, Products, SKUs, Inventory, Orders
         try:
+            snapshot_count = TenantFeatureSnapshot.objects.filter(workspace_id=workspace_id).count()
+            TenantFeatureSnapshot.objects.filter(workspace_id=workspace_id).delete()
+            TrainingDatasetManifest.objects.filter(workspace_id=workspace_id).delete()
+            ModelVersion.objects.filter(workspace_id=workspace_id).delete()
+            counts['3_feature_snapshots'] = snapshot_count
             OrderItem.objects.all().delete()
             Order.objects.all().delete()
             InventoryRecord.objects.all().delete()

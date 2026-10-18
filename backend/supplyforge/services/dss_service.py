@@ -6,21 +6,27 @@ import os
 import sys
 import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import TYPE_CHECKING, Dict, List, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
-from src.pipeline.dss_pipeline import DSSPipeline
 from src.ingestion.validator import validate_input_data
+
+if TYPE_CHECKING:
+    from src.pipeline.dss_pipeline import DSSPipeline
 
 class MerchantDSSWebService:
     _pipeline_instance = None
 
     @classmethod
-    def get_pipeline(cls) -> DSSPipeline:
+    def get_pipeline(cls) -> 'DSSPipeline':
         """Lazy load and singleton cache DSSPipeline."""
         if cls._pipeline_instance is None:
+            # The pipeline imports optional ML libraries; only load it for a
+            # DSS endpoint rather than while Django registers every URL.
+            from src.pipeline.dss_pipeline import DSSPipeline
+
             cls._pipeline_instance = DSSPipeline(PROJECT_ROOT)
         return cls._pipeline_instance
 

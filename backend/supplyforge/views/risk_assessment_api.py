@@ -314,19 +314,27 @@ def _auto_populate_assessments_from_products(session_id=None):
     Auto-populates SlowMovingRiskAssessment DB table from real imported Product + Order data.
     Calculates real evidence: sales velocity, DSLS, zero-rate, ADI from actual OrderItem history.
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
     from django.db.models import Max, Sum, Count, Q
+    from django.utils import timezone
     from supplyforge.models import Product, Order, OrderItem, Sku, IngestionSession
 
-    session = IngestionSession.objects.filter(id=session_id).first() if session_id else None
+    session = (
+        IngestionSession.objects.select_related('workspace')
+        .filter(id=session_id)
+        .first()
+        if session_id else None
+    )
+    if not session:
+        logger.warning('Skipping risk auto-population without an explicit ingestion session.')
+        return
+    workspace_user_id = str(session.workspace.owner_id or session.workspace_id)
     real_items = []
     seen_skus = set()
 
     # Determine reference date from actual data
-    max_order_dt = Order.objects.aggregate(Max('created_at'))['created_at__max']
-    ref_date = max_order_dt if max_order_dt else datetime.now()
-    if hasattr(ref_date, 'tzinfo') and ref_date.tzinfo is not None:
-        ref_date = ref_date.replace(tzinfo=None)
+    max_order_dt = Order.objects.filter(user_id=workspace_user_id).aggregate(Max('created_at'))['created_at__max']
+    ref_date = max_order_dt if max_order_dt else timezone.now()
 
     ninety_days_ago = ref_date - timedelta(days=90)
     thirty_days_ago = ref_date - timedelta(days=30)
@@ -336,7 +344,7 @@ def _auto_populate_assessments_from_products(session_id=None):
     seen_skus = set()
     real_items = []
 
-    p_qs = Product.objects.all()
+    p_qs = Product.objects.filter(user_id=workspace_user_id)
     for p in p_qs:
         sku_val = p.item_sku or p.third_party_id or f"SKU_{p.id}"
         name_val = p.product_name or f"Product {sku_val}"
@@ -354,7 +362,9 @@ def _auto_populate_assessments_from_products(session_id=None):
             })
 
     if not real_items:
-        oi_items = OrderItem.objects.values('sku', 'product_name').distinct()[:1000]
+        oi_items = OrderItem.objects.filter(
+            order__user_id=workspace_user_id,
+        ).values('sku', 'product_name').distinct()[:1000]
         for item in oi_items:
             sku_val = item.get('sku')
             name_val = item.get('product_name')
@@ -372,22 +382,17 @@ def _auto_populate_assessments_from_products(session_id=None):
                 })
 
     if not real_items:
-        if session:
-            SlowMovingRiskAssessment.objects.filter(session=session).delete()
-        else:
-            SlowMovingRiskAssessment.objects.all().delete()
+        SlowMovingRiskAssessment.objects.filter(session=session).delete()
         return
 
     # Delete old assessments for this session
-    if session:
-        SlowMovingRiskAssessment.objects.filter(session=session).delete()
-    else:
-        SlowMovingRiskAssessment.objects.all().delete()
+    SlowMovingRiskAssessment.objects.filter(session=session).delete()
 
     # 3. Compute real evidence in bulk queries across all SKUs & product names
     evidence_map = {}
     
     oi_stats_90d_sku = OrderItem.objects.filter(
+        order__user_id=workspace_user_id,
         order__created_at__gte=ninety_days_ago, order__created_at__lte=ref_date
     ).values('sku').annotate(
         sold_90d=Sum('quantity'),
@@ -397,6 +402,7 @@ def _auto_populate_assessments_from_products(session_id=None):
     stats_90d_sku = {r['sku'].upper().strip(): r for r in oi_stats_90d_sku if r.get('sku')}
 
     oi_stats_90d_name = OrderItem.objects.filter(
+        order__user_id=workspace_user_id,
         order__created_at__gte=ninety_days_ago, order__created_at__lte=ref_date
     ).values('product_name').annotate(
         sold_90d=Sum('quantity'),
@@ -406,27 +412,39 @@ def _auto_populate_assessments_from_products(session_id=None):
     stats_90d_name = {r['product_name'].strip(): r for r in oi_stats_90d_name if r.get('product_name')}
 
     oi_stats_30d_sku = OrderItem.objects.filter(
+        order__user_id=workspace_user_id,
         order__created_at__gte=thirty_days_ago, order__created_at__lte=ref_date
     ).values('sku').annotate(sold_30d=Sum('quantity'))
     stats_30d_sku = {r['sku'].upper().strip(): r['sold_30d'] for r in oi_stats_30d_sku if r.get('sku')}
 
     oi_stats_30d_name = OrderItem.objects.filter(
+        order__user_id=workspace_user_id,
         order__created_at__gte=thirty_days_ago, order__created_at__lte=ref_date
     ).values('product_name').annotate(sold_30d=Sum('quantity'))
     stats_30d_name = {r['product_name'].strip(): r['sold_30d'] for r in oi_stats_30d_name if r.get('product_name')}
 
     oi_stats_7d_sku = OrderItem.objects.filter(
+        order__user_id=workspace_user_id,
         order__created_at__gte=seven_days_ago, order__created_at__lte=ref_date
     ).values('sku').annotate(sold_7d=Sum('quantity'))
     stats_7d_sku = {r['sku'].upper().strip(): r['sold_7d'] for r in oi_stats_7d_sku if r.get('sku')}
 
     oi_stats_7d_name = OrderItem.objects.filter(
+        order__user_id=workspace_user_id,
         order__created_at__gte=seven_days_ago, order__created_at__lte=ref_date
     ).values('product_name').annotate(sold_7d=Sum('quantity'))
     stats_7d_name = {r['product_name'].strip(): r['sold_7d'] for r in oi_stats_7d_name if r.get('product_name')}
 
-    total_orders_sku = {r['sku'].upper().strip(): r['cnt'] for r in OrderItem.objects.values('sku').annotate(cnt=Count('id')) if r.get('sku')}
-    total_orders_name = {r['product_name'].strip(): r['cnt'] for r in OrderItem.objects.values('product_name').annotate(cnt=Count('id')) if r.get('product_name')}
+    total_orders_sku = {
+        r['sku'].upper().strip(): r['cnt']
+        for r in OrderItem.objects.filter(order__user_id=workspace_user_id).values('sku').annotate(cnt=Count('id'))
+        if r.get('sku')
+    }
+    total_orders_name = {
+        r['product_name'].strip(): r['cnt']
+        for r in OrderItem.objects.filter(order__user_id=workspace_user_id).values('product_name').annotate(cnt=Count('id'))
+        if r.get('product_name')
+    }
 
     for item in real_items:
         s_val = (item.get('item_sku') or item.get('sku') or '').upper().strip()
@@ -441,8 +459,6 @@ def _auto_populate_assessments_from_products(session_id=None):
         total_orders = total_orders_sku.get(s_val) or total_orders_name.get(p_name) or 0
 
         if last_sale:
-            if hasattr(last_sale, 'tzinfo') and last_sale.tzinfo is not None:
-                last_sale = last_sale.replace(tzinfo=None)
             dsls = max(0, (ref_date - last_sale).days)
         else:
             dsls = 999
@@ -465,31 +481,7 @@ def _auto_populate_assessments_from_products(session_id=None):
             'total_orders': total_orders,
         }
 
-    # Find IngestionSession
-    session_obj = None
-    if session_id:
-        try:
-            session_obj = IngestionSession.objects.get(id=session_id)
-        except Exception:
-            session_obj = None
-    if not session_obj:
-        session_obj = IngestionSession.objects.order_by('-created_at').first()
-    if not session_obj:
-        import uuid
-        from supplyforge.models import Workspace
-        ws = Workspace.objects.filter(id=1).first()
-        if not ws:
-            ws = Workspace.objects.first()
-        if not ws:
-            ws = Workspace.objects.create(id=1, name='Default Workspace')
-        session_obj = IngestionSession.objects.create(
-            id=uuid.uuid4(),
-            workspace=ws,
-            original_filename='system_auto_session.csv',
-            status='COMPLETED',
-            readiness_status='READY',
-            readiness_score=100.0
-        )
+    session_obj = session
 
     assessments_to_create = []
 
@@ -613,7 +605,7 @@ def _auto_populate_assessments_from_products(session_id=None):
         )
 
     if assessments_to_create:
-        SlowMovingRiskAssessment.objects.all().delete()
+        SlowMovingRiskAssessment.objects.filter(session=session_obj).delete()
         SlowMovingRiskAssessment.objects.bulk_create(assessments_to_create, ignore_conflicts=True)
         try:
             from supplyforge.services.auto_decision_generator import AutoDecisionGeneratorService

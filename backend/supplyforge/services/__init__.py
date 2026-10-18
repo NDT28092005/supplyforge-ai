@@ -1,22 +1,48 @@
-# supplyforge/services package
-# Re-export commonly used services
+"""Lazy exports for application services.
 
-from .dss_service import MerchantDSSWebService
-from .rate_limiter import RegistrationRateLimiter
+Importing a focused service (for example S3 ingestion) must not initialize the
+DSS/ML dependency graph. Workers load only the dependencies for their queue.
+"""
 
-try:
-    from .normalizer import VietnameseNormalizer, Levenshtein
-    from .industry import IndustryPlaybook, PLAYBOOKS, IndustryDetectionService
-    from .ingestion import GeminiColumnMappingService, DynamicFileImportService
-    from .insight import InventoryInsightService
-    from .financial import InventoryFinancialEngineService, FinancialLiquidationEngine
-    from .portfolio import PortfolioOrchestrationService
-    from .sku_tinder import SkuNormalizationService
-    from .gemini_copilot import GeminiCopilotService
-    from .odoo import OdooIntegrationService
-    from .shopee_client import ShopeeClient, ShopeeAPIError, verify_webhook_signature
-    from .shopee_sync import ShopeeSyncService
-except ImportError:
-    pass
+from importlib import import_module
 
-__all__ = ['MerchantDSSWebService', 'RegistrationRateLimiter']
+
+_EXPORTS = {
+    'MerchantDSSWebService': ('.dss_service', 'MerchantDSSWebService'),
+    'RegistrationRateLimiter': ('.rate_limiter', 'RegistrationRateLimiter'),
+    'VietnameseNormalizer': ('.normalizer', 'VietnameseNormalizer'),
+    'Levenshtein': ('.normalizer', 'Levenshtein'),
+    'IndustryPlaybook': ('.industry', 'IndustryPlaybook'),
+    'PLAYBOOKS': ('.industry', 'PLAYBOOKS'),
+    'IndustryDetectionService': ('.industry', 'IndustryDetectionService'),
+    'GeminiColumnMappingService': ('.ingestion', 'GeminiColumnMappingService'),
+    'DynamicFileImportService': ('.ingestion', 'DynamicFileImportService'),
+    'InventoryInsightService': ('.insight', 'InventoryInsightService'),
+    'InventoryFinancialEngineService': ('.financial', 'InventoryFinancialEngineService'),
+    'FinancialLiquidationEngine': ('.financial', 'FinancialLiquidationEngine'),
+    'PortfolioOrchestrationService': ('.portfolio', 'PortfolioOrchestrationService'),
+    'SkuNormalizationService': ('.sku_tinder', 'SkuNormalizationService'),
+    'GeminiCopilotService': ('.gemini_copilot', 'GeminiCopilotService'),
+    'OdooIntegrationService': ('.odoo', 'OdooIntegrationService'),
+    'ShopeeClient': ('.shopee_client', 'ShopeeClient'),
+    'ShopeeAPIError': ('.shopee_client', 'ShopeeAPIError'),
+    'verify_webhook_signature': ('.shopee_client', 'verify_webhook_signature'),
+    'ShopeeSyncService': ('.shopee_sync', 'ShopeeSyncService'),
+}
+
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name):
+    """Import a service only when a caller explicitly requests it."""
+    try:
+        module_name, attribute = _EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(f'module {__name__!r} has no attribute {name!r}') from exc
+    value = getattr(import_module(module_name, __name__), attribute)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_EXPORTS))

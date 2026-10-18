@@ -324,6 +324,11 @@ def _serialize_session(session: IngestionSession) -> dict:
             span = (session.date_range_end - session.date_range_start).days
         date_range = {'start': start_str, 'end': end_str, 'spanDays': span}
 
+    try:
+        version = session.dataset_version_record
+    except Exception:
+        version = None
+
     return {
         'sessionId': str(session.id),
         'status': session.status,
@@ -347,6 +352,9 @@ def _serialize_session(session: IngestionSession) -> dict:
         },
         'createdAt': session.created_at.isoformat() if session.created_at else None,
         'updatedAt': session.updated_at.isoformat() if session.updated_at else None,
+        'datasetVersion': version.version_label if version else session.dataset_version,
+        'dataAsOf': version.data_as_of.isoformat() if version and version.data_as_of else None,
+        'isStale': not bool(version and version.status == 'ACTIVE'),
         'errorCode': session.error_code,
         'errorMessage': (
             'Không thể hoàn tất xử lý tệp CSV.'

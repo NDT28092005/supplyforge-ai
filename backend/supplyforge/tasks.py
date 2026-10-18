@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from celery import shared_task
 from django.conf import settings
@@ -24,6 +24,11 @@ import supplyforge.celery_telemetry
 logger = logging.getLogger(__name__)
 
 LOCK_TTL_SECONDS = 30 * 60  # 30 minutes
+MAX_REPORTED_PARTITIONS = 200
+
+
+class ImportCancelled(RuntimeError):
+    """Signals a cooperative cancellation at a durable ingestion checkpoint."""
 
 
 @shared_task(name="health_check_task", bind=True)
@@ -77,11 +82,127 @@ def _release_redis_lock(lock_key: str) -> None:
 
 def _update_stage_progress(job: BackgroundJob, stage_name: str, stage_pct: int, stage_status: str, overall_pct: int):
     stages = job.stages_json or {}
-    stages[stage_name] = {'status': stage_status, 'progress': stage_pct}
+    stage = dict(stages.get(stage_name, {}))
+    stage.update({'status': stage_status, 'progress': stage_pct})
+    stages[stage_name] = stage
     job.stages_json = stages
     job.current_stage = stage_name
     job.progress_pct = overall_pct
     job.save(update_fields=['stages_json', 'current_stage', 'progress_pct', 'updated_at'])
+
+
+def _partition_progress(partition_counts: dict | None) -> dict:
+    """Keep job metadata bounded when source data spans many dates."""
+    partition_counts = partition_counts or {}
+    items = sorted(partition_counts.items())
+    visible = dict(items[:MAX_REPORTED_PARTITIONS])
+    return {
+        'completed': visible,
+        'completedCount': len(items),
+        'truncated': len(items) > len(visible),
+    }
+
+
+def _import_progress_reporter(job: BackgroundJob, total_rows: int):
+    """Persist safe import progress and stop only at chunk/partition boundaries."""
+    started = time.monotonic()
+
+    def report(payload: dict) -> None:
+        current = BackgroundJob.objects.get(id=job.id)
+        if current.status in {'CANCEL_REQUESTED', 'CANCELLED'}:
+            raise ImportCancelled('User requested cancellation at a durable checkpoint.')
+
+        processed = max(0, int(payload.get('rowsProcessed') or 0))
+        elapsed = time.monotonic() - started
+        rate = processed / elapsed if processed and elapsed else 0
+        remaining = max(0, total_rows - processed) if total_rows else None
+        eta_seconds = int(remaining / rate) if remaining is not None and rate else None
+        phase = payload.get('phase', 'IMPORTING')
+        completion_ratio = min(1.0, processed / total_rows) if total_rows else 0.0
+        if phase == 'SILVER':
+            stage_pct = 20 + int(35 * completion_ratio)
+            overall_pct = 60 + int(8 * completion_ratio)
+        else:
+            stage_pct = 55 + int(40 * completion_ratio)
+            overall_pct = 68 + int(10 * completion_ratio)
+
+        stages = current.stages_json or {}
+        stage = dict(stages.get('IMPORTING', {}))
+        timestamp = timezone.now()
+        stage.update({
+            'status': 'PROCESSING',
+            'progress': min(stage_pct, 95),
+            'phase': phase,
+            'rowsProcessed': processed,
+            'totalRows': total_rows or None,
+            'rowsRemaining': remaining,
+            'filesWritten': int(payload.get('filesWritten') or 0),
+            'batchNumber': int(payload.get('batchNumber') or 0),
+            'partitionProgress': _partition_progress(payload.get('partitionCounts')),
+            'elapsedSeconds': round(elapsed, 1),
+            'estimatedTimeRemainingSeconds': eta_seconds,
+            'estimatedCompletionAt': (
+                (timestamp + timedelta(seconds=eta_seconds)).isoformat()
+                if eta_seconds is not None else None
+            ),
+            'checkpoint': {
+                'phase': phase,
+                'rowsCompleted': processed,
+                'at': timestamp.isoformat(),
+            },
+        })
+        stages['IMPORTING'] = stage
+        current.stages_json = stages
+        current.current_stage = 'IMPORTING'
+        current.progress_pct = min(overall_pct, 79)
+        current.save(update_fields=['stages_json', 'current_stage', 'progress_pct', 'updated_at'])
+
+    return report
+
+
+def _mark_import_published(job: BackgroundJob) -> None:
+    """Dataset replacement is irreversible after promotion, so cancel becomes too late."""
+    current = BackgroundJob.objects.get(id=job.id)
+    stages = current.stages_json or {}
+    stage = dict(stages.get('IMPORTING', {}))
+    checkpoint = dict(stage.get('checkpoint', {}))
+    checkpoint.update({'phase': 'PUBLISHED', 'at': timezone.now().isoformat()})
+    stage['checkpoint'] = checkpoint
+    if current.status == 'CANCEL_REQUESTED':
+        current.status = 'RUNNING'
+        stage['cancellation'] = {'status': 'TOO_LATE', 'message': 'Dataset đã được publish.'}
+    stages['IMPORTING'] = stage
+    current.stages_json = stages
+    current.save(update_fields=['status', 'stages_json', 'updated_at'])
+
+
+def _import_is_published(job: BackgroundJob) -> bool:
+    stages = job.stages_json or {}
+    checkpoint = (stages.get('IMPORTING') or {}).get('checkpoint') or {}
+    return checkpoint.get('phase') == 'PUBLISHED'
+
+
+def _mark_job_cancelled(job: BackgroundJob, reason: str) -> dict:
+    """Cancel a job and preserve lake artifacts for a later idempotent retry."""
+    job.refresh_from_db()
+    job.status = 'CANCELLED'
+    job.completed_at = timezone.now()
+    stages = job.stages_json or {}
+    stage = dict(stages.get(job.current_stage or 'IMPORTING', {}))
+    stage.update({'status': 'CANCELLED', 'cancellationReason': reason})
+    stages[job.current_stage or 'IMPORTING'] = stage
+    job.stages_json = stages
+    job.save(update_fields=['status', 'completed_at', 'stages_json', 'updated_at'])
+    if job.ingestion_session:
+        job.ingestion_session.status = 'CANCELLED'
+        job.ingestion_session.save(update_fields=['status', 'updated_at'])
+        try:
+            from supplyforge.services.lakehouse_ingestion import LakehouseIngestionService
+
+            LakehouseIngestionService.mark_cancelled(job.ingestion_session, reason)
+        except Exception:
+            logger.exception('Could not mark lake dataset version as cancelled for job %s.', job.id)
+    return {'cancelled': True, 'last_stage': job.current_stage}
 
 
 def _stage_parse(job: BackgroundJob, context: dict) -> dict:
@@ -133,14 +254,26 @@ def _stage_profile(job: BackgroundJob, context: dict) -> dict:
         'uniqueSkus': getattr(profile, 'unique_skus', getattr(profile, 'unique_sku_count', 0)),
         'dateRange': getattr(profile, 'date_range', {}),
     }
+    if session.raw_storage_path:
+        extension = os.path.splitext(session.original_filename)[1].lower() or '.csv'
+        session.lake_storage_path = StorageBackend.publish_raw_to_lake(
+            session.raw_storage_path,
+            f'bronze/workspace-{session.workspace_id}/sessions/{session.id}/source{extension}',
+        )
     session.status = 'PROFILED'
     session.save(update_fields=[
         'total_rows', 'total_columns', 'headers_json', 'column_types_json',
         'preview_rows_json', 'missing_values_json', 'dataset_profile_json',
-        'status', 'updated_at'
+        'lake_storage_path', 'status', 'updated_at'
     ])
 
+    from supplyforge.services.lakehouse_ingestion import LakehouseIngestionService
+
+    dataset_version = LakehouseIngestionService.prepare_version(session)
+
     context['profile'] = session.dataset_profile_json
+    context['dataset_version_id'] = str(dataset_version.id)
+    context['dataset_version'] = dataset_version.version_label
     _update_stage_progress(job, 'PROFILING', 100, 'COMPLETED', 35)
     return context
 
@@ -170,19 +303,55 @@ def _stage_import(job: BackgroundJob, context: dict) -> dict:
     session.status = 'PROCESSING'
     session.save(update_fields=['status', 'updated_at'])
 
+    from supplyforge.services.lakehouse_ingestion import LakehouseIngestionService
+
+    dataset_version = LakehouseIngestionService.prepare_version(session)
+    progress_report = _import_progress_reporter(job, session.total_rows or 0)
     with StorageBackend.localize(session.storage_path) as local_path:
-        with open(local_path, 'rb') as f:
-            import_res = DynamicFileImportService.process_batch_import(
-                file_obj=f,
+        # Silver is generated before mutating the operational projection. A
+        # failed lake transform leaves the previously active dataset untouched.
+        silver_manifest = LakehouseIngestionService.materialize_silver(
+            dataset_version,
+            local_path,
+            mapping_rule,
+            progress_callback=progress_report,
+        )
+        import_res = LakehouseIngestionService.completed_import_result(dataset_version)
+        if import_res is None:
+            silver_progress = {
+                'filesWritten': silver_manifest.get('filesWritten', 0),
+                'partitionCounts': silver_manifest.get('partitionCounts', {}),
+            }
+            progress_report({
+                'phase': 'OPERATIONAL_IMPORT',
+                'rowsProcessed': 0,
+                **silver_progress,
+            })
+            import_res = DynamicFileImportService.process_file_in_chunks(
+                file_path=local_path,
                 mapping_rule=mapping_rule,
                 user_id=job.workspace.owner_id or job.workspace_id,
                 session_type=session.session_type,
                 session_id=str(session.id),
                 workspace_id=job.workspace_id,
                 force_reset=session.session_type == 'INITIAL',
+                chunk_size=settings.INGESTION_CHUNK_ROW_SIZE,
+                progress_callback=lambda payload: progress_report({
+                    **payload,
+                    **silver_progress,
+                }),
             )
+            LakehouseIngestionService.record_import_result(dataset_version, import_res)
+
+        gold_payload = LakehouseIngestionService.materialize_gold(dataset_version)
+        dataset_version = LakehouseIngestionService.promote(dataset_version)
+        _mark_import_published(job)
 
     context['import_result'] = import_res
+    context['dataset_version'] = dataset_version.version_label
+    context['data_as_of'] = dataset_version.data_as_of.isoformat()
+    context['lake_reconciliation'] = gold_payload['reconciliation']
+    context['silver_manifest'] = silver_manifest
     _update_stage_progress(job, 'IMPORTING', 100, 'COMPLETED', 80)
     return context
 
@@ -199,6 +368,35 @@ def _stage_ml_inference(job: BackgroundJob, context: dict) -> dict:
     except Exception as e:
         logger.warning(f"Batch ML Inference notice for job {job.id}: {e}")
         context['ml_result'] = {'status': 'SKIPPED_OR_BASELINE'}
+
+    dataset_version_id = context.get('dataset_version_id')
+    if dataset_version_id:
+        try:
+            from supplyforge.models import DatasetVersion
+            from supplyforge.services.mlops_governance import FeatureSnapshotService
+
+            version = DatasetVersion.objects.get(
+                id=dataset_version_id,
+                workspace_id=job.workspace_id,
+            )
+            context['feature_snapshot'] = FeatureSnapshotService.materialize_from_assessments(version)
+        except Exception as exc:
+            # Snapshots are retriable from the immutable risk assessment data.
+            logger.warning('Feature snapshot materialization notice for job %s: %s', job.id, exc)
+
+        try:
+            from supplyforge.models import DatasetVersion
+            from supplyforge.services.lakehouse_ingestion import LakehouseIngestionService
+
+            version = DatasetVersion.objects.get(
+                id=dataset_version_id,
+                workspace_id=job.workspace_id,
+            )
+            context['dashboard_summary'] = LakehouseIngestionService.materialize_dashboard_gold(version)
+        except Exception as exc:
+            # The dashboard can safely use its legacy aggregate while a later
+            # batch retries this optional read-model materialization.
+            logger.warning('Dashboard gold materialization notice for job %s: %s', job.id, exc)
 
     _update_stage_progress(job, 'ML_INFERENCE', 100, 'COMPLETED', 95)
     return context
@@ -234,7 +432,10 @@ def _stage_finalize(job: BackgroundJob, context: dict) -> dict:
         'rowsProcessed': session.total_rows or rows_valid,
         'rowsValid': rows_valid,
         'session_id': str(session.id),
-        'filename': session.original_filename
+        'filename': session.original_filename,
+        'datasetVersion': context.get('dataset_version', session.dataset_version),
+        'dataAsOf': context.get('data_as_of'),
+        'reconciliation': context.get('lake_reconciliation'),
     }
     _update_stage_progress(job, 'FINALIZING', 100, 'COMPLETED', 100)
     return context
@@ -253,12 +454,7 @@ def run_import_pipeline(self, job_id: str):
         return {'error': 'Job not found'}
 
     if job.status in ['CANCEL_REQUESTED', 'CANCELLED']:
-        job.status = 'CANCELLED'
-        job.save(update_fields=['status', 'updated_at'])
-        if job.ingestion_session:
-            job.ingestion_session.status = 'CANCELLED'
-            job.ingestion_session.save(update_fields=['status', 'updated_at'])
-        return {'cancelled': True}
+        return _mark_job_cancelled(job, 'User requested cancellation before the job started.')
 
     job.status = 'RUNNING'
     job.started_at = timezone.now()
@@ -279,15 +475,16 @@ def run_import_pipeline(self, job_id: str):
         # Check cancellation before each stage
         job.refresh_from_db(fields=['status'])
         if job.status in ['CANCEL_REQUESTED', 'CANCELLED']:
-            job.status = 'CANCELLED'
-            job.save(update_fields=['status', 'updated_at'])
-            if job.ingestion_session:
-                job.ingestion_session.status = 'CANCELLED'
-                job.ingestion_session.save(update_fields=['status', 'updated_at'])
-            return {'cancelled': True, 'last_stage': stage_name}
+            job.refresh_from_db()
+            if _import_is_published(job):
+                _mark_import_published(job)
+                continue
+            return _mark_job_cancelled(job, f'User requested cancellation before {stage_name}.')
 
         try:
             context = stage_fn(job, context)
+        except ImportCancelled as exc:
+            return _mark_job_cancelled(job, str(exc))
         except Exception as exc:
             logger.exception(f"Error in stage {stage_name} for job {job_id}: {exc}")
             if job.retry_count < job.max_retries:
@@ -303,6 +500,12 @@ def run_import_pipeline(self, job_id: str):
                     job.ingestion_session.status = 'FAILED'
                     job.ingestion_session.error_message = str(exc)
                     job.ingestion_session.save(update_fields=['status', 'error_message', 'updated_at'])
+                    try:
+                        from supplyforge.services.lakehouse_ingestion import LakehouseIngestionService
+
+                        LakehouseIngestionService.mark_failed(job.ingestion_session, str(exc))
+                    except Exception:
+                        logger.exception('Could not mark lake dataset version as failed for job %s.', job_id)
 
                 from supplyforge.metrics import record_task
                 record_task(worker_type='data', queue='data_worker', task_type='run_import_pipeline', status='failed')
