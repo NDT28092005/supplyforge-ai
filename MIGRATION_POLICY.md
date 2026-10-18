@@ -43,3 +43,54 @@ Trong môi trường Production với chiến lược phát hành cuốn chiếu
 - **Release N (EXPAND)**: Thêm cột mới `new_field` (`null=True` hoặc có `default`). Vẫn giữ nguyên `old_field`.
 - **Release N+1 (MIGRATE & DUAL-WRITE)**: Chuyển code sang dùng `new_field`. Backfill dữ liệu từ `old_field` sang `new_field`.
 - **Release N+2 (CONTRACT & CLEANUP)**: Xóa `old_field` an toàn sau khi 100% ứng dụng chạy trên Release N+1.
+
+
+
+
+
+
+
+
+
+
+
+Thao Tác Hằng Ngày
+
+  Khởi động staging:
+
+  aws sso login --profile supplyforge-dev
+  cd /home/tungn/supplyforge-ai/infra/terraform
+  bash scripts/up.sh
+
+  Lệnh này tự tạo NAT/Redis, khởi động RDS, chạy migration, rồi bật API/worker.
+
+  Tắt và tiết kiệm tối đa:
+
+  cd /home/tungn/supplyforge-ai/infra/terraform
+  bash scripts/down.sh
+
+  Lệnh này dừng ECS/RDS, xóa NAT và Redis. hibernate.sh và hibernate-all.sh hiện là alias tương đương down.sh.
+
+  Khi có thay đổi backend, commit code trước rồi build image mới bằng:
+
+  bash scripts/build-image.sh staging-004
+
+  Sau đó đổi backend_image_tag sang staging-004 trong infra/terraform/variables.tf, rồi chạy up.sh.
+
+  Còn Thiếu
+
+  - Public URL an toàn: domain, ACM certificate và HTTPS ALB.
+  - Frontend production hosting.
+  - ClickHouse Cloud và SageMaker MLOps chưa triển khai.
+
+  Các script chính đã được chuẩn hóa tại infra/terraform/scripts.
+
+    Khi sửa frontend và đã commit:
+
+  cd /home/tungn/supplyforge-ai/infra/terraform
+  bash scripts/deploy-frontend.sh
+
+  Muốn xóa toàn bộ hosting frontend để ngừng phí CloudFront/S3:
+
+  cd /home/tungn/supplyforge-ai/infra/terraform
+  bash scripts/remove-frontend.sh
