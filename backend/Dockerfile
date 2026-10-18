@@ -27,8 +27,10 @@ COPY src/ /app/src/
 
 # Do not run the application as root inside the container.
 RUN addgroup --system supplyforge && \
-    adduser --system --ingroup supplyforge supplyforge && \
+    adduser --system --home /home/supplyforge --ingroup supplyforge supplyforge && \
+    mkdir -p /home/supplyforge && \
     chown -R supplyforge:supplyforge /app
+ENV HOME=/home/supplyforge
 USER supplyforge
 
 EXPOSE 8080
