@@ -23,9 +23,10 @@ export class ServicesPageComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    this.services = this.defaultServices();
     this.apiService.getServices().subscribe({
       next: (res) => {
-        this.services = res.services || [];
+        if (res?.services?.length) this.services = res.services;
         this.loading = false;
       },
       error: (err) => {
@@ -44,5 +45,30 @@ export class ServicesPageComponent implements OnInit {
     } else {
       this.router.navigate(['/']);
     }
+  }
+
+  private defaultServices(): any[] {
+    return [
+      {
+        title: 'Kiểm tra và chuẩn hóa file',
+        desc: 'Đối chiếu cột, ngày bán và bản ghi trùng trước khi dữ liệu được dùng để phân tích.',
+        result: 'Đầu vào rõ ràng hơn'
+      },
+      {
+        title: 'Nhận diện hàng bán chậm có giải thích',
+        desc: 'Đọc sức bán theo nhiều cửa sổ thời gian và đặt cạnh tồn kho, giá trị vốn liên quan.',
+        result: 'Biết SKU cần xem trước'
+      },
+      {
+        title: 'Ước tính tác động lên dòng vốn',
+        desc: 'Nhìn phần vốn đang bị giữ trong hàng chậm để đội ngũ cân nhắc hành động phù hợp.',
+        result: 'Biết tiền đang ở đâu'
+      },
+      {
+        title: 'Đề xuất hướng xử lý để duyệt',
+        desc: 'Chuyển tín hiệu thành phương án như theo dõi, bán kèm hoặc xả hàng, luôn kèm dữ liệu nguồn.',
+        result: 'Quyết định có căn cứ'
+      }
+    ];
   }
 }

@@ -1,54 +1,55 @@
-<main sfPageMotion class="services-page">
-  <div *ngIf="loading" class="services-loading"><span></span>Đang tải các khả năng hệ thống</div>
+<main sfPageMotion class="public-page services-page">
+  <div *ngIf="loading" class="public-loading"><span></span>Đang mở cách SupplyForge làm việc</div>
 
   <ng-container *ngIf="!loading">
-    <section data-motion="header" class="services-hero" aria-labelledby="services-heading">
-      <div>
-        <p class="page-mark"><span></span> Khả năng của SupplyForge</p>
-        <h1 id="services-heading">Một hệ thống để nhìn, ưu tiên và xử lý hàng chậm.</h1>
+    <section data-motion="header" class="internal-hero services-hero" aria-labelledby="services-heading">
+      <div class="internal-hero__copy">
+        <p class="eyebrow"><span class="eyebrow-dot"></span> Cách SupplyForge làm việc</p>
+        <h1 id="services-heading">Một file. Ba câu hỏi. Một thứ tự ưu tiên.</h1>
+        <p>SupplyForge không thay merchant ra quyết định. Hệ thống biến dữ liệu bán hàng thành bối cảnh để cả đội biết đang nhìn gì và vì sao.</p>
+        <div class="hero-actions">
+          <button type="button" class="button button-primary" (click)="onAction('csv-upload')">Thử với file CSV <span aria-hidden="true">↗</span></button>
+          <button type="button" class="button button-quiet" (click)="onAction('hero')">Về trang chủ</button>
+        </div>
       </div>
-      <div class="services-intro">
-        <p>SupplyForge không thay merchant ra quyết định. Hệ thống chuẩn bị dữ liệu và bối cảnh để mỗi quyết định về kho có căn cứ hơn.</p>
-        <button type="button" (click)="onAction('csv-upload')">Nạp tệp CSV</button>
+      <div class="service-stack" aria-label="Ba lớp xử lý">
+        <div class="stack-line"></div>
+        <article><span>01</span><div><strong>Đọc dữ liệu</strong><small>Kiểm tra cột, ngày và bản ghi trùng.</small></div><b>INPUT</b></article>
+        <article><span>02</span><div><strong>Đọc tín hiệu</strong><small>Đặt sức bán cạnh tồn và giá trị vốn.</small></div><b>SIGNAL</b></article>
+        <article><span>03</span><div><strong>Đưa ra ưu tiên</strong><small>Chuyển rủi ro thành việc cần duyệt.</small></div><b>ACTION</b></article>
       </div>
     </section>
 
-    <section data-motion="priority" class="feature-index" aria-labelledby="feature-heading">
-      <header class="feature-header">
-        <div class="section-title">
-          <span class="section-index">01</span>
-          <div><p>Hệ thống làm được gì</p><h2 id="feature-heading">Bốn việc chính, cùng một mục tiêu: đưa vốn về đúng chỗ.</h2></div>
-        </div>
-        <p class="feature-summary">Mỗi khả năng được thiết kế để thay một phần việc thủ công trong quy trình quản lý tồn kho.</p>
-      </header>
-
-      <div class="feature-labels" aria-hidden="true"><span>Khả năng</span><span>Merchant nhận được gì</span></div>
+    <section data-motion="priority" class="service-index" aria-labelledby="feature-heading">
+      <div class="section-heading">
+        <span class="section-index">01</span>
+        <div><p class="section-caption">Các khả năng chính</p><h2 id="feature-heading">Không thêm một công cụ khó dùng vào quy trình vốn đã nhiều file.</h2></div>
+      </div>
       <div class="feature-list">
         <article *ngFor="let srv of services; let index = index">
-          <span class="feature-number font-mono">0{{ index + 1 }}</span>
+          <span class="feature-number">0{{ index + 1 }}</span>
           <div><h3>{{ srv.title }}</h3><p>{{ srv.desc }}</p></div>
           <strong>{{ srv.result || srv.badge }}</strong>
         </article>
-        <article *ngIf="services.length === 0" class="feature-empty"><div><h3>Danh mục khả năng đang được cập nhật</h3><p>Bắt đầu bằng việc nạp tệp dữ liệu kho hàng để xem các mô-đun hiện có.</p></div></article>
+        <article *ngIf="services.length === 0"><span class="feature-number">01</span><div><h3>Đọc file và chuẩn hóa dữ liệu</h3><p>Kiểm tra đầu vào trước khi chạy phân tích để tránh kết luận dựa trên file lỗi.</p></div><strong>Đầu vào sạch hơn</strong></article>
       </div>
     </section>
 
-    <section data-motion="panel" class="result-panel" aria-labelledby="result-heading">
-      <div class="result-intro">
-        <span class="section-index">02</span>
-        <p>Đầu ra cho đội vận hành</p>
-        <h2 id="result-heading">Một cuộc họp kho có thể bắt đầu bằng ba câu trả lời.</h2>
+    <section data-motion="panel" class="answer-panel" aria-labelledby="answer-heading">
+      <div class="answer-copy">
+        <p class="section-caption">Đầu ra cho đội vận hành</p>
+        <h2 id="answer-heading">Một cuộc họp kho có thể bắt đầu bằng ba câu trả lời.</h2>
       </div>
-      <div class="result-list">
-        <article><span>Cần xem gì trước?</span><strong>Danh sách SKU được ưu tiên</strong></article>
-        <article><span>Vì sao phải xử lý?</span><strong>Dữ liệu bán, tồn và vốn liên quan</strong></article>
-        <article><span>Làm gì tiếp theo?</span><strong>Hướng xử lý để đội ngũ duyệt</strong></article>
+      <div class="answer-list">
+        <article><span>01 / CẦN XEM GÌ TRƯỚC?</span><strong>Danh sách SKU được ưu tiên</strong><p>Không phải mọi mã hàng đều cần được xử lý cùng lúc.</p></article>
+        <article><span>02 / VÌ SAO PHẢI XỬ LÝ?</span><strong>Dữ liệu bán, tồn và vốn liên quan</strong><p>Biết điểm số đi cùng dữ liệu nào và đang đọc đến ngày nào.</p></article>
+        <article><span>03 / LÀM GÌ TIẾP THEO?</span><strong>Hướng xử lý để merchant duyệt</strong><p>Giảm giá, bán kèm hay theo dõi thêm đều là lựa chọn có bối cảnh.</p></article>
       </div>
     </section>
 
-    <section data-motion="panel" class="services-cta">
-      <div><p>Không cần thay quy trình ngay từ đầu</p><h2>Bắt đầu với file bán hàng bạn đang có.</h2></div>
-      <button type="button" (click)="onAction('csv-upload')">Nạp tệp CSV</button>
+    <section data-motion="panel" class="closing-cta">
+      <div><p class="section-caption">Bắt đầu từ quy trình hiện tại</p><h2>Nạp file CSV bạn đang có.</h2></div>
+      <button type="button" class="button button-light" (click)="onAction('csv-upload')">Nạp file CSV <span aria-hidden="true">↗</span></button>
     </section>
   </ng-container>
 </main>

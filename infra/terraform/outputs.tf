@@ -7,7 +7,7 @@ output "staging" {
     api_service     = aws_ecs_service.api.name
     worker_service  = aws_ecs_service.worker.name
     ecr_repository  = aws_ecr_repository.backend.repository_url
-    rds_endpoint    = aws_db_instance.mysql.address
+    rds_endpoint    = var.database_enabled ? aws_db_instance.mysql[0].address : null
     redis_endpoint  = var.redis_enabled ? aws_elasticache_replication_group.redis[0].primary_endpoint_address : null
     raw_bucket      = aws_s3_bucket.data["raw"].id
     lake_bucket     = aws_s3_bucket.data["lake"].id
@@ -24,7 +24,7 @@ output "django_secret_arn" {
 
 output "rds_master_secret_arn" {
   description = "RDS-managed JSON secret ARN. Its password value is never output."
-  value       = aws_db_instance.mysql.master_user_secret[0].secret_arn
+  value       = var.database_enabled ? aws_db_instance.mysql[0].master_user_secret[0].secret_arn : null
 }
 
 output "ecs_cluster_name" {

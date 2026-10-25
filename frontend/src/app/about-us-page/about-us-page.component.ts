@@ -23,9 +23,15 @@ export class AboutUsPageComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    this.data = this.defaultData();
     this.apiService.getAboutUs().subscribe({
       next: (res) => {
-        this.data = res;
+        this.data = {
+          ...this.data,
+          ...res,
+          core_values: res?.core_values?.length ? res.core_values : this.data.core_values,
+          stats: res?.stats?.length ? res.stats : this.data.stats
+        };
         this.loading = false;
       },
       error: (err) => {
@@ -46,5 +52,18 @@ export class AboutUsPageComponent implements OnInit {
     } else {
       this.router.navigate(['/']);
     }
+  }
+
+  private defaultData(): any {
+    return {
+      title: 'SupplyForge AI',
+      description: 'SupplyForge biến lịch sử bán hàng thành một thứ tự xử lý rõ ràng để merchant không phải dò từng file hoặc quyết định theo cảm giác.',
+      core_values: [
+        { title: 'Minh bạch trước khi tự động hóa', desc: 'Luôn hiển thị nguồn dữ liệu, mốc thời gian và cửa sổ quan sát trước khi tạo tín hiệu.' },
+        { title: 'Ưu tiên theo vốn và sức bán', desc: 'Đặt SKU chậm cạnh giá trị tồn để đội ngũ biết việc nào đáng được xem trước.' },
+        { title: 'AI hỗ trợ, merchant quyết định', desc: 'Khuyến nghị giúp rút ngắn thời gian phân tích, nhưng quyền duyệt vẫn ở người vận hành.' }
+      ],
+      stats: []
+    };
   }
 }

@@ -63,8 +63,8 @@ locals {
     { name = "APP_ENV", value = var.environment },
     { name = "DJANGO_DEBUG", value = "false" },
     { name = "USE_SQLITE", value = "0" },
-    { name = "MYSQL_HOST", value = aws_db_instance.mysql.address },
-    { name = "MYSQL_PORT", value = tostring(aws_db_instance.mysql.port) },
+    { name = "MYSQL_HOST", value = var.database_enabled ? aws_db_instance.mysql[0].address : "" },
+    { name = "MYSQL_PORT", value = var.database_enabled ? tostring(aws_db_instance.mysql[0].port) : "3306" },
     { name = "MYSQL_DATABASE", value = var.mysql_database },
     { name = "MYSQL_USER", value = var.mysql_username },
     { name = "REDIS_HOST", value = local.redis_endpoint },
@@ -83,14 +83,18 @@ locals {
     { name = "TRUSTED_PROXY_IPS", value = var.vpc_cidr },
   ]
 
-  runtime_secrets = [
-    {
-      name      = "DJANGO_SECRET_KEY"
-      valueFrom = aws_secretsmanager_secret.django.arn
-    },
-    {
-      name      = "MYSQL_PASSWORD"
-      valueFrom = "${aws_db_instance.mysql.master_user_secret[0].secret_arn}:password::"
-    },
-  ]
+  runtime_secrets = concat(
+    [
+      {
+        name      = "DJANGO_SECRET_KEY"
+        valueFrom = aws_secretsmanager_secret.django.arn
+      },
+    ],
+    var.database_enabled ? [
+      {
+        name      = "MYSQL_PASSWORD"
+        valueFrom = "${aws_db_instance.mysql[0].master_user_secret[0].secret_arn}:password::"
+      },
+    ] : [],
+  )
 }

@@ -13,15 +13,11 @@ fi
 # models its configuration, while AWS owns the stopped/running runtime state.
 terraform apply -auto-approve \
   -var='enable_nat_gateways=true' \
+  -var='database_enabled=true' \
   -var='redis_enabled=true' \
   -var="enable_frontend_hosting=$frontend_hosting_enabled" \
   -var='api_desired_count=0' \
   -var='worker_desired_count=0'
-
-aws rds start-db-instance \
-  --profile supplyforge-dev \
-  --region ap-southeast-1 \
-  --db-instance-identifier sf-staging-mysql >/dev/null 2>&1 || true
 
 aws rds wait db-instance-available \
   --profile supplyforge-dev \
@@ -33,6 +29,7 @@ bash "$ROOT_DIR/scripts/migrate.sh"
 
 terraform apply -auto-approve \
   -var='enable_nat_gateways=true' \
+  -var='database_enabled=true' \
   -var='redis_enabled=true' \
   -var="enable_frontend_hosting=$frontend_hosting_enabled" \
   -var='api_desired_count=1' \

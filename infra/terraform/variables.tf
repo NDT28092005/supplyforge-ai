@@ -137,9 +137,9 @@ variable "image_builder_source_key" {
 }
 
 variable "enable_frontend_hosting" {
-  description = "Manage the private S3 + CloudFront Angular frontend. Disable only to delete all frontend hosting resources."
+  description = "Manage the private S3 + CloudFront Angular frontend. Disabled by default so hosting is created only by deploy-frontend.sh."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "frontend_builder_source_key" {
@@ -175,6 +175,12 @@ variable "mysql_instance_class" {
   description = "RDS instance class for staging."
   type        = string
   default     = "db.t3.micro"
+}
+
+variable "database_enabled" {
+  description = "Create the disposable staging RDS MySQL instance. `down.sh` destroys it; `up.sh` recreates it before migrations."
+  type        = bool
+  default     = false
 }
 
 variable "redis_enabled" {

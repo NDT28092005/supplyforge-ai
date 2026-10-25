@@ -1,4 +1,16 @@
+moved {
+  from = aws_db_subnet_group.mysql
+  to   = aws_db_subnet_group.mysql[0]
+}
+
+moved {
+  from = aws_db_instance.mysql
+  to   = aws_db_instance.mysql[0]
+}
+
 resource "aws_db_subnet_group" "mysql" {
+  count = var.database_enabled ? 1 : 0
+
   name       = "sf-staging-db-subnet"
   subnet_ids = values(aws_subnet.private_data)[*].id
 
@@ -8,6 +20,8 @@ resource "aws_db_subnet_group" "mysql" {
 }
 
 resource "aws_db_instance" "mysql" {
+  count = var.database_enabled ? 1 : 0
+
   identifier     = "sf-staging-mysql"
   engine         = "mysql"
   engine_version = "8.0"
@@ -24,25 +38,25 @@ resource "aws_db_instance" "mysql" {
   # password value and ECS injects only its JSON password key at runtime.
   manage_master_user_password = true
 
-  db_subnet_group_name   = aws_db_subnet_group.mysql.name
+  db_subnet_group_name   = aws_db_subnet_group.mysql[0].name
   vpc_security_group_ids = [aws_security_group.rds.id]
   publicly_accessible    = false
   multi_az               = false
 
-  backup_retention_period   = 1
-  backup_window             = "18:30-19:30"
-  maintenance_window        = "sun:20:00-sun:21:00"
-  copy_tags_to_snapshot     = true
-  deletion_protection       = true
-  skip_final_snapshot       = false
-  final_snapshot_identifier = "sf-staging-mysql-final"
+  backup_retention_period = 1
+  backup_window           = "18:30-19:30"
+  maintenance_window      = "sun:20:00-sun:21:00"
+  copy_tags_to_snapshot   = true
+  # Staging data is disposable. `down.sh` removes the database without a
+  # final snapshot so stopped RDS storage never becomes an idle charge.
+  deletion_protection = false
+  skip_final_snapshot = true
 
   auto_minor_version_upgrade      = true
   apply_immediately               = true
   enabled_cloudwatch_logs_exports = ["error", "general", "slowquery"]
 
   lifecycle {
-    prevent_destroy = true
     # RDS selects the current patch release in the configured MySQL family.
     # Keep automatic minor upgrades enabled without Terraform attempting a downgrade.
     ignore_changes = [engine_version]

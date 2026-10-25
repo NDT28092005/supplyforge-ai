@@ -41,6 +41,7 @@ export class HeaderComponent implements OnInit {
   notifications: AppNotification[] = [];
   filterTab: 'all' | 'unread' | 'critical' = 'all';
   isLoadingNoti: boolean = false;
+  isMobileMenuOpen = false;
 
   constructor(
     public router: Router,
@@ -48,7 +49,11 @@ export class HeaderComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.loadNotifications();
+    if (this.isAppRoute) this.loadNotifications();
+  }
+
+  get isAppRoute(): boolean {
+    return this.router.url.startsWith('/app');
   }
 
   loadNotifications(): void {
@@ -124,6 +129,7 @@ export class HeaderComponent implements OnInit {
   }
 
   onLoginClick(): void {
+    this.closeMobileMenu();
     this.router.navigate(['/auth']);
   }
 
@@ -136,10 +142,19 @@ export class HeaderComponent implements OnInit {
   }
 
   onLogoClick(): void {
+    this.closeMobileMenu();
     if (this.router.url.startsWith('/app')) {
       this.router.navigate(['/app/dashboard']);
     } else {
       this.router.navigate(['/']);
     }
+  }
+
+  toggleMobileMenu(): void {
+    this.isMobileMenuOpen = !this.isMobileMenuOpen;
+  }
+
+  closeMobileMenu(): void {
+    this.isMobileMenuOpen = false;
   }
 }

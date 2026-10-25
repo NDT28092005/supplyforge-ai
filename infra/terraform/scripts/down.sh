@@ -23,23 +23,15 @@ aws ecs wait services-stable \
   --cluster sf-staging \
   --services sf-staging-api sf-staging-worker
 
-aws rds stop-db-instance \
-  --profile supplyforge-dev \
-  --region ap-southeast-1 \
-  --db-instance-identifier sf-staging-mysql >/dev/null 2>&1 || true
-
-aws rds wait db-instance-stopped \
-  --profile supplyforge-dev \
-  --region ap-southeast-1 \
-  --db-instance-identifier sf-staging-mysql
-
-# Cost-safe defaults remove NAT and Redis after all task writers and RDS stop.
+# Cost-safe defaults remove NAT, Redis, and disposable RDS storage after all
+# task writers stop. No final RDS snapshot is retained in staging.
 terraform apply -auto-approve \
   -var='enable_nat_gateways=false' \
+  -var='database_enabled=false' \
   -var='redis_enabled=false' \
   -var="enable_frontend_hosting=$frontend_hosting_enabled" \
   -var='api_desired_count=0' \
   -var='worker_desired_count=0'
 
-printf '%s\n' 'Runtime hibernated: ECS is zero, RDS is stopped, and NAT/Redis were removed.'
-printf '%s\n' 'S3, ECR, Terraform state, and RDS storage are preserved.'
+printf '%s\n' 'Runtime removed: ECS is zero; RDS, Redis, and NAT were deleted.'
+printf '%s\n' 'S3, ECR, Terraform state, and frontend hosting are preserved.'

@@ -11,19 +11,20 @@ scripts use the local `supplyforge-dev` AWS IAM Identity Center profile.
 
 ## Cost Model
 
-The default variables intentionally create **zero running Fargate tasks**.
-RDS, Redis, and NAT gateways are still billable after the first apply.
+The default variables intentionally create **zero running Fargate tasks** and
+no RDS, Redis, or NAT resources.
 
 | Command | Effect | Billing left running |
 |---|---|---|
-| `bash scripts/down.sh` | API/worker to zero, requests RDS stop, removes Redis/NAT | S3, ECR, RDS storage, logs |
+| `bash scripts/down.sh` | API/worker to zero, deletes disposable RDS/Redis/NAT | S3, ECR, logs |
 | `bash scripts/deploy-frontend.sh` | Builds Angular and deploys it to private S3 + CloudFront | Static asset storage and actual CloudFront traffic only |
 | `bash scripts/remove-frontend.sh` | Deletes CloudFront, static assets and its CodeBuild project | Does not touch data buckets, ECR, or RDS storage |
-| `bash scripts/up.sh` | Recreates NAT if needed, starts RDS, API=1, worker=1 | All staging services |
+| `bash scripts/up.sh` | Recreates NAT, RDS, Redis, migrates schema, API=1, worker=1 | All staging services |
 
-Redis cannot be paused. `terraform apply -var='redis_enabled=false'` destroys
-it and loses queued Celery jobs and cached data. RDS has `prevent_destroy` and
-deletion protection; it is intentionally stopped with AWS CLI, not destroyed.
+Redis cannot be paused. `down.sh` destroys Redis and the staging RDS instance;
+all queued jobs, cache entries, database rows, backups, and snapshots from that
+instance are intentionally discarded. `up.sh` creates a new empty database and
+runs migrations before starting the API and workers.
 
 ## Frontend Hosting
 

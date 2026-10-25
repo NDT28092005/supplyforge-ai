@@ -1,103 +1,53 @@
-<main class="min-h-screen bg-slate-50/50 py-12 px-6 md:px-16 lg:px-24 font-sans animate-fade-in">
-  <div class="max-w-5xl mx-auto space-y-12">
+<main sfPageMotion class="public-page blog-page">
+  <div *ngIf="loading" class="public-loading"><span></span>Đang mở góc kiến thức</div>
 
-    <!-- Loading Skeleton -->
-    <div *ngIf="loading" class="text-center py-20 space-y-4">
-      <div class="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-      <p class="text-xs font-bold text-slate-500">Đang tải dữ liệu bài viết từ API /api/v1/blog...</p>
-    </div>
+  <ng-container *ngIf="!loading && !selectedArticle">
+    <section data-motion="header" class="blog-hero" aria-labelledby="blog-heading">
+      <div>
+        <p class="eyebrow"><span class="eyebrow-dot"></span> Góc kiến thức SupplyForge</p>
+        <h1 id="blog-heading">Những điều cần biết trước khi ra quyết định về kho.</h1>
+      </div>
+      <p>Giải thích ngắn gọn về hàng bán chậm, dữ liệu theo thời gian và cách biến một file CSV thành một cuộc trao đổi dễ hiểu trong đội ngũ.</p>
+    </section>
 
-    <!-- Main Content View -->
-    <div *ngIf="!loading" class="space-y-10">
-
-      <!-- Header Page Card (when on list view) -->
-      <header *ngIf="!selectedArticle"
-        class="bg-white border border-slate-200/80 p-8 sm:p-12 rounded-3xl shadow-xs text-center space-y-4">
-        <span
-          class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-4 py-1.5 rounded-full inline-block">
-          Blog &amp; Kiến thức Kho hàng
-        </span>
-        <h1 class="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
-          Góc Kiến thức Quản trị Tồn kho &amp; Dòng vốn
-        </h1>
-        <p class="text-slate-600 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed font-medium">
-          Tổng hợp các bài viết phân tích, kinh nghiệm và chiến lược tối ưu hóa kho hàng dành cho nhà bán lẻ và
-          E-commerce.
-        </p>
-      </header>
-
-      <!-- ARTICLE DETAIL VIEW -->
-      <article *ngIf="selectedArticle"
-        class="bg-white border border-slate-200/80 p-8 sm:p-12 rounded-3xl shadow-xs space-y-8 animate-fade-in">
-        <div class="flex items-center justify-between border-b border-slate-100 pb-5">
-          <button (click)="backToList()"
-            class="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer">
-            <span>&larr; Quay lại danh sách bài viết</span>
-          </button>
-          <span class="text-[10px] font-mono font-bold text-slate-400">API: /api/v1/blog/{{ selectedArticle.slug
-            }}</span>
+    <section data-motion="priority" class="article-grid" aria-label="Danh sách bài viết">
+      <article *ngFor="let post of posts; let index = index" (click)="readArticle(post.slug)"
+        [class.featured]="index === 0" class="article-card">
+        <div class="article-card__top">
+          <span>{{ post.category || 'Inventory basics' }}</span>
+          <small>{{ post.read_time || '5 phút đọc' }}</small>
         </div>
-
-        <div class="space-y-3">
-          <div class="flex items-center gap-3">
-            <span
-              class="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full uppercase tracking-wider font-mono">
-              {{ selectedArticle.category }}
-            </span>
-            <span class="text-xs text-slate-400 font-mono">{{ selectedArticle.date }} · {{ selectedArticle.read_time
-              }}</span>
-          </div>
-          <h1 class="text-2xl sm:text-4xl font-black text-slate-900 leading-tight">
-            {{ selectedArticle.title }}
-          </h1>
+        <div class="article-card__body">
+          <p class="article-number">0{{ index + 1 }}</p>
+          <h2>{{ post.title }}</h2>
+          <p>{{ post.summary }}</p>
         </div>
-
-        <!-- Paragraphs -->
-        <div class="space-y-5 text-sm sm:text-base text-slate-700 leading-relaxed font-medium">
-          <p *ngFor="let p of selectedArticle.content">
-            {{ p }}
-          </p>
-        </div>
-
-        <!-- Key Takeaways Box -->
-        <div *ngIf="selectedArticle.key_takeaways"
-          class="bg-indigo-50/70 border border-indigo-100 p-6 rounded-2xl space-y-3">
-          <h4 class="text-xs font-bold text-indigo-900 uppercase tracking-wider">Điểm cốt lõi cần nhớ:</h4>
-          <ul class="space-y-2 text-xs sm:text-sm text-indigo-800 pl-5 list-disc font-semibold">
-            <li *ngFor="let point of selectedArticle.key_takeaways">{{ point }}</li>
-          </ul>
-        </div>
+        <div class="article-card__footer"><span>Đọc bài</span><b aria-hidden="true">↗</b></div>
       </article>
+    </section>
+  </ng-container>
 
-      <!-- BLOG LIST GRID -->
-      <section *ngIf="!selectedArticle" class="grid grid-cols-1 md:grid-cols-2 gap-6" aria-label="Danh sách bài viết">
-        <article *ngFor="let post of posts" (click)="readArticle(post.slug)"
-          class="bg-white border border-slate-200/80 p-7 rounded-3xl shadow-xs space-y-4 hover:border-indigo-300 transition-all cursor-pointer group">
-          <div class="flex items-center justify-between">
-            <span
-              class="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full uppercase tracking-wider font-mono">
-              {{ post.category }}
-            </span>
-            <span class="text-[11px] text-slate-400 font-mono">{{ post.read_time }}</span>
-          </div>
-
-          <div class="space-y-2">
-            <h2 class="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition-colors leading-snug">
-              {{ post.title }}
-            </h2>
-            <p class="text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-3 font-medium">
-              {{ post.summary }}
-            </p>
-          </div>
-
-          <div
-            class="pt-2 flex items-center justify-between border-t border-slate-100 text-xs font-bold text-indigo-600">
-            <span>Đọc bài viết chi tiết</span>
-            <span class="transition-transform group-hover:translate-x-1">&rarr;</span>
-          </div>
-        </article>
-      </section>
-
+  <article *ngIf="!loading && selectedArticle" data-motion="header" class="article-detail">
+    <button type="button" class="back-link" (click)="backToList()">← Quay lại góc kiến thức</button>
+    <div class="article-detail__meta">
+      <span>{{ selectedArticle.category || 'Inventory basics' }}</span>
+      <small>{{ selectedArticle.date }} · {{ selectedArticle.read_time || '5 phút đọc' }}</small>
     </div>
-  </div>
+    <h1>{{ selectedArticle.title }}</h1>
+    <div class="article-detail__layout">
+      <div class="article-content">
+        <p *ngFor="let paragraph of selectedArticle.content">{{ paragraph }}</p>
+      </div>
+      <aside *ngIf="selectedArticle.key_takeaways?.length" class="takeaway-card">
+        <span class="card-label">TÓM TẮT NHANH</span>
+        <h2>Điều cần nhớ</h2>
+        <ul><li *ngFor="let point of selectedArticle.key_takeaways">{{ point }}</li></ul>
+      </aside>
+    </div>
+  </article>
+
+  <section *ngIf="!loading && !selectedArticle" class="blog-cta">
+    <div><p class="section-caption">Muốn nhìn dữ liệu của chính bạn?</p><h2>Đọc xong, thử với một file CSV thật.</h2></div>
+    <a routerLink="/auth" [queryParams]="{ mode: 'register' }">Tạo tài khoản <span aria-hidden="true">↗</span></a>
+  </section>
 </main>

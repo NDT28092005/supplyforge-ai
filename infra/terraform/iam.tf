@@ -52,10 +52,10 @@ data "aws_iam_policy_document" "execution_secrets" {
   statement {
     sid     = "ReadRuntimeSecrets"
     actions = ["secretsmanager:GetSecretValue"]
-    resources = [
-      aws_secretsmanager_secret.django.arn,
-      aws_db_instance.mysql.master_user_secret[0].secret_arn,
-    ]
+    resources = concat(
+      [aws_secretsmanager_secret.django.arn],
+      var.database_enabled ? [aws_db_instance.mysql[0].master_user_secret[0].secret_arn] : [],
+    )
   }
 }
 
