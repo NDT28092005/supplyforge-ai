@@ -448,3 +448,53 @@
   .user-chip { padding-right: .2rem; }
   .login-button { font-size: .62rem; padding: .64rem .65rem; }
 }
+
+/* Keep the public navigation human and legible without touching the app workspace. */
+.sf-header:not(.sf-header--app) {
+  background: rgba(247, 247, 241, .92);
+  border-bottom-color: rgba(190, 209, 201, .82);
+  font-family: 'Lexend', 'Be Vietnam Pro', sans-serif;
+}
+
+.sf-header:not(.sf-header--app) .sf-header__inner {
+  max-width: 1440px;
+  min-height: 4.8rem;
+}
+
+.sf-header:not(.sf-header--app) .sf-brand__mark {
+  background: #e7f1eb;
+  border-color: #c6dcd2;
+}
+
+.sf-header:not(.sf-header--app) .sf-brand__copy small {
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  font-size: .52rem;
+  letter-spacing: .02em;
+  text-transform: none;
+}
+
+.sf-header:not(.sf-header--app) .sf-header__nav { gap: .35rem; }
+
+.sf-header:not(.sf-header--app) .sf-header__nav a {
+  color: #405e65;
+  font-size: .73rem;
+  padding: .66rem .78rem;
+}
+
+.sf-header:not(.sf-header--app) .sf-header__nav a:hover,
+.sf-header:not(.sf-header--app) .sf-header__nav a.is-active {
+  background: #e1eee8;
+  color: #146b65;
+}
+
+.sf-header:not(.sf-header--app) .login-button {
+  background: #123b45;
+  border-radius: .62rem;
+  font-size: .72rem;
+  padding: .76rem .92rem;
+}
+
+.sf-header:not(.sf-header--app) .demo-button {
+  color: #48646a;
+  font-size: .72rem;
+}

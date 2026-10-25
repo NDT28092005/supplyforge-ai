@@ -501,3 +501,358 @@
 @media (prefers-reduced-motion: reduce) {
   .orbit-ring, .orbit-spark { animation: none; }
 }
+
+/* Public v2: a spacious operating brief, not a compact dashboard. */
+.public-page {
+  --ink: #102d36;
+  --muted: #526b70;
+  --line: #cbdad5;
+  --cyan: #168a7e;
+  --blue: #176a78;
+  font-family: 'Lexend', 'Be Vietnam Pro', sans-serif;
+  max-width: 1320px;
+}
+
+.public-page :is(button, input) {
+  font-family: inherit;
+}
+
+.eyebrow,
+.hero-overline,
+.visual-label,
+.scene-topline,
+.scene-footer,
+.step-eyebrow,
+.closing-kicker,
+.dialog-label {
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+}
+
+.eyebrow {
+  font-size: .68rem;
+  letter-spacing: .035em;
+  text-transform: none;
+}
+
+.hero-overline {
+  color: #547179;
+  font-size: .7rem;
+  letter-spacing: .025em;
+  text-transform: none;
+}
+
+.home-hero {
+  background:
+    radial-gradient(circle at 0 0, rgba(22, 138, 126, .14), transparent 30rem),
+    #f7f7f1;
+  border-color: #c6d8d1;
+  border-radius: 1.7rem;
+  grid-template-columns: minmax(0, 1.04fr) minmax(31rem, .96fr);
+  min-height: 670px;
+}
+
+.hero-copy {
+  padding: clamp(2.5rem, 6vw, 6.4rem);
+}
+
+.hero-copy h1 {
+  font-size: clamp(3rem, 5.15vw, 5.45rem);
+  letter-spacing: -.066em;
+  line-height: 1.03;
+  margin: 1rem 0 1.45rem;
+  max-width: 11.5ch;
+}
+
+.hero-summary {
+  color: #405b61;
+  font-size: 1rem;
+  line-height: 1.78;
+  max-width: 35rem;
+}
+
+.hero-actions {
+  margin-top: 2.25rem;
+}
+
+.button {
+  border-radius: .65rem;
+  font-size: .77rem;
+  padding: .9rem 1.1rem;
+}
+
+.button-primary {
+  background: #123b45;
+}
+
+.hero-reassurance {
+  color: #506c70;
+  font-size: .72rem;
+}
+
+.hero-visual {
+  background: linear-gradient(145deg, #123c46, #0d3038);
+  isolation: isolate;
+  min-height: 670px;
+  padding: clamp(1.4rem, 3vw, 2.5rem);
+}
+
+.hero-visual::before {
+  opacity: .55;
+  z-index: -1;
+}
+
+.hero-illustration {
+  bottom: -10%;
+  height: auto;
+  max-width: none;
+  opacity: .76;
+  position: absolute;
+  right: -28%;
+  width: 130%;
+  will-change: transform, opacity;
+  z-index: 0;
+}
+
+.hero-visual .visual-header,
+.hero-visual .intake-card,
+.hero-visual .import-window {
+  z-index: 2;
+}
+
+.visual-header strong {
+  font-size: .98rem;
+  line-height: 1.4;
+  max-width: 21rem;
+}
+
+.live-chip {
+  background: rgba(7, 32, 39, .38);
+  color: #b9f0e4;
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  font-size: .55rem;
+}
+
+.import-window {
+  align-items: stretch;
+  background: rgba(5, 28, 34, .66);
+  border: 1px solid rgba(185, 235, 222, .33);
+  border-radius: 1rem;
+  display: grid;
+  gap: .7rem;
+  grid-template-columns: 1fr auto 1fr;
+  margin: clamp(2rem, 7vh, 5.8rem) 0 1.05rem;
+  padding: .9rem;
+  will-change: transform, opacity;
+}
+
+.window-event {
+  background: rgba(36, 98, 102, .46);
+  border-radius: .7rem;
+  display: grid;
+  gap: .28rem;
+  padding: .75rem;
+}
+
+.window-event.is-current {
+  background: rgba(25, 143, 126, .34);
+  border: 1px solid rgba(173, 244, 223, .23);
+}
+
+.window-event__index {
+  color: #9bc9c2;
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  font-size: .54rem;
+  letter-spacing: .06em;
+}
+
+.window-event strong {
+  color: #f5fff9;
+  font-size: .8rem;
+}
+
+.window-event small {
+  color: #b0d2cb;
+  font-size: .61rem;
+  line-height: 1.45;
+}
+
+.window-connector {
+  align-self: center;
+  background: #b9e5d7;
+  height: 1px;
+  position: relative;
+  width: 1.4rem;
+}
+
+.window-connector::after {
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid #b9e5d7;
+  border-top: 4px solid transparent;
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: -3px;
+}
+
+.intake-card {
+  background: rgba(8, 34, 40, .77);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 20px 42px -30px rgba(0, 0, 0, .86);
+}
+
+.intake-card h2 {
+  font-size: 1rem;
+}
+
+.intake-copy {
+  color: #bed4d1;
+  font-size: .72rem;
+}
+
+.signal-strip {
+  margin-top: 1.7rem;
+}
+
+.signal-strip > div {
+  padding-bottom: 1.45rem;
+  padding-top: 1.45rem;
+}
+
+.signal-strip strong {
+  font-size: .9rem;
+  letter-spacing: -.02em;
+}
+
+.signal-strip small {
+  color: #60767b;
+  font-size: .73rem;
+}
+
+.world-journey {
+  min-height: 195vh;
+  padding-top: 8rem;
+}
+
+.journey-intro {
+  max-width: 51rem;
+}
+
+.journey-intro h2,
+.trust-copy h2,
+.closing-cta h2 {
+  letter-spacing: -.058em;
+  line-height: 1.06;
+}
+
+.journey-intro h2 {
+  font-size: clamp(2.25rem, 4.3vw, 4.3rem);
+  max-width: 13ch;
+}
+
+.journey-intro > p:last-child,
+.trust-copy > p:last-child {
+  color: #526b70;
+  font-size: .96rem;
+  max-width: 39rem;
+}
+
+.journey-grid {
+  gap: clamp(4rem, 8vw, 9.5rem);
+  grid-template-columns: minmax(23rem, 1.03fr) minmax(21rem, .97fr);
+}
+
+.scene-frame {
+  border-color: #2d646b;
+  border-radius: 1.2rem;
+}
+
+.scene-viewport {
+  background: linear-gradient(135deg, #0f333d, #164b52);
+  isolation: isolate;
+}
+
+.scene-illustration {
+  height: 106%;
+  left: -14%;
+  mix-blend-mode: screen;
+  object-fit: cover;
+  opacity: .19;
+  position: absolute;
+  top: -2%;
+  width: 130%;
+  will-change: transform;
+  z-index: 0;
+}
+
+.scene-route,
+.scene-glow,
+.scene-pulse {
+  z-index: 2;
+}
+
+.journey-copy {
+  padding-top: 4rem;
+}
+
+.journey-step {
+  min-height: 66vh;
+}
+
+.journey-step h3 {
+  font-size: clamp(2rem, 3.2vw, 3.2rem);
+  line-height: 1.08;
+  max-width: 13ch;
+}
+
+.journey-step > div:last-child > p:not(.step-eyebrow) {
+  color: #506b70;
+  font-size: .94rem;
+  max-width: 31rem;
+}
+
+.trust-band {
+  background: #e8f1ec;
+  border-color: #c9ddd4;
+  border-radius: 1.2rem;
+}
+
+.trust-copy h2 {
+  max-width: 12ch;
+}
+
+.trust-list strong {
+  font-size: .9rem;
+}
+
+.trust-list small {
+  color: #597177;
+  font-size: .74rem;
+}
+
+.closing-cta {
+  background: #123b45;
+  border-radius: 1.2rem;
+}
+
+.public-footer {
+  color: #5e7478;
+  font-size: .7rem;
+}
+
+@media (max-width: 920px) {
+  .home-hero { grid-template-columns: 1fr; }
+  .hero-visual { min-height: 590px; }
+  .hero-illustration { right: -20%; width: 110%; }
+}
+
+@media (max-width: 640px) {
+  .hero-copy h1 { font-size: clamp(2.65rem, 12vw, 3.65rem); max-width: 12ch; }
+  .hero-summary { font-size: .9rem; }
+  .hero-visual { min-height: 560px; }
+  .hero-illustration { bottom: 3%; right: -37%; width: 152%; }
+  .import-window { gap: .5rem; grid-template-columns: 1fr; margin-top: 2.1rem; }
+  .window-connector { justify-self: center; transform: rotate(90deg); }
+  .scene-illustration { opacity: .14; }
+  .journey-intro h2 { font-size: 2.45rem; }
+  .journey-step { min-height: 50vh; }
+}

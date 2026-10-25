@@ -13,6 +13,7 @@
     <section data-motion="priority" class="article-grid" aria-label="Danh sách bài viết">
       <article *ngFor="let post of posts; let index = index" (click)="readArticle(post.slug)"
         [class.featured]="index === 0" class="article-card">
+        <img class="article-card__art" [src]="articleArt[index % articleArt.length]" alt="" aria-hidden="true" />
         <div class="article-card__top">
           <span>{{ post.category || 'Inventory basics' }}</span>
           <small>{{ post.read_time || '5 phút đọc' }}</small>

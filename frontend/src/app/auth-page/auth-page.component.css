@@ -675,6 +675,116 @@
   }
 }
 
+/* Public auth v2: the same clear operating language as the public site. */
+.auth-page {
+  --auth-ink: #112f37;
+  --auth-muted: #526b70;
+  --auth-teal: #167b72;
+  font-family: 'Lexend', 'Be Vietnam Pro', sans-serif;
+  background:
+    radial-gradient(circle at 10% 4%, rgba(232, 190, 86, .18), transparent 21rem),
+    #edf2ed;
+}
+
+.auth-page :is(button, input) { font-family: inherit; }
+
+.auth-form-wrapper {
+  border-color: #ccdcd6;
+  border-radius: 1.2rem;
+  box-shadow: 0 30px 70px -52px rgba(17, 47, 55, .7);
+}
+
+.brand-name,
+.form-header .form-title {
+  letter-spacing: -.045em;
+}
+
+.form-header .form-title {
+  font-size: clamp(1.85rem, 3vw, 2.45rem);
+  line-height: 1.14;
+}
+
+.form-header .form-subtitle {
+  color: #526b70;
+  font-size: .87rem;
+  line-height: 1.7;
+}
+
+.auth-tabs,
+.field-box input,
+.btn-social {
+  border-color: #ccddd7;
+}
+
+.auth-tab.active {
+  box-shadow: 0 6px 16px -14px rgba(20, 101, 96, .6);
+}
+
+.btn-submit-primary {
+  background: #123b45;
+  font-size: .8rem;
+  padding: .9rem 1.5rem;
+}
+
+.btn-submit-primary:hover:not(:disabled) { background: #1c5260; }
+
+.auth-brand-panel {
+  background:
+    radial-gradient(circle at 18% 14%, rgba(234, 190, 82, .17), transparent 18rem),
+    linear-gradient(145deg, #133d47, #10343e 56%, #0d2932);
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.auth-brand-art {
+  bottom: -7%;
+  filter: saturate(.8) contrast(1.1);
+  height: auto;
+  mix-blend-mode: screen;
+  opacity: .26;
+  position: absolute;
+  right: -20%;
+  width: 120%;
+  z-index: 0;
+}
+
+.brand-showcase-container {
+  position: relative;
+  z-index: 1;
+}
+
+.platform-badge,
+.pillar-number {
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+}
+
+.showcase-title {
+  font-size: clamp(2.7rem, 4.1vw, 4.3rem);
+  letter-spacing: -.065em;
+  line-height: 1.04;
+  max-width: 11ch;
+}
+
+.showcase-mission {
+  color: #d1e3dc;
+  font-size: .91rem;
+  line-height: 1.8;
+  max-width: 30rem;
+}
+
+.pillar-item {
+  background: rgba(7, 37, 44, .48);
+  border-color: rgba(180, 228, 214, .23);
+  padding: .9rem .95rem;
+}
+
+.pillar-title { font-size: .82rem; }
+.pillar-desc { color: #c3d9d2; font-size: .7rem; line-height: 1.5; }
+
+@media (max-width: 1023px) {
+  .auth-page { min-height: 100vh; }
+}
+
 /* Public auth surface: calmer than the operational workspace. */
 .auth-page {
   --auth-ink: #0e1f2f;

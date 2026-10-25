@@ -1,5 +1,8 @@
 .next
 node_modules
+.angular
+dist
+coverage
 .git
 .gitignore
 *.md

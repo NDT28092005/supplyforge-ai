@@ -3,10 +3,10 @@
     <div class="hero-copy">
       <p class="eyebrow"><span class="eyebrow-dot"></span> Inventory intelligence cho merchant</p>
       <span class="hero-overline">Từ file bán hàng đến quyết định có căn cứ</span>
-      <h1 id="main-heading">Đừng để hàng chậm quyết định thay bạn.</h1>
+      <h1 id="main-heading">Nhập file hôm nay. Tuần sau nhập tiếp. Vẫn biết hàng nào đang mắc vốn.</h1>
       <p class="hero-summary">
-        SupplyForge gom lịch sử bán hàng thành một bản đồ dễ đọc: SKU nào cần xem trước, vốn đang nằm ở đâu và
-        bước tiếp theo nên là gì.
+        Mỗi lần nhập là một mốc dữ liệu. SupplyForge đọc lại sức bán và tồn theo cửa sổ 7, 30, 90 ngày để bạn phân
+        biệt biến động ngắn hạn với vấn đề cần xử lý.
       </p>
 
       <div class="hero-actions">
@@ -26,27 +26,28 @@
     <div class="hero-visual" aria-label="Mô phỏng hành trình dữ liệu tồn kho">
       <div class="visual-noise visual-noise--one"></div>
       <div class="visual-noise visual-noise--two"></div>
+      <img data-hero-illustration class="hero-illustration" src="assets/public/import-windows.svg"
+        alt="Minh họa dữ liệu bán hàng được đặt vào các cửa sổ thời gian" />
       <div class="visual-header">
         <div>
-          <span class="visual-label">WORKSPACE / INVENTORY PULSE</span>
-          <strong>Nhìn thấy điểm nghẽn trước khi nó thành chi phí</strong>
+          <span class="visual-label">WORKSPACE / INVENTORY HISTORY</span>
+          <strong>Đừng mất bối cảnh chỉ vì có file mới.</strong>
         </div>
-        <span class="live-chip"><i></i> LIVE MODEL</span>
+        <span class="live-chip"><i></i> DATA AS OF: HÔM NAY</span>
       </div>
 
-      <div class="orbit-map" aria-hidden="true">
-        <div class="orbit-ring orbit-ring--large"></div>
-        <div class="orbit-ring orbit-ring--small"></div>
-        <div class="orbit-spark orbit-spark--one"></div>
-        <div class="orbit-spark orbit-spark--two"></div>
-        <div class="orbit-core">
-          <span class="orbit-core__label">SKU</span>
-          <strong>3,842</strong>
-          <small>đang được đọc</small>
+      <div data-import-window class="import-window" aria-label="Mốc dữ liệu và cửa sổ phân tích">
+        <div class="window-event">
+          <span class="window-event__index">LẦN NẠP 01</span>
+          <strong>Hôm nay</strong>
+          <small>Tạo đường cơ sở</small>
         </div>
-        <div class="orbit-node orbit-node--one"><span>01</span><b>Sales</b></div>
-        <div class="orbit-node orbit-node--two"><span>02</span><b>Risk</b></div>
-        <div class="orbit-node orbit-node--three"><span>03</span><b>Action</b></div>
+        <span class="window-connector" aria-hidden="true"></span>
+        <div class="window-event is-current">
+          <span class="window-event__index">LẦN NẠP 02</span>
+          <strong>Một tuần sau</strong>
+          <small>Tính lại 7 / 30 / 90 ngày</small>
+        </div>
       </div>
 
       <div class="intake-card">
@@ -102,8 +103,8 @@
   <section id="world-journey" #journeyRoot class="world-journey" aria-labelledby="journey-heading">
     <div class="journey-intro">
       <p class="eyebrow"><span class="eyebrow-dot"></span> Một hành trình dữ liệu</p>
-      <h2 id="journey-heading">Từ một file quen thuộc đến một thứ tự hành động rõ ràng.</h2>
-      <p>Cuộn xuống để đi qua ba chặng SupplyForge xử lý giúp bạn. Mỗi chặng trả lời một câu hỏi vận hành, không thêm một lớp thuật ngữ.</p>
+      <h2 id="journey-heading">Lần nạp sau không nên bắt đội ngũ bắt đầu lại từ đầu.</h2>
+      <p>Cuộn để xem một file đi từ kiểm tra đầu vào, qua bối cảnh thời gian, đến danh sách việc cần xem trước. Mỗi chặng trả lời đúng một câu hỏi vận hành.</p>
     </div>
 
     <div class="journey-grid">
@@ -114,6 +115,7 @@
             <span>0{{ activeWorldScene + 1 }} / 03</span>
           </div>
           <div class="scene-viewport">
+            <img class="scene-illustration" src="assets/public/action-board.svg" alt="" aria-hidden="true" />
             <div class="scene-glow"></div>
             <svg class="scene-route" viewBox="0 0 560 420" fill="none" role="img"
               aria-label="Đường đi từ dữ liệu đến hành động">
@@ -134,7 +136,7 @@
             <div class="scene-pulse scene-pulse--two"></div>
           </div>
           <div class="scene-footer">
-            <span class="scene-status"><i></i> Model đang giữ ngữ cảnh</span>
+            <span class="scene-status"><i></i> Mốc dữ liệu là một phần của kết luận</span>
             <span class="scene-date">WINDOW: 7 / 30 / 90 NGÀY</span>
           </div>
         </div>
@@ -158,8 +160,8 @@
   <section class="trust-band" aria-labelledby="trust-heading">
     <div class="trust-copy">
       <p class="eyebrow"><span class="eyebrow-dot"></span> Được thiết kế cho quyết định thật</p>
-      <h2 id="trust-heading">AI không thay người quản lý kho. Nó giúp bạn bắt đầu đúng chỗ.</h2>
-      <p>Không cần tin một điểm số mơ hồ. Bạn luôn thấy dữ liệu nguồn, khoảng thời gian và lý do đằng sau mỗi ưu tiên.</p>
+      <h2 id="trust-heading">Không còn một con số rủi ro mà không biết nó đến từ đâu.</h2>
+      <p>Mỗi ưu tiên cần đi cùng dữ liệu nguồn, thời điểm dữ liệu và khoảng thời gian đã được nhìn. Người quản lý vẫn là người quyết định.</p>
     </div>
     <div class="trust-list">
       <div><span>01</span><strong>Hiển thị thời điểm dữ liệu</strong><small>Biết phân tích đang đọc đến ngày nào.</small></div>

@@ -11,6 +11,12 @@ import { ApiService } from '../api.service';
   styleUrls: ['./blog-page.component.css']
 })
 export class BlogPageComponent implements OnInit {
+  readonly articleArt = [
+    'assets/public/import-windows.svg',
+    'assets/public/signal-shelf.svg',
+    'assets/public/action-board.svg'
+  ];
+
   posts: any[] = [];
   selectedArticle: any = null;
   loading = true;

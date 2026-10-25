@@ -112,12 +112,10 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
             .fromTo('[data-motion="header"] .hero-summary', { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.42 }, '-=0.24')
             .fromTo('[data-motion="header"] .hero-actions', { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.35 }, '-=0.18')
             .fromTo('[data-motion="header"] .hero-visual', { autoAlpha: 0, x: desktop ? 24 : 0 }, { autoAlpha: 1, x: 0, duration: 0.65 }, '-=0.5')
+            .fromTo('[data-hero-illustration]', { autoAlpha: 0, y: 22, scale: 1.03 }, { autoAlpha: 0.76, y: 0, scale: 1, duration: 0.7 }, '-=0.52')
+            .fromTo('[data-import-window]', { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.42 }, '-=0.34')
             .fromTo('.signal-strip', { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.35 }, '-=0.25');
 
-          gsap.to('.orbit-ring--large', { rotation: 360, duration: 36, repeat: -1, ease: 'none' });
-          gsap.to('.orbit-ring--small', { rotation: -360, duration: 24, repeat: -1, ease: 'none' });
-          gsap.to('.orbit-spark--one', { y: -9, x: 5, duration: 2.6, repeat: -1, yoyo: true, ease: 'sine.inOut' });
-          gsap.to('.orbit-spark--two', { y: 7, x: -4, duration: 3.2, repeat: -1, yoyo: true, ease: 'sine.inOut' });
           return () => timeline.kill();
         },
         root
@@ -258,6 +256,10 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
     const nodeScaleTo = nodes.map((node) => gsap.quickTo(node, 'scale', { duration: 0.25, ease: 'power2.out' }));
     const stepOpacityTo = steps.map((step) => gsap.quickTo(step, 'autoAlpha', { duration: 0.24, ease: 'power2.out' }));
     const stepYTo = steps.map((step) => gsap.quickTo(step, 'y', { duration: 0.24, ease: 'power2.out' }));
+    const sceneIllustration = journey.querySelector<HTMLElement>('.scene-illustration');
+    const sceneIllustrationYTo = sceneIllustration
+      ? gsap.quickTo(sceneIllustration, 'yPercent', { duration: 0.35, ease: 'power2.out' })
+      : undefined;
     const normalizeProgress = gsap.utils.clamp(0, 1);
     const mapScene = gsap.utils.mapRange(0, 1, 0, steps.length - 1);
     const routeLength = progress.getTotalLength();
@@ -275,6 +277,7 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
       const activeScene = Math.min(steps.length - 1, Math.floor(sceneValue + 0.45));
 
       progressTo(routeLength * (1 - progressValue));
+      sceneIllustrationYTo?.(gsap.utils.mapRange(0, 1, 2, -8, progressValue));
       nodes.forEach((_, index) => nodeScaleTo[index](index === activeScene ? 1.12 : 0.76));
       steps.forEach((_, index) => {
         const distance = Math.abs(index - sceneValue);

@@ -57,7 +57,7 @@ export class AboutUsPageComponent implements OnInit {
   private defaultData(): any {
     return {
       title: 'SupplyForge AI',
-      description: 'SupplyForge biến lịch sử bán hàng thành một thứ tự xử lý rõ ràng để merchant không phải dò từng file hoặc quyết định theo cảm giác.',
+      description: 'SupplyForge đặt dữ liệu bán hàng vào đúng mốc thời gian để merchant không phải dò từng file, quên lần nhập trước hoặc quyết định theo cảm giác.',
       core_values: [
         { title: 'Minh bạch trước khi tự động hóa', desc: 'Luôn hiển thị nguồn dữ liệu, mốc thời gian và cửa sổ quan sát trước khi tạo tín hiệu.' },
         { title: 'Ưu tiên theo vốn và sức bán', desc: 'Đặt SKU chậm cạnh giá trị tồn để đội ngũ biết việc nào đáng được xem trước.' },
