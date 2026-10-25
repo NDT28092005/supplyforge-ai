@@ -170,6 +170,7 @@
   filter: saturate(.78);
   height: auto;
   opacity: .18;
+  pointer-events: none;
   position: absolute;
   right: -25%;
   width: 82%;

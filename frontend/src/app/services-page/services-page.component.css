@@ -186,6 +186,7 @@
   mix-blend-mode: multiply;
   object-fit: cover;
   opacity: .25;
+  pointer-events: none;
   position: absolute;
   top: 0;
   width: 100%;

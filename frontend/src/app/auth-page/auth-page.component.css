@@ -742,6 +742,7 @@
   height: auto;
   mix-blend-mode: screen;
   opacity: .26;
+  pointer-events: none;
   position: absolute;
   right: -20%;
   width: 120%;
