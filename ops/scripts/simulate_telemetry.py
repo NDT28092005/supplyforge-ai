@@ -1,243 +1,384 @@
 #!/usr/bin/env python3
+"""Expose realistic SupplyForge metrics for local dashboard demonstrations.
+
+This process is deliberately separate from Django and listens on port 9108 by
+default. It is a dashboard fixture, not a traffic generator: never scrape it
+at the same time as the real backend because the two sources would represent
+different realities in one Prometheus instance.
 """
-SupplyForge AI — Enterprise Telemetry & Metric Simulator
-Generates 100% complete metrics for Django API, MySQL, Redis, Celery, ML Pipeline, and Domain KPIs.
-"""
-import time
+
+from __future__ import annotations
+
+import os
 import random
-from prometheus_client import start_http_server, Counter, Histogram, Gauge
+import time
 
-# ----------------------------------------------------
-# 1. Django API & Recording Rules Metrics
-# ----------------------------------------------------
-REQ_BEFORE_MW = Counter(
+from prometheus_client import Counter, Gauge, Histogram, start_http_server
+
+
+PORT = int(os.getenv('TELEMETRY_SIMULATOR_PORT', '9108'))
+INTERVAL_SECONDS = max(1.0, float(os.getenv('TELEMETRY_SIMULATOR_INTERVAL_SECONDS', '2')))
+
+
+# These schemas intentionally match backend/supplyforge/metrics.py.
+HTTP_REQUESTS_BEFORE = Counter(
     'django_http_requests_before_middlewares_total',
-    'Total HTTP requests before middlewares',
-    ['method']
+    'Total HTTP requests before Django middleware.',
+    ['method'],
 )
-RESP_STATUS = Counter(
-    'django_http_responses_total_by_status_name_total',
-    'Total HTTP responses by status name',
-    ['status', 'status_code']
-)
-REQ_LATENCY = Histogram(
-    'django_http_requests_latency_seconds',
-    'HTTP request latency bucket',
-    ['view', 'method'],
-    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
-)
-REQ_BY_METHOD = Counter(
+HTTP_REQUESTS_BY_METHOD = Counter(
     'django_http_requests_total_by_method_total',
-    'Total HTTP requests by method',
-    ['method']
+    'Total HTTP requests by method.',
+    ['method'],
 )
-REQ_5XX = Counter(
+HTTP_RESPONSES = Counter(
+    'django_http_responses_total_by_status_name_total',
+    'Total HTTP responses by status.',
+    ['status', 'status_code'],
+)
+HTTP_5XX = Counter(
     'django_http_requests_total_by_status_5xx_total',
-    'Total HTTP 5xx error requests'
+    'Total HTTP 5xx responses.',
+)
+HTTP_DURATION = Histogram(
+    'django_http_requests_latency_seconds',
+    'Django request latency.',
+    ['view', 'method'],
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
 )
 
-# ----------------------------------------------------
-# 2. MySQL Metrics (Mocked for Exporter Dashboard)
-# ----------------------------------------------------
-MYSQL_UP = Gauge('mysql_up', 'MySQL Up Status')
-MYSQL_THREADS = Gauge('mysql_global_status_threads_connected', 'Connected MySQL threads')
-MYSQL_MAX_CONN = Gauge('mysql_global_variables_max_connections', 'Max MySQL connections')
+INGESTION_TOTAL = Counter(
+    'supplyforge_ingestion_total',
+    'Total count of data ingestion runs.',
+    ['pipeline', 'source_type', 'status'],
+)
+INGESTION_FAILED_TOTAL = Counter(
+    'supplyforge_ingestion_failed_total',
+    'Total failed data ingestion runs.',
+    ['pipeline', 'source_type'],
+)
+INGESTION_DURATION = Histogram(
+    'supplyforge_ingestion_duration_seconds',
+    'Ingestion pipeline duration.',
+    ['pipeline', 'source_type'],
+    buckets=(0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0),
+)
+INGESTION_ROWS = Counter(
+    'supplyforge_ingestion_rows_total',
+    'Rows processed by ingestion.',
+    ['pipeline', 'source_type'],
+)
+INGESTION_LAST_SUCCESS = Gauge(
+    'supplyforge_ingestion_last_success_timestamp',
+    'Unix timestamp of the most recent successful ingestion.',
+    ['pipeline'],
+)
 
-MYSQL_COMMANDS = Counter('mysql_global_status_commands_total', 'MySQL commands executed', ['command'])
-MYSQL_SLOW_QUERIES = Counter('mysql_global_status_slow_queries_total', 'MySQL slow queries total')
-MYSQL_BP_READS = Counter('mysql_global_status_innodb_buffer_pool_reads_total', 'InnoDB buffer pool reads')
-MYSQL_BP_REQUESTS = Counter('mysql_global_status_innodb_buffer_pool_read_requests_total', 'InnoDB buffer pool read requests')
-MYSQL_BYTES_RCVD = Counter('mysql_global_status_bytes_received_total', 'MySQL bytes received total')
-MYSQL_BYTES_SENT = Counter('mysql_global_status_bytes_sent_total', 'MySQL bytes sent total')
+PREDICTION_TOTAL = Counter(
+    'supplyforge_prediction_total',
+    'Total risk predictions.',
+    ['model', 'model_version', 'status'],
+)
+PREDICTION_FAILED_TOTAL = Counter(
+    'supplyforge_prediction_failed_total',
+    'Total failed risk predictions.',
+    ['model', 'model_version', 'error_type'],
+)
+PREDICTION_DURATION = Histogram(
+    'supplyforge_prediction_duration_seconds',
+    'End-to-end prediction duration.',
+    ['model', 'model_version'],
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+)
+INFERENCE_DURATION = Histogram(
+    'supplyforge_model_inference_duration_seconds',
+    'Raw model inference duration.',
+    ['model', 'model_version'],
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5),
+)
+RISK_ASSESSMENT_TOTAL = Counter(
+    'supplyforge_risk_assessment_total',
+    'Total risk assessments generated.',
+    ['risk_level', 'status', 'model_version'],
+)
+RISK_ASSESSMENT_FAILED_TOTAL = Counter(
+    'supplyforge_risk_assessment_failed_total',
+    'Total failed risk assessments.',
+    ['model_version'],
+)
+HIGH_RISK_SKUS = Gauge(
+    'supplyforge_high_risk_sku_total',
+    'Snapshot count of SKUs by risk level.',
+    ['risk_level'],
+)
 
-# ----------------------------------------------------
-# 3. Redis Metrics (Mocked for Exporter Dashboard)
-# ----------------------------------------------------
-REDIS_UP = Gauge('redis_up', 'Redis Up Status')
-REDIS_MEM_USED = Gauge('redis_memory_used_bytes', 'Redis memory used bytes')
-REDIS_MEM_MAX = Gauge('redis_memory_max_bytes', 'Redis memory max limit bytes')
+DECISION_GENERATED_TOTAL = Counter(
+    'supplyforge_decision_generated_total',
+    'Total decision recommendations generated.',
+    ['decision_type', 'status'],
+)
+DECISION_APPROVED_TOTAL = Counter(
+    'supplyforge_decision_approved_total',
+    'Total recommendations approved.',
+    ['decision_type'],
+)
+DECISION_REJECTED_TOTAL = Counter(
+    'supplyforge_decision_rejected_total',
+    'Total recommendations rejected.',
+    ['decision_type'],
+)
+SIMULATION_TOTAL = Counter(
+    'supplyforge_simulation_total',
+    'Total simulations executed.',
+    ['simulation_type', 'status'],
+)
 
-REDIS_HITS = Counter('redis_keyspace_hits_total', 'Redis keyspace hits')
-REDIS_MISSES = Counter('redis_keyspace_misses_total', 'Redis keyspace misses')
-REDIS_EVICTED = Counter('redis_evicted_keys_total', 'Redis evicted keys total')
+CACHE_HIT_TOTAL = Counter(
+    'supplyforge_cache_hit_total',
+    'Total cache hits.',
+    ['cache_area', 'operation'],
+)
+CACHE_MISS_TOTAL = Counter(
+    'supplyforge_cache_miss_total',
+    'Total cache misses.',
+    ['cache_area', 'operation'],
+)
+CACHE_ERROR_TOTAL = Counter(
+    'supplyforge_cache_error_total',
+    'Total cache errors.',
+    ['cache_area', 'operation'],
+)
+CACHE_REFRESH_TOTAL = Counter(
+    'supplyforge_cache_refresh_total',
+    'Total cache refreshes.',
+    ['cache_area'],
+)
+CACHE_WARM_TOTAL = Counter(
+    'supplyforge_cache_warm_total',
+    'Total cache warming executions.',
+    ['cache_area'],
+)
 
-# ----------------------------------------------------
-# 4. SupplyForge Domain Metrics
-# ----------------------------------------------------
-IMPORT_TOTAL = Counter('supplyforge_import_total', 'Total data import executions', ['status', 'format'])
-IMPORT_DURATION = Histogram('supplyforge_import_duration_seconds', 'Data import step execution duration', ['step'], buckets=[0.1, 0.5, 1.0, 5.0, 10.0, 30.0])
-IMPORT_ROWS = Counter('supplyforge_import_rows_total', 'Total ingested data rows')
+TASK_TOTAL = Counter(
+    'supplyforge_task_total',
+    'Total Celery tasks executed.',
+    ['worker_type', 'queue', 'task_type', 'status'],
+)
+TASK_FAILED_TOTAL = Counter(
+    'supplyforge_task_failed_total',
+    'Total failed Celery tasks.',
+    ['worker_type', 'queue', 'task_type'],
+)
+TASK_DURATION = Histogram(
+    'supplyforge_task_duration_seconds',
+    'Celery task execution duration.',
+    ['worker_type', 'queue', 'task_type'],
+    buckets=(0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 300.0),
+)
+TASK_QUEUE_DEPTH = Gauge(
+    'supplyforge_task_queue_depth',
+    'Current task queue depth.',
+    ['worker_type', 'queue'],
+)
+TASK_AGE = Gauge(
+    'supplyforge_task_age_seconds',
+    'Age of the oldest queued task.',
+    ['worker_type', 'queue'],
+)
 
-PREDICTION_TOTAL = Counter('supplyforge_prediction_total', 'Total risk predictions', ['model_version', 'status'])
-PREDICTION_DURATION = Histogram('supplyforge_prediction_duration_seconds', 'ML inference duration in seconds', ['step'], buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0])
-RISK_DISTRIBUTION = Counter('supplyforge_risk_distribution_total', 'Predicted risk level distribution', ['risk_level'])
-FEATURE_MISSING_RATE = Gauge('supplyforge_feature_missing_rate', 'Input feature missing rate')
-MODEL_GOVERNANCE = Gauge('supplyforge_model_governance_info', 'Active ML model governance info', ['model_version', 'feature_version', 'threshold_version'])
-
-RISK_ASSESSMENTS = Counter('supplyforge_risk_assessment_total', 'Total risk assessments')
-DECISION_GENERATED = Counter('supplyforge_decision_generated_total', 'Total automated decisions generated', ['action_type'])
-DECISION_APPROVED = Counter('supplyforge_decision_approved_total', 'Total decisions approved by operators')
-CACHE_HIT = Counter('supplyforge_cache_hit_total', 'Total cache hits', ['cache_name'])
-CACHE_MISS = Counter('supplyforge_cache_miss_total', 'Total cache misses', ['cache_name'])
-
-QUEUE_DEPTH = Gauge('supplyforge_task_queue_depth', 'Celery queue backlog depth', ['queue'])
-TASK_AGE = Gauge('supplyforge_task_age_seconds', 'Oldest task age in queue in seconds', ['queue'])
-TASK_TOTAL = Counter('supplyforge_task_total', 'Celery task executions total', ['queue', 'status'])
-
-# Initialize labeled series upfront with non-zero values
-def init_series():
-    MYSQL_UP.set(1)
-    MYSQL_THREADS.set(25)
-    MYSQL_MAX_CONN.set(150)
-    
-    REDIS_UP.set(1)
-    REDIS_MEM_USED.set(400000000)
-    REDIS_MEM_MAX.set(1073741824)
-    
-    MODEL_GOVERNANCE.labels(model_version='v1.2', feature_version='v2', threshold_version='v1').set(1)
-    DECISION_GENERATED.labels(action_type='PO_REORDER').inc(1)
-    DECISION_GENERATED.labels(action_type='CAPITAL_REALLOCATION').inc(1)
-    DECISION_APPROVED.inc(1)
-    RISK_ASSESSMENTS.inc(1)
-    
-    for fmt in ['csv', 'excel']:
-        IMPORT_TOTAL.labels(status='success', format=fmt).inc(1)
-    
-    IMPORT_ROWS.inc(500)
-    PREDICTION_TOTAL.labels(model_version='v1.2', status='success').inc(1)
-    
-    for r in ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']:
-        RISK_DISTRIBUTION.labels(risk_level=r).inc(1)
-        
-    for m in ['GET', 'POST', 'PUT', 'DELETE']:
-        REQ_BEFORE_MW.labels(method=m).inc(1)
-        REQ_BY_METHOD.labels(method=m).inc(1)
-        
-    RESP_STATUS.labels(status='200', status_code='200').inc(1)
-    RESP_STATUS.labels(status='500', status_code='500').inc(1)
-    
-    for cmd in ['select', 'insert', 'update']:
-        MYSQL_COMMANDS.labels(command=cmd).inc(1)
-        
-    for c_name in ['risk_matrix', 'portfolio', 'sku_lookup']:
-        CACHE_HIT.labels(cache_name=c_name).inc(1)
-        CACHE_MISS.labels(cache_name=c_name).inc(1)
-
-    for q in ['data_worker', 'ml_worker', 'decision_worker']:
-        QUEUE_DEPTH.labels(queue=q).set(2)
-        TASK_AGE.labels(queue=q).set(5.0)
-        TASK_TOTAL.labels(queue=q, status='success').inc(1)
-        TASK_TOTAL.labels(queue=q, status='failed').inc(1)
-
-    REQ_LATENCY.labels(view='api_risk_matrix', method='GET').observe(0.05)
-    FEATURE_MISSING_RATE.set(0.005)
-    
-    MYSQL_SLOW_QUERIES.inc(1)
-    MYSQL_BP_READS.inc(10)
-    MYSQL_BP_REQUESTS.inc(500)
-    MYSQL_BYTES_RCVD.inc(10240)
-    MYSQL_BYTES_SENT.inc(40960)
-    
-    REDIS_HITS.inc(100)
-    REDIS_MISSES.inc(5)
-    REDIS_EVICTED.inc(2)
-
-init_series()
-
-
-def generate_telemetry_step():
-    # 1. API Requests
-    methods = ['GET', 'POST', 'PUT', 'DELETE']
-    views = ['api_risk_matrix', 'api_decision_recommend', 'api_batch_import', 'api_portfolio']
-    
-    for _ in range(random.randint(10, 25)):
-        m = random.choice(methods)
-        v = random.choice(views)
-        REQ_BEFORE_MW.labels(method=m).inc()
-        REQ_BY_METHOD.labels(method=m).inc()
-        REQ_LATENCY.labels(view=v, method=m).observe(random.uniform(0.02, 0.25))
-        
-        if random.random() < 0.02:
-            RESP_STATUS.labels(status='500', status_code='500').inc()
-            REQ_5XX.inc()
-        else:
-            RESP_STATUS.labels(status='200', status_code='200').inc()
-
-    # 2. MySQL Metrics
-    MYSQL_THREADS.set(random.randint(15, 50))
-    MYSQL_COMMANDS.labels(command='select').inc(random.randint(30, 90))
-    MYSQL_COMMANDS.labels(command='insert').inc(random.randint(5, 25))
-    MYSQL_COMMANDS.labels(command='update').inc(random.randint(2, 12))
-    
-    MYSQL_BP_REQUESTS.inc(random.randint(200, 600))
-    MYSQL_BP_READS.inc(random.randint(2, 10))
-    MYSQL_BYTES_RCVD.inc(random.randint(2048, 20480))
-    MYSQL_BYTES_SENT.inc(random.randint(8192, 81920))
-    MYSQL_SLOW_QUERIES.inc(random.randint(1, 3))
-
-    # 3. Redis Metrics
-    REDIS_MEM_USED.set(random.randint(300000000, 550000000))
-    REDIS_HITS.inc(random.randint(40, 120))
-    REDIS_MISSES.inc(random.randint(1, 8))
-    REDIS_EVICTED.inc(random.randint(1, 3))
-
-    # 4. Ingestion & Domain
-    fmt = random.choice(['csv', 'excel'])
-    IMPORT_TOTAL.labels(status='success', format=fmt).inc()
-    IMPORT_ROWS.inc(random.randint(300, 6000))
-    IMPORT_DURATION.labels(step='insert').observe(random.uniform(0.5, 4.0))
-
-    # 5. ML Model
-    for _ in range(random.randint(4, 12)):
-        PREDICTION_TOTAL.labels(model_version='v1.2', status='success').inc()
-        PREDICTION_DURATION.labels(step='inference').observe(random.uniform(0.03, 0.18))
-        PREDICTION_DURATION.labels(step='shap').observe(random.uniform(0.05, 0.22))
-        
-        r_level = random.choices(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], weights=[65, 20, 10, 5])[0]
-        RISK_DISTRIBUTION.labels(risk_level=r_level).inc()
-
-    FEATURE_MISSING_RATE.set(random.uniform(0.001, 0.018))
-    RISK_ASSESSMENTS.inc(random.randint(2, 8))
-
-    # 6. Decisions & Cache
-    action = random.choice(['PO_REORDER', 'CAPITAL_REALLOCATION'])
-    DECISION_GENERATED.labels(action_type=action).inc()
-    if random.random() < 0.85:
-        DECISION_APPROVED.inc()
-
-    for c_name in ['risk_matrix', 'portfolio', 'sku_lookup']:
-        CACHE_HIT.labels(cache_name=c_name).inc(random.randint(15, 50))
-        if random.random() < 0.12:
-            CACHE_MISS.labels(cache_name=c_name).inc(random.randint(1, 5))
-
-    # 7. Celery
-    QUEUE_DEPTH.labels(queue='data_worker').set(random.randint(0, 4))
-    QUEUE_DEPTH.labels(queue='ml_worker').set(random.randint(0, 6))
-    QUEUE_DEPTH.labels(queue='decision_worker').set(random.randint(0, 2))
-
-    TASK_AGE.labels(queue='data_worker').set(random.uniform(0.5, 8.0))
-    TASK_AGE.labels(queue='ml_worker').set(random.uniform(1.0, 18.0))
-    TASK_AGE.labels(queue='decision_worker').set(random.uniform(0.1, 3.0))
-
-    TASK_TOTAL.labels(queue='ml_worker', status='success').inc(random.randint(2, 8))
-    TASK_TOTAL.labels(queue='data_worker', status='success').inc(random.randint(1, 4))
-    TASK_TOTAL.labels(queue='decision_worker', status='success').inc(random.randint(1, 5))
-    if random.random() < 0.1:
-        TASK_TOTAL.labels(queue='ml_worker', status='failed').inc(1)
+# Snapshot metrics mirror business_metrics_collector.py and have no tenant,
+# SKU, user, email, request ID, or other high-cardinality labels.
+BUSINESS_SNAPSHOT_UP = Gauge(
+    'supplyforge_business_snapshot_up',
+    'Whether business snapshot collection succeeded.',
+)
+BUSINESS_ACTIVE_DATASETS = Gauge(
+    'supplyforge_business_active_datasets',
+    'Number of active dataset versions.',
+)
+BUSINESS_FRESHNESS_DAYS = Gauge(
+    'supplyforge_business_dataset_freshness_days',
+    'Maximum active dataset age in days.',
+)
+BUSINESS_QUALITY = Gauge(
+    'supplyforge_business_dataset_quality_score',
+    'Active dataset quality score.',
+    ['stat'],
+)
+BUSINESS_RISK_SKUS = Gauge(
+    'supplyforge_business_portfolio_skus',
+    'Current SKU count by risk class.',
+    ['risk_class'],
+)
+BUSINESS_CAPITAL = Gauge(
+    'supplyforge_business_capital_exposure_vnd',
+    'Current capital exposure in VND.',
+    ['metric'],
+)
+BUSINESS_BACKLOG = Gauge(
+    'supplyforge_business_action_backlog_total',
+    'Actionable decision backlog by priority tier.',
+    ['priority_tier'],
+)
+BUSINESS_UNREAD = Gauge(
+    'supplyforge_business_unread_notifications_total',
+    'Unread notification count by severity.',
+    ['severity'],
+)
 
 
-def main():
-    port = 8080
-    start_http_server(port)
-    print(f"🚀 Telemetry Simulator listening on port {port}...")
-    
-    loop_count = 0
+MODEL = 'lightgbm'
+MODEL_VERSION = 'risk-v1'
+RISK_CLASSES = ('CRITICAL', 'HIGH_RISK', 'MEDIUM_RISK', 'LOW_RISK')
+WORKERS = (
+    ('data', 'data_worker', 'run_import_pipeline'),
+    ('ml', 'ml_worker', 'run_risk_inference'),
+    ('decision', 'decision_worker', 'generate_decisions'),
+)
+
+
+def initialize() -> None:
+    """Create all stable label series so empty dashboard states are explicit."""
+    HTTP_5XX.inc(0)
+    HTTP_RESPONSES.labels(status='500', status_code='500').inc(0)
+    BUSINESS_SNAPSHOT_UP.set(1)
+    BUSINESS_ACTIVE_DATASETS.set(1)
+    BUSINESS_FRESHNESS_DAYS.set(3)
+    BUSINESS_QUALITY.labels(stat='average').set(94.5)
+    BUSINESS_QUALITY.labels(stat='minimum').set(91.0)
+
+    for risk_class, count in {
+        'CRITICAL': 36,
+        'HIGH_RISK': 124,
+        'MEDIUM_RISK': 380,
+        'LOW_RISK': 1_260,
+    }.items():
+        BUSINESS_RISK_SKUS.labels(risk_class=risk_class).set(count)
+        HIGH_RISK_SKUS.labels(risk_level=risk_class).set(count)
+
+    for metric, value in {
+        'inventory_value': 4_800_000_000,
+        'risk_weighted_exposure': 1_160_000_000,
+        'probability_adjusted_exposure': 760_000_000,
+        'opportunity_cost': 135_000_000,
+    }.items():
+        BUSINESS_CAPITAL.labels(metric=metric).set(value)
+
+    for tier, count in {'P1': 11, 'P2': 27, 'P3': 95, 'P4': 220}.items():
+        BUSINESS_BACKLOG.labels(priority_tier=tier).set(count)
+    for severity, count in {'CRITICAL': 1, 'HIGH': 4, 'WARNING': 9, 'INFO': 15}.items():
+        BUSINESS_UNREAD.labels(severity=severity).set(count)
+
+    INGESTION_LAST_SUCCESS.labels(pipeline='medallion').set(time.time())
+    INGESTION_FAILED_TOTAL.labels(pipeline='medallion', source_type='csv').inc(0)
+    PREDICTION_FAILED_TOTAL.labels(
+        model=MODEL,
+        model_version=MODEL_VERSION,
+        error_type='unknown',
+    ).inc(0)
+    RISK_ASSESSMENT_FAILED_TOTAL.labels(model_version=MODEL_VERSION).inc(0)
+    CACHE_ERROR_TOTAL.labels(cache_area='dashboard', operation='get').inc(0)
+    for worker_type, queue, task_type in WORKERS:
+        TASK_QUEUE_DEPTH.labels(worker_type=worker_type, queue=queue).set(0)
+        TASK_AGE.labels(worker_type=worker_type, queue=queue).set(0)
+        TASK_TOTAL.labels(
+            worker_type=worker_type,
+            queue=queue,
+            task_type=task_type,
+            status='success',
+        ).inc()
+        TASK_FAILED_TOTAL.labels(
+            worker_type=worker_type,
+            queue=queue,
+            task_type=task_type,
+        ).inc(0)
+
+
+def record_step() -> None:
+    """Advance counters and alter gauges inside realistic, non-alerting ranges."""
+    for _ in range(random.randint(12, 28)):
+        method = random.choices(('GET', 'POST'), weights=(9, 1))[0]
+        view = random.choice(('dashboard_summary', 'risk_assessment_list', 'jobs_list'))
+        latency = random.lognormvariate(-2.5, 0.45)
+        HTTP_REQUESTS_BEFORE.labels(method=method).inc()
+        HTTP_REQUESTS_BY_METHOD.labels(method=method).inc()
+        HTTP_DURATION.labels(view=view, method=method).observe(latency)
+        HTTP_RESPONSES.labels(status='200', status_code='200').inc()
+
+    if random.random() < 0.10:
+        rows = random.randint(2_000, 15_000)
+        INGESTION_TOTAL.labels(
+            pipeline='medallion', source_type='csv', status='success'
+        ).inc()
+        INGESTION_DURATION.labels(pipeline='medallion', source_type='csv').observe(
+            random.uniform(4.0, 18.0)
+        )
+        INGESTION_ROWS.labels(pipeline='medallion', source_type='csv').inc(rows)
+        INGESTION_LAST_SUCCESS.labels(pipeline='medallion').set(time.time())
+
+    for _ in range(random.randint(8, 20)):
+        PREDICTION_TOTAL.labels(
+            model=MODEL, model_version=MODEL_VERSION, status='success'
+        ).inc()
+        PREDICTION_DURATION.labels(model=MODEL, model_version=MODEL_VERSION).observe(
+            random.uniform(0.08, 0.35)
+        )
+        INFERENCE_DURATION.labels(model=MODEL, model_version=MODEL_VERSION).observe(
+            random.uniform(0.02, 0.16)
+        )
+        risk_class = random.choices(
+            RISK_CLASSES, weights=(3, 10, 27, 60), k=1
+        )[0]
+        RISK_ASSESSMENT_TOTAL.labels(
+            risk_level=risk_class,
+            status='success',
+            model_version=MODEL_VERSION,
+        ).inc()
+
+    for _ in range(random.randint(20, 50)):
+        CACHE_HIT_TOTAL.labels(cache_area='dashboard', operation='get').inc()
+    for _ in range(random.randint(1, 4)):
+        CACHE_MISS_TOTAL.labels(cache_area='dashboard', operation='get').inc()
+
+    for worker_type, queue, task_type in WORKERS:
+        depth = random.randint(0, 5 if worker_type != 'ml' else 8)
+        TASK_QUEUE_DEPTH.labels(worker_type=worker_type, queue=queue).set(depth)
+        TASK_AGE.labels(worker_type=worker_type, queue=queue).set(
+            random.uniform(0.0, 12.0 if depth else 1.0)
+        )
+        TASK_TOTAL.labels(
+            worker_type=worker_type,
+            queue=queue,
+            task_type=task_type,
+            status='success',
+        ).inc(random.randint(1, 5))
+        TASK_DURATION.labels(
+            worker_type=worker_type,
+            queue=queue,
+            task_type=task_type,
+        ).observe(random.uniform(0.2, 3.0))
+
+    decision_type = random.choice(('DISCOUNT_CLEARANCE', 'BUNDLE_PROMOTION'))
+    DECISION_GENERATED_TOTAL.labels(
+        decision_type=decision_type, status='success'
+    ).inc()
+    if random.random() < 0.7:
+        DECISION_APPROVED_TOTAL.labels(decision_type=decision_type).inc()
+    SIMULATION_TOTAL.labels(
+        simulation_type='DISCOUNT_SIMULATION', status='success'
+    ).inc(random.randint(0, 2))
+
+
+def main() -> None:
+    initialize()
+    start_http_server(PORT)
+    print(
+        f'SupplyForge telemetry simulator listening on http://127.0.0.1:{PORT}/metrics '
+        f'(interval={INTERVAL_SECONDS:g}s).'
+    )
     while True:
-        generate_telemetry_step()
-        loop_count += 1
-        if loop_count % 10 == 0:
-            print(f"📊 [Telemetry Simulator - Loop {loop_count}] Generated synthetic operational telemetry.")
-        time.sleep(1)
+        record_step()
+        time.sleep(INTERVAL_SECONDS)
 
 
 if __name__ == '__main__':

@@ -110,3 +110,19 @@ class JobViewsTestCase(TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(self.job.status, 'RUNNING')
         self.assertIn('publish', response.data['message'].lower())
+
+    def test_list_active_only_returns_only_jobs_that_need_polling(self):
+        BackgroundJob.objects.create(
+            workspace=self.workspace,
+            job_type='CSV_IMPORT',
+            ingestion_session=self.session,
+            status='COMPLETED',
+            current_stage='FINALIZING',
+            progress_pct=100,
+        )
+
+        response = self.client.get('/api/v2/jobs/?active_only=true')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['activeOnly'])
+        self.assertEqual([job['jobId'] for job in response.data['jobs']], [str(self.job.id)])

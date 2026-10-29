@@ -7,7 +7,7 @@ groups:
         labels:
           severity: P1
           service: redis
-          environment: production
+          environment: local
           team: devops
         annotations:
           summary: "SupplyForge Redis Exporter/Server is DOWN"
@@ -21,7 +21,7 @@ groups:
         labels:
           severity: P3
           service: redis
-          environment: production
+          environment: local
           team: devops
         annotations:
           summary: "SupplyForge Redis memory usage is high (>85%)"
@@ -35,7 +35,7 @@ groups:
         labels:
           severity: P3
           service: redis
-          environment: production
+          environment: local
           team: devops
         annotations:
           summary: "SupplyForge Redis key evictions rate is high (>10/s)"

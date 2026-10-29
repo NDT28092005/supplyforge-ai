@@ -82,6 +82,7 @@ from .explanation_views import (
 )
 from .capital_exposure_views import (
     create_capital_exposure_analysis,
+    get_latest_capital_exposure_analysis,
     get_capital_exposure_analysis,
     get_capital_exposure_summary,
     list_capital_exposure_items,
@@ -189,7 +190,7 @@ __all__ = [
     'list_explanations_view', 'get_global_explanation_view',
     'get_batch_explanations_view', 'get_sku_explanation_view',
     'get_sku_explanation_history_view',
-    'create_capital_exposure_analysis', 'get_capital_exposure_analysis',
+    'create_capital_exposure_analysis', 'get_latest_capital_exposure_analysis', 'get_capital_exposure_analysis',
     'get_capital_exposure_summary', 'list_capital_exposure_items',
     'get_capital_exposure_sku_detail', 'get_capital_exposure_aging_distribution',
     'get_capital_exposure_risk_distribution',
@@ -202,4 +203,3 @@ __all__ = [
     'ExportRiskReportView', 'ExportCapitalReportView',
     'ExportDecisionReportView', 'ExportActionPlanReportView'
 ]
-

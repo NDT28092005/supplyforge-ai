@@ -1,7 +1,15 @@
 import io
 from rest_framework.test import APIClient
 from django.test import TestCase
-from supplyforge.models import IngestionSession, User, Workspace, WorkspaceMember
+from django.utils import timezone
+
+from supplyforge.models import (
+    DatasetVersion,
+    IngestionSession,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
 from supplyforge.services.error_matrix import ErrorMatrixRegistry
 from supplyforge.views.auth import generate_access_token
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -72,6 +80,111 @@ class ImportIdempotencyAndErrorMatrixTestCase(TestCase):
 
         # Verify only 1 IngestionSession was created for workspace
         self.assertEqual(IngestionSession.objects.filter(workspace=self.workspace).count(), 1)
+
+    def test_clear_allows_reimporting_an_archived_identical_file(self):
+        """A deliberate reset retires the old fingerprint, not the history."""
+        csv_bytes = (
+            b'order_id,sku,product_name,selling_price,quantity,order_date\n'
+            b'ORD-CLEAR-01,SKU-CLEAR-1,Reloadable Product,199000,1,2026-08-01\n'
+        )
+        initial_upload = self.client.post(
+            '/api/v2/ingestion/upload',
+            {
+                'file': SimpleUploadedFile(
+                    'reloadable.csv', csv_bytes, content_type='text/csv',
+                ),
+                'workspaceId': self.workspace.id,
+            },
+            format='multipart',
+            **self.auth,
+        )
+        self.assertEqual(initial_upload.status_code, 200)
+        session = IngestionSession.objects.get(id=initial_upload.json()['sessionId'])
+        version = DatasetVersion.objects.create(
+            workspace=self.workspace,
+            ingestion_session=session,
+            version_number=1,
+            version_label='v1.0',
+            import_type='INITIAL',
+            status=DatasetVersion.STATUS_ACTIVE,
+            data_as_of=timezone.now(),
+        )
+
+        clear_response = self.client.delete('/api/v1/import/clear', **self.auth)
+
+        self.assertEqual(clear_response.status_code, 200)
+        session.refresh_from_db()
+        version.refresh_from_db()
+        self.assertEqual(session.status, 'ARCHIVED')
+        self.assertEqual(session.error_code, 'DATASET_RETIRED')
+        self.assertEqual(version.status, DatasetVersion.STATUS_SUPERSEDED)
+
+        reupload = self.client.post(
+            '/api/v2/ingestion/upload',
+            {
+                'file': SimpleUploadedFile(
+                    'reloadable.csv', csv_bytes, content_type='text/csv',
+                ),
+                'workspaceId': self.workspace.id,
+            },
+            format='multipart',
+            **self.auth,
+        )
+
+        self.assertEqual(reupload.status_code, 200)
+        self.assertFalse(reupload.json().get('idempotent_retry', False))
+        self.assertNotEqual(reupload.json()['sessionId'], str(session.id))
+        self.assertEqual(IngestionSession.objects.filter(workspace=self.workspace).count(), 2)
+
+    def test_reimport_recovers_a_legacy_cleared_completed_session(self):
+        """Pre-fix cleared workspaces must not require a second clear action."""
+        csv_bytes = (
+            b'order_id,sku,product_name,selling_price,quantity,order_date\n'
+            b'ORD-LEGACY-01,SKU-LEGACY-1,Legacy Product,199000,1,2026-08-01\n'
+        )
+        first_upload = self.client.post(
+            '/api/v2/ingestion/upload',
+            {
+                'file': SimpleUploadedFile(
+                    'legacy-cleared.csv', csv_bytes, content_type='text/csv',
+                ),
+                'workspaceId': self.workspace.id,
+            },
+            format='multipart',
+            **self.auth,
+        )
+        self.assertEqual(first_upload.status_code, 200)
+        session = IngestionSession.objects.get(id=first_upload.json()['sessionId'])
+        session.status = 'COMPLETED'
+        session.save(update_fields=['status', 'updated_at'])
+        version = DatasetVersion.objects.create(
+            workspace=self.workspace,
+            ingestion_session=session,
+            version_number=1,
+            version_label='v1.0',
+            import_type='INITIAL',
+            status=DatasetVersion.STATUS_ACTIVE,
+            data_as_of=timezone.now(),
+        )
+
+        reupload = self.client.post(
+            '/api/v2/ingestion/upload',
+            {
+                'file': SimpleUploadedFile(
+                    'legacy-cleared.csv', csv_bytes, content_type='text/csv',
+                ),
+                'workspaceId': self.workspace.id,
+            },
+            format='multipart',
+            **self.auth,
+        )
+
+        self.assertEqual(reupload.status_code, 200)
+        self.assertFalse(reupload.json().get('idempotent_retry', False))
+        session.refresh_from_db()
+        version.refresh_from_db()
+        self.assertEqual(session.status, 'ARCHIVED')
+        self.assertEqual(version.status, DatasetVersion.STATUS_SUPERSEDED)
 
     def test_error_matrix_registry_api(self):
         """Verify Requirement #22: Error Matrix registry returns all 12 standardized error codes and behaviors."""

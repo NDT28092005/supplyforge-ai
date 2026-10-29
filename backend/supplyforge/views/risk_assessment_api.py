@@ -2,7 +2,8 @@ import logging
 import os
 import pandas as pd
 from django.conf import settings
-from django.db.models import Q, Count
+from django.db.models import Q, Count, FloatField, IntegerField
+from django.db.models.functions import Cast
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -20,6 +21,25 @@ def _risk_queryset_for_request(request):
     if getattr(request, 'tenant_context_validated', False) and getattr(request, 'workspace_id', None):
         queryset = queryset.filter(session__workspace_id=request.workspace_id)
     return queryset
+
+
+def _compact_risk_evidence(evidence):
+    """Keep list responses bounded; the detail endpoint owns full evidence."""
+    evidence = evidence if isinstance(evidence, dict) else {}
+    allowed = {
+        'sales_velocity_90d', 'sales_velocity_30d', 'zero_rate_90d',
+        'dsls', 'sold_90d', 'sold_30d', 'stock_quantity', 'unit_cost',
+        'capital_exposure_vnd', 'forecast_7d', 'forecast_14d',
+        'forecast_30d', 'forecast_trend', 'forecast_model', 'demand_pattern',
+    }
+    return {key: evidence[key] for key in allowed if key in evidence}
+
+
+def _annotate_risk_metrics(queryset):
+    return queryset.annotate(
+        list_capital_exposure=Cast('evidence__capital_exposure_vnd', FloatField()),
+        list_dsls=Cast('evidence__dsls', IntegerField()),
+    )
 
 
 # ── M3-07 Risk API & Persistence Views ─────────────────────────────────
@@ -180,12 +200,7 @@ def list_risk_assessments(request):
 
     queryset = _risk_queryset_for_request(request)
 
-    # If table is completely empty, attempt auto-populating from existing Product records or CSV
-    if not queryset.exists():
-        _auto_populate_assessments_from_products(session_id)
-        queryset = _risk_queryset_for_request(request)
-
-    if session_id and queryset.filter(session_id=session_id).exists():
+    if session_id:
         queryset = queryset.filter(session_id=session_id)
 
     if risk_class:
@@ -193,46 +208,76 @@ def list_risk_assessments(request):
     if sku:
         queryset = queryset.filter(Q(sku__icontains=sku) | Q(product_name__icontains=sku))
 
+    category = request.query_params.get('category')
+    if category:
+        queryset = queryset.filter(category__icontains=category)
+
+    capital_band = request.query_params.get('capital_band')
+    aging_band = request.query_params.get('aging_band')
+    sort_needs_metrics = sort_by.lstrip('-') in {'capital_exposure', 'dsls'}
+    if capital_band or aging_band or sort_needs_metrics:
+        queryset = _annotate_risk_metrics(queryset)
+    if capital_band == 'LOW':
+        queryset = queryset.filter(list_capital_exposure__lt=10_000_000)
+    elif capital_band == 'MID':
+        queryset = queryset.filter(list_capital_exposure__gte=10_000_000, list_capital_exposure__lte=50_000_000)
+    elif capital_band == 'HIGH':
+        queryset = queryset.filter(list_capital_exposure__gt=50_000_000)
+    if aging_band == 'FRESH':
+        queryset = queryset.filter(list_dsls__lte=30)
+    elif aging_band == 'AGING':
+        queryset = queryset.filter(list_dsls__gt=30, list_dsls__lte=60)
+    elif aging_band == 'AT_RISK':
+        queryset = queryset.filter(list_dsls__gt=60, list_dsls__lte=90)
+    elif aging_band == 'CRITICAL':
+        queryset = queryset.filter(list_dsls__gt=90)
+
     if sort_by in ['risk_score', '-risk_score', 'risk_probability', '-risk_probability', 'created_at', '-created_at']:
         queryset = queryset.order_by(sort_by)
+    elif sort_by in ['capital_exposure', '-capital_exposure']:
+        queryset = queryset.order_by(sort_by.replace('capital_exposure', 'list_capital_exposure'), 'id')
+    elif sort_by in ['dsls', '-dsls']:
+        queryset = queryset.order_by(sort_by.replace('dsls', 'list_dsls'), 'id')
 
-    # Optional Pagination
-    limit = int(request.query_params.get('limit', 500))
-    offset = int(request.query_params.get('offset', 0))
+    try:
+        limit = min(100, max(1, int(request.query_params.get('limit', 50))))
+        offset = max(0, int(request.query_params.get('offset', 0)))
+    except (TypeError, ValueError):
+        return Response({'error': 'limit và offset phải là số nguyên hợp lệ.'}, status=status.HTTP_400_BAD_REQUEST)
     total_count = queryset.count()
-    records = queryset[offset:offset+limit]
+    records = queryset.only(
+        'id', 'sku', 'canonical_sku_id', 'product_name', 'category',
+        'risk_class', 'risk_score', 'risk_probability', 'primary_signals',
+        'supporting_signals', 'evidence', 'model_version',
+        'assessment_timestamp',
+    )[offset:offset+limit]
 
-    data = [
-        {
-            'assessment_id': str(r.id),
-            'sku': r.sku,
-            'canonical_sku_id': r.canonical_sku_id,
-            'product_name': r.product_name,
-            'category': r.category,
+    data = []
+    for record in records:
+        evidence = _compact_risk_evidence(record.evidence)
+        data.append({
+            'assessment_id': str(record.id),
+            'sku': record.sku,
+            'canonical_sku_id': record.canonical_sku_id,
+            'product_name': record.product_name,
+            'category': record.category,
             'risk': {
-                'class': r.risk_class,
-                'score': r.risk_score,
-                'probability': r.risk_probability
+                'class': record.risk_class,
+                'score': record.risk_score,
+                'probability': record.risk_probability
             },
-            'primary_signals': r.primary_signals,
-            'supporting_signals': r.supporting_signals,
-            'diagnostics': r.diagnostics,
-            'evidence': r.evidence,
-            'capital_exposure_vnd': r.evidence.get('capital_exposure_vnd') if isinstance(r.evidence, dict) else None,
-            'stock_quantity': r.evidence.get('stock_quantity', 0) if isinstance(r.evidence, dict) else 0,
-            'unit_cost': r.evidence.get('unit_cost', 0) if isinstance(r.evidence, dict) else 0,
+            'primary_signals': record.primary_signals,
+            'supporting_signals': record.supporting_signals,
+            'evidence': evidence,
+            'capital_exposure_vnd': evidence.get('capital_exposure_vnd'),
+            'stock_quantity': evidence.get('stock_quantity', 0),
+            'unit_cost': evidence.get('unit_cost', 0),
             'model': {
-                'name': 'LightGBM' if 'lightgbm' in (r.model_version or '').lower() else 'Risk classifier',
-                'version': r.model_version
+                'name': 'LightGBM' if 'lightgbm' in (record.model_version or '').lower() else 'Risk classifier',
+                'version': record.model_version
             },
-            'calibration_version': r.calibration_version,
-            'diagnostic_rule_version': r.diagnostic_rule_version,
-            'data_version': r.dataset_version,
-            'assessment_status': r.assessment_status,
-            'assessment_timestamp': r.assessment_timestamp.isoformat()
-        }
-        for r in records
-    ]
+            'assessment_timestamp': record.assessment_timestamp.isoformat()
+        })
 
     return Response({
         'total_count': total_count,
@@ -635,11 +680,7 @@ def get_global_risk_summary(request):
     session_id = request.query_params.get('session_id')
     qs = _risk_queryset_for_request(request)
 
-    if not qs.exists():
-        _auto_populate_assessments_from_products(session_id)
-        qs = _risk_queryset_for_request(request)
-
-    if session_id and qs.filter(session_id=session_id).exists():
+    if session_id:
         qs = qs.filter(session_id=session_id)
 
     total_skus = qs.count()

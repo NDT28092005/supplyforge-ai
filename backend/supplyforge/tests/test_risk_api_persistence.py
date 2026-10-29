@@ -74,3 +74,12 @@ class RiskApiPersistenceTestCase(TestCase):
         res_sum = self.client.get('/api/v1/risk/summary')
         self.assertEqual(res_sum.status_code, 200)
         self.assertEqual(res_sum.data["critical"], 1)
+
+    def test_list_does_not_create_assessments_on_a_get_request(self):
+        """A read request must not start the risk pipeline or write records."""
+        response = self.client.get('/api/v1/risk/assessments/list', {'limit': 500})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['limit'], 100)
+        self.assertEqual(response.data['total_count'], 0)
+        self.assertEqual(SlowMovingRiskAssessment.objects.count(), 0)

@@ -36,6 +36,18 @@ class CapitalExposureAnalysisRecord(models.Model):
     class Meta:
         db_table = "supplyforge_capital_exposure_analysis"
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["merchant_id", "dataset_version"],
+                name="capital_analysis_merchant_dataset_unique",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['dataset_version', 'status'],
+                name='capital_analysis_ds_status_idx',
+            ),
+        ]
 
     def __str__(self):
         return f"Analysis {self.analysis_id} ({self.dataset_version}) - {self.status}"
@@ -79,6 +91,20 @@ class CapitalExposureItemRecord(models.Model):
             models.Index(fields=["analysis", "slow_moving_risk_class"]),
             models.Index(fields=["analysis", "aging_risk_level"]),
             models.Index(fields=["analysis", "aging_priority"]),
+            # Default and filtered capital queues are read far more often than
+            # an analysis is rebuilt, so index their ranking columns.
+            models.Index(
+                fields=["analysis", "-risk_weighted_exposure"],
+                name="capital_analysis_rwce_idx",
+            ),
+            models.Index(
+                fields=["analysis", "slow_moving_risk_class", "-risk_weighted_exposure"],
+                name="capital_analysis_risk_rwce_idx",
+            ),
+            models.Index(
+                fields=["analysis", "aging_priority", "-risk_weighted_exposure"],
+                name="capital_analysis_prio_rwce_idx",
+            ),
         ]
 
     def __str__(self):

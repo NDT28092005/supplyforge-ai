@@ -13,7 +13,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from supplyforge.models import IngestionSession, Workspace
-from supplyforge.services.ingestion_jobs import create_or_get_import_job, dispatch_import_job
+from supplyforge.services.ingestion_jobs import (
+    ImportJobDispatchError,
+    create_or_get_import_job,
+    dispatch_import_job,
+)
 from supplyforge.services.storage_backend import S3StorageBackend
 
 
@@ -239,51 +243,50 @@ class S3MultipartIngestionService:
                     ),
                 )
                 payload = {'sessionId': str(session.id), 'jobId': str(job.id), 'status': job.status}
-                if created:
-                    transaction.on_commit(lambda: dispatch_import_job(job))
-                return payload, created
+            else:
+                if not upload_id or upload_id != session.s3_upload_id:
+                    raise MultipartUploadError('uploadId không khớp upload session.')
 
-            if not upload_id or upload_id != session.s3_upload_id:
-                raise MultipartUploadError('uploadId không khớp upload session.')
+                completed = S3StorageBackend().complete_multipart_upload(
+                    session.s3_object_key,
+                    upload_id,
+                    cls._normalized_parts(
+                        parts,
+                        math.ceil(session.file_size_bytes / settings.S3_MULTIPART_PART_SIZE_BYTES),
+                    ),
+                )
+                metadata = S3StorageBackend().head_uri(session.raw_storage_path)
+                content_length = int(metadata.get('ContentLength') or 0)
+                if content_length != session.file_size_bytes:
+                    session.status = 'FAILED'
+                    session.error_code = 'S3_OBJECT_SIZE_MISMATCH'
+                    session.error_message = 'Kích thước object không khớp metadata upload.'
+                    session.save(update_fields=['status', 'error_code', 'error_message', 'updated_at'])
+                    raise MultipartUploadError('Kích thước object không hợp lệ.')
 
-            completed = S3StorageBackend().complete_multipart_upload(
-                session.s3_object_key,
-                upload_id,
-                cls._normalized_parts(
-                    parts,
-                    math.ceil(session.file_size_bytes / settings.S3_MULTIPART_PART_SIZE_BYTES),
-                ),
-            )
-            metadata = S3StorageBackend().head_uri(session.raw_storage_path)
-            content_length = int(metadata.get('ContentLength') or 0)
-            if content_length != session.file_size_bytes:
-                session.status = 'FAILED'
-                session.error_code = 'S3_OBJECT_SIZE_MISMATCH'
-                session.error_message = 'Kích thước object không khớp metadata upload.'
-                session.save(update_fields=['status', 'error_code', 'error_message', 'updated_at'])
-                raise MultipartUploadError('Kích thước object không hợp lệ.')
-
-            etag = str(metadata.get('ETag') or completed.get('ETag') or '').strip('"')
-            session.s3_object_etag = etag
-            session.s3_checksum_sha256 = str(metadata.get('ChecksumSHA256') or '')
-            session.file_hash = cls._checksum_hex(metadata) or session.file_hash
-            session.upload_completed_at = timezone.now()
-            session.save(update_fields=[
-                's3_object_etag', 's3_checksum_sha256', 'file_hash',
-                'upload_completed_at', 'updated_at',
-            ])
-            job, created = create_or_get_import_job(
-                session,
-                cls._event_idempotency_key(settings.S3_BUCKET, session.s3_object_key, etag),
-            )
+                etag = str(metadata.get('ETag') or completed.get('ETag') or '').strip('"')
+                session.s3_object_etag = etag
+                session.s3_checksum_sha256 = str(metadata.get('ChecksumSHA256') or '')
+                session.file_hash = cls._checksum_hex(metadata) or session.file_hash
+                session.upload_completed_at = timezone.now()
+                session.save(update_fields=[
+                    's3_object_etag', 's3_checksum_sha256', 'file_hash',
+                    'upload_completed_at', 'updated_at',
+                ])
+                job, created = create_or_get_import_job(
+                    session,
+                    cls._event_idempotency_key(settings.S3_BUCKET, session.s3_object_key, etag),
+                )
+                payload = {'sessionId': str(session.id), 'jobId': str(job.id), 'status': 'PENDING'}
 
         if created:
-            dispatch_import_job(job)
-        return {
-            'sessionId': str(session.id),
-            'jobId': str(job.id),
-            'status': 'PENDING',
-        }, created
+            try:
+                dispatch_import_job(job)
+            except ImportJobDispatchError as exc:
+                raise MultipartUploadError(
+                    'Không thể kết nối hàng chờ xử lý. Vui lòng thử lại sau.'
+                ) from exc
+        return payload, created
 
     @classmethod
     def handle_object_created_event(cls, event: dict) -> tuple[dict | None, bool]:
@@ -331,5 +334,10 @@ class S3MultipartIngestionService:
             )
 
         if created:
-            dispatch_import_job(job)
+            try:
+                dispatch_import_job(job)
+            except ImportJobDispatchError:
+                # The dispatcher has already marked the durable job as FAILED.
+                # A replayed storage event can retry dispatch without re-uploading.
+                return {'sessionId': str(session.id), 'jobId': str(job.id)}, False
         return {'sessionId': str(session.id), 'jobId': str(job.id)}, created

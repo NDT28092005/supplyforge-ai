@@ -121,6 +121,7 @@ class CapitalExposureRepository:
         risk_level: Optional[str] = None,
         aging_bucket: Optional[str] = None,
         aging_priority: Optional[str] = None,
+        capital_band: Optional[str] = None,
         search: Optional[str] = None,
         page: int = 1,
         limit: int = 50,
@@ -132,11 +133,20 @@ class CapitalExposureRepository:
         qs = CapitalExposureItemRecord.objects.filter(analysis_id=analysis_id)
 
         if risk_level:
-            qs = qs.filter(slow_moving_risk_class=risk_level.upper())
+            if risk_level.upper() == 'AT_RISK':
+                qs = qs.filter(slow_moving_risk_class__in=['CRITICAL', 'HIGH_RISK'])
+            else:
+                qs = qs.filter(slow_moving_risk_class=risk_level.upper())
         if aging_bucket:
             qs = qs.filter(aging_bucket=aging_bucket.upper())
         if aging_priority:
             qs = qs.filter(aging_priority=aging_priority.upper())
+        if capital_band == 'LOW':
+            qs = qs.filter(capital_exposure__lt=10_000_000)
+        elif capital_band == 'MID':
+            qs = qs.filter(capital_exposure__gte=10_000_000, capital_exposure__lte=50_000_000)
+        elif capital_band == 'HIGH':
+            qs = qs.filter(capital_exposure__gt=50_000_000)
         if search:
             qs = qs.filter(Q(sku__icontains=search) | Q(product_name__icontains=search) | Q(category__icontains=search))
 

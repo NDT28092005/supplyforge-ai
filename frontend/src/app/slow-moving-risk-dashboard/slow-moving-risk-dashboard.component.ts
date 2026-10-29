@@ -5,6 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../api.service';
 import { DashboardStateService } from '../core/state/dashboard-state.service';
 import { PageMotionDirective } from '../core/motion/page-motion.directive';
+import { forkJoin } from 'rxjs';
 
 export interface ShapFactorItem {
   label: string;
@@ -76,6 +77,17 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   items: SkuRiskItem[] = [];
   dataState: 'loading' | 'ready' | 'empty' | 'error' = 'loading';
   loadError = '';
+  tableLoading = false;
+  pageSize = 50;
+  page = 1;
+  totalItems = 0;
+  riskSummary = {
+    total_skus: 0,
+    critical: 0,
+    high_risk: 0,
+    medium_risk: 0,
+    low_risk: 0,
+  };
 
   constructor(
     private apiService: ApiService,
@@ -97,12 +109,27 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void { }
 
-  loadRealAssessments(): void {
-    this.dataState = 'loading';
+  loadRealAssessments(resetPage: boolean = false): void {
+    if (resetPage) this.page = 1;
+    const isInitialLoad = this.dataState === 'loading';
+    if (isInitialLoad) this.dataState = 'loading';
+    else this.tableLoading = true;
     this.loadError = '';
-    this.items = [];
-    this.apiService.getAllM3RiskAssessments().subscribe({
-      next: (res: any) => {
+    const params = this.buildListParams();
+    forkJoin({
+      list: this.apiService.getM3RiskAssessments(params),
+      summary: this.apiService.getM3RiskSummary(this.sessionId || undefined),
+    }).subscribe({
+      next: ({ list, summary }: any) => {
+        const res = list;
+        this.riskSummary = {
+          total_skus: Number(summary?.total_skus || 0),
+          critical: Number(summary?.critical || 0),
+          high_risk: Number(summary?.high_risk || 0),
+          medium_risk: Number(summary?.medium_risk || 0),
+          low_risk: Number(summary?.low_risk || 0),
+        };
+        this.totalItems = Number(res?.total_count || 0);
         if (res && Array.isArray(res.assessments) && res.assessments.length > 0) {
           this.items = res.assessments.map((a: any) => this.mapAssessmentToSkuRiskItem(a));
           if (this.skuId) {
@@ -110,15 +137,54 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
             if (match) this.openDrawer(match);
           }
           this.dataState = 'ready';
-        } else {
+        } else if (this.totalItems === 0 && !this.hasActiveFilters()) {
           this.dataState = 'empty';
+        } else {
+          this.items = [];
+          this.dataState = 'ready';
         }
+        this.tableLoading = false;
       },
       error: (err: any) => {
         this.dataState = 'error';
-        this.loadError = err?.error?.error || 'Không thể tải kết quả đánh giá rủi ro. Vui lòng thử lại.';
+        this.tableLoading = false;
+        this.loadError = err?.error?.detail || err?.error?.error || 'Không thể tải kết quả đánh giá rủi ro. Vui lòng thử lại.';
       }
     });
+  }
+
+  private buildListParams(): Record<string, string | number> {
+    const params: Record<string, string | number> = {
+      limit: this.pageSize,
+      offset: (this.page - 1) * this.pageSize,
+      sort_by: this.serverSort(),
+    };
+    if (this.sessionId) params['session_id'] = this.sessionId;
+    if (this.selectedRiskFilter) params['risk_class'] = this.selectedRiskFilter;
+    if (this.searchTerm.trim()) params['sku'] = this.searchTerm.trim();
+    if (this.categoryFilter) params['category'] = this.categoryFilter;
+    if (this.capitalFilter) params['capital_band'] = this.capitalFilter;
+    if (this.agingFilter) params['aging_band'] = this.agingFilter;
+    return params;
+  }
+
+  private serverSort(): string {
+    const fields: Record<string, string> = {
+      probabilityValue: 'risk_probability',
+      capitalExposureVal: 'capital_exposure',
+      rwceVal: 'risk_score',
+      dslsDays: 'dsls',
+      priorityScore: 'risk_score',
+    };
+    const field = fields[this.sortField] || 'risk_probability';
+    return this.sortDirection === 'desc' ? `-${field}` : field;
+  }
+
+  private hasActiveFilters(): boolean {
+    return Boolean(
+      this.selectedRiskFilter || this.searchTerm.trim() || this.categoryFilter ||
+      this.capitalFilter || this.agingFilter || this.demandPatternFilter,
+    );
   }
 
   goToImport(): void {
@@ -256,64 +322,7 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   }
 
   get filteredItems(): SkuRiskItem[] {
-    let result = this.items.filter(item => {
-      const matchRisk = !this.selectedRiskFilter || item.riskClass === this.selectedRiskFilter;
-      const term = this.searchTerm.toLowerCase().trim();
-      const matchSearch = !term ||
-        item.sku.toLowerCase().includes(term) ||
-        item.name.toLowerCase().includes(term) ||
-        (item.category && item.category.toLowerCase().includes(term));
-
-      const matchCategory = !this.categoryFilter || (item.category || '').toLowerCase().includes(this.categoryFilter.toLowerCase());
-
-      let matchCapital = true;
-      const capVal = item.capitalExposureVal || 0;
-      if (this.capitalFilter === 'LOW') matchCapital = capVal < 10000000;
-      else if (this.capitalFilter === 'MID') matchCapital = capVal >= 10000000 && capVal <= 50000000;
-      else if (this.capitalFilter === 'HIGH') matchCapital = capVal > 50000000;
-
-      let matchAging = true;
-      const dsls = item.dslsDays || 0;
-      if (this.agingFilter === 'FRESH') matchAging = dsls <= 30;
-      else if (this.agingFilter === 'AGING') matchAging = dsls > 30 && dsls <= 60;
-      else if (this.agingFilter === 'AT_RISK') matchAging = dsls > 60 && dsls <= 90;
-      else if (this.agingFilter === 'CRITICAL') matchAging = dsls > 90;
-
-      let matchDemand = true;
-      if (this.demandPatternFilter) {
-        matchDemand = (item.demandPattern || '').toLowerCase().includes(this.demandPatternFilter.toLowerCase());
-      }
-
-      return matchRisk && matchSearch && matchCategory && matchCapital && matchAging && matchDemand;
-    });
-
-    result.sort((a, b) => {
-      let valA: number = 0;
-      let valB: number = 0;
-
-      if (this.sortField === 'probabilityValue') {
-        valA = a.probabilityValue || 0;
-        valB = b.probabilityValue || 0;
-      } else if (this.sortField === 'capitalExposureVal') {
-        valA = a.capitalExposureVal || 0;
-        valB = b.capitalExposureVal || 0;
-      } else if (this.sortField === 'rwceVal') {
-        valA = a.rwceVal || 0;
-        valB = b.rwceVal || 0;
-      } else if (this.sortField === 'dslsDays') {
-        valA = a.dslsDays || 0;
-        valB = b.dslsDays || 0;
-      } else if (this.sortField === 'priorityScore') {
-        valA = a.priorityScore || 0;
-        valB = b.priorityScore || 0;
-      }
-
-      if (valA < valB) return this.sortDirection === 'desc' ? 1 : -1;
-      if (valA > valB) return this.sortDirection === 'desc' ? -1 : 1;
-      return 0;
-    });
-
-    return result;
+    return this.items;
   }
 
   exportReport(format: 'csv' | 'excel' = 'csv'): void {
@@ -342,19 +351,19 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   }
 
   get totalCount(): number {
-    return this.items.length;
+    return this.riskSummary.total_skus;
   }
 
   get highRiskCount(): number {
-    return this.items.filter(i => i.riskClass === 'HIGH_RISK').length;
+    return this.riskSummary.high_risk;
   }
 
   get criticalCount(): number {
-    return this.items.filter(i => i.riskClass === 'CRITICAL').length;
+    return this.riskSummary.critical;
   }
 
   get mediumRiskCount(): number {
-    return this.items.filter(i => i.riskClass === 'MEDIUM_RISK').length;
+    return this.riskSummary.medium_risk;
   }
 
   get watchCount(): number {
@@ -362,7 +371,7 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   }
 
   get lowRiskCount(): number {
-    return this.items.filter(i => i.riskClass === 'LOW_RISK').length;
+    return this.riskSummary.low_risk;
   }
 
   get safeCount(): number {
@@ -371,6 +380,33 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
 
   setFilter(filter: string): void {
     this.selectedRiskFilter = filter;
+    this.loadRealAssessments(true);
+  }
+
+  onFiltersChanged(): void {
+    this.loadRealAssessments(true);
+  }
+
+  changePage(nextPage: number): void {
+    if (nextPage < 1 || nextPage > this.totalPages || nextPage === this.page) return;
+    this.page = nextPage;
+    this.loadRealAssessments();
+  }
+
+  get totalPages(): number {
+    return Math.max(1, Math.ceil(this.totalItems / this.pageSize));
+  }
+
+  get pageStart(): number {
+    return this.totalItems === 0 ? 0 : (this.page - 1) * this.pageSize + 1;
+  }
+
+  get pageEnd(): number {
+    return Math.min(this.page * this.pageSize, this.totalItems);
+  }
+
+  trackBySku(_: number, item: SkuRiskItem): string {
+    return item.sku;
   }
 
   getPatternLabel(pattern?: string): string {

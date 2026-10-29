@@ -79,6 +79,10 @@ class BackgroundJob(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['workspace', 'status']),
+            models.Index(
+                fields=['workspace', 'status', 'created_at'],
+                name='job_ws_status_created_idx',
+            ),
             models.Index(fields=['celery_task_id']),
             models.Index(fields=['idempotency_key']),
         ]

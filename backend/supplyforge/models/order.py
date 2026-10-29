@@ -15,6 +15,14 @@ class Order(models.Model):
 
     class Meta:
         db_table = 'orders'
+        indexes = [
+            # Time-windowed sales features first narrow by merchant, then by
+            # source event time.
+            models.Index(
+                fields=['user_id', 'created_at'],
+                name='order_user_created_idx',
+            ),
+        ]
 
 
 class OrderItem(models.Model):
@@ -29,3 +37,7 @@ class OrderItem(models.Model):
 
     class Meta:
         db_table = 'order_items'
+        indexes = [
+            # Supports SKU-level fallback lookup without scanning all items.
+            models.Index(fields=['sku'], name='order_item_sku_idx'),
+        ]

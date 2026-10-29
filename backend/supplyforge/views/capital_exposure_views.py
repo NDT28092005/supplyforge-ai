@@ -9,15 +9,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-import pandas as pd
-
 from src.analytics.capital_exposure_repository import CapitalExposureRepository
-from src.analytics.capital_valuation_engine import CapitalValuationEngine
-from src.analytics.inventory_aging_engine import InventoryAgingEngine
-from src.analytics.risk_weighted_exposure_engine import RiskWeightedExposureEngine
-from src.analytics.aging_risk_classifier import AgingRiskClassifier
-from src.analytics.capital_exposure_aggregator import CapitalExposureAggregator
-from src.analytics.financial_impact_engine import FinancialImpactEngine
+from supplyforge.services.capital_exposure_service import CapitalExposureAnalysisService
 
 from supplyforge.serializers.capital_exposure_serializer import (
     CapitalExposureAnalysisSerializer,
@@ -45,146 +38,48 @@ def _analysis_is_visible_to_request(request, analysis_rec):
 def create_capital_exposure_analysis(request):
     """
     POST /api/capital-exposure/analyses
-    Triggers or registers a new Capital Exposure Analysis run.
-    Runs pipeline M5-02 -> M5-08 and persists results atomically via Repository.
+    Queues a capital exposure analysis when the active dataset has no read model.
+
+    The portfolio calculation is intentionally worker-only. Returning a 202
+    prevents a first dashboard visit from monopolising a Gunicorn worker.
     """
     serializer = CreateCapitalExposureAnalysisRequestSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    data = serializer.validated_data
-    merchant_id = data.get("merchant_id", "default_merchant")
-    dataset_version = data.get("dataset_version", "v1.0")
-    annual_rate = data.get("annual_opportunity_rate", 0.12)
-    aid = data.get("analysis_id")
+    workspace_id = getattr(request, "workspace_id", None)
+    if not (getattr(request, "tenant_context_validated", False) and workspace_id):
+        return Response({"detail": "Yêu cầu cần workspace đã xác thực."}, status=status.HTTP_401_UNAUTHORIZED)
 
-    try:
-        from supplyforge.models import IngestionSession, SlowMovingRiskAssessment, Order, Product
-        from datetime import datetime, timedelta
-        from django.db.models import Max
+    analysis = CapitalExposureAnalysisService.get_current_analysis(int(workspace_id))
+    if analysis:
+        return Response(CapitalExposureAnalysisSerializer(analysis).data, status=status.HTTP_200_OK)
 
-        workspace_id = getattr(request, "workspace_id", None)
-        has_tenant_context = bool(getattr(request, "tenant_context_validated", False) and workspace_id)
-        session_queryset = IngestionSession.objects.filter(risk_assessments__isnull=False)
-        if has_tenant_context:
-            # The client never supplies a merchant identifier or version as an
-            # authority boundary. Both are derived from its authenticated
-            # workspace and the active risk-assessment session.
-            session_queryset = session_queryset.filter(workspace_id=workspace_id)
+    from supplyforge.tasks import run_capital_exposure_analysis
 
-        latest_session = session_queryset.order_by('-created_at').first()
-        if has_tenant_context and not latest_session:
-            return Response({
-                "detail": "Chưa có kết quả đánh giá rủi ro cho bộ dữ liệu hiện tại.",
-                "code": "RISK_ASSESSMENT_REQUIRED",
-            }, status=status.HTTP_409_CONFLICT)
+    run_capital_exposure_analysis.delay(int(workspace_id))
+    return Response({
+        "status": "QUEUED",
+        "code": "CAPITAL_ANALYSIS_QUEUED",
+        "detail": "Phân tích vốn đang được chuẩn bị từ bộ dữ liệu đã nạp.",
+    }, status=status.HTTP_202_ACCEPTED)
 
-        if has_tenant_context and latest_session:
-            merchant_id = f"workspace:{workspace_id}"
-            dataset_version = f"session:{latest_session.id}"
-            existing = CapitalExposureRepository.get_latest_analysis(
-                merchant_id=merchant_id,
-                dataset_version=dataset_version,
-            )
-            if existing:
-                return Response(CapitalExposureAnalysisSerializer(existing).data, status=status.HTTP_200_OK)
 
-        assessments_qs = SlowMovingRiskAssessment.objects.filter(session=latest_session) if latest_session else SlowMovingRiskAssessment.objects.all()
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_latest_capital_exposure_analysis(request):
+    """Return the completed analysis for the authenticated active workspace."""
+    workspace_id = getattr(request, 'workspace_id', None)
+    if not (getattr(request, 'tenant_context_validated', False) and workspace_id):
+        return Response({"detail": "Yêu cầu cần workspace đã xác thực."}, status=status.HTTP_401_UNAUTHORIZED)
 
-        if assessments_qs.exists():
-            # Determine reference date from actual data
-            orders = Order.objects.all()
-            if has_tenant_context:
-                orders = orders.filter(user_id=str(request.user_id))
-            max_order_dt = orders.aggregate(Max('created_at'))['created_at__max']
-            ref_date = max_order_dt if max_order_dt else datetime.now()
-            if hasattr(ref_date, 'tzinfo') and ref_date.tzinfo is not None:
-                ref_date = ref_date.replace(tzinfo=None)
-
-            product_rows = []
-            risk_assessments = []
-            for a in assessments_qs:
-                ev = a.evidence if isinstance(a.evidence, dict) else {}
-                stock = int(ev.get('stock_quantity') or 0)
-                cost = float(ev.get('unit_cost') or 0.0)
-                dsls = int(ev.get('dsls') or 0)
-                cap_exp = float(ev.get('capital_exposure_vnd') or (stock * cost))
-                r_prob = float(a.risk_probability or 0.0)
-                r_score = float(a.risk_score or 0.0)
-
-                product_rows.append({
-                    'sku': a.sku,
-                    'product_name': a.product_name,
-                    'category': a.category or 'Tồn kho',
-                    'stock_on_hand': stock,
-                    'unit_cost': cost,
-                    'dsls': dsls,
-                    'capital_exposure_vnd': cap_exp,
-                    'last_sale_date': None,
-                })
-
-                risk_assessments.append({
-                    'sku': a.sku,
-                    'risk_class': a.risk_class,
-                    'risk_probability': r_prob,
-                    'risk_score': r_score,
-                })
-
-            sample_df = pd.DataFrame(product_rows)
-        else:
-            ref_date = datetime.now()
-            product_rows = [
-                {
-                    'sku': f'SKU_100{i}',
-                    'product_name': f'Sample Product 100{i}',
-                    'category': 'Electronics' if i % 2 == 0 else 'Apparel',
-                    'stock_on_hand': 20 * i,
-                    'unit_cost': 50.0 * i,
-                    'dsls': 15 * i,
-                    'last_sale_date': (ref_date - timedelta(days=15 * i)).strftime('%Y-%m-%d'),
-                }
-                for i in range(1, 6)
-            ]
-            sample_df = pd.DataFrame(product_rows)
-            risk_assessments = [
-                {
-                    'sku': f'SKU_100{i}',
-                    'risk_class': 'HIGH_RISK' if i > 3 else 'LOW_RISK',
-                    'risk_probability': 0.8 if i > 3 else 0.15,
-                    'risk_score': 80.0 if i > 3 else 15.0,
-                }
-                for i in range(1, 6)
-            ]
-
-        # Generate sample pipeline dataset if no custom data attached
-        val_engine = CapitalValuationEngine()
-        aging_engine = InventoryAgingEngine()
-        exposure_engine = RiskWeightedExposureEngine()
-        classifier = AgingRiskClassifier()
-        aggregator = CapitalExposureAggregator()
-        impact_engine = FinancialImpactEngine(default_opportunity_rate=annual_rate)
-
-        sku_val_records, val_summary = val_engine.value_dataset(sample_df, risk_assessments)
-        aging_records, matrix, aging_summary = aging_engine.analyze_dataset_aging(sku_val_records, analysis_date=ref_date.strftime('%Y-%m-%d') if 'ref_date' in dir() and ref_date else '2026-08-23')
-        exposure_records, portfolio_summary = exposure_engine.evaluate_portfolio_exposure(aging_records)
-        assessments, risk_dist, prio_dist, summary = classifier.evaluate_dataset_aging_risk(exposure_records)
-        fin_summary = impact_engine.evaluate_portfolio_financial_impact(assessments, annual_rate=annual_rate)
-
-        # Persist via Repository
-        analysis_rec = CapitalExposureRepository.save_analysis(
-            summary_payload=fin_summary,
-            sku_assessment_records=assessments,
-            merchant_id=merchant_id,
-            dataset_version=dataset_version,
-            analysis_id=aid
-        )
-
-        res_serializer = CapitalExposureAnalysisSerializer(analysis_rec)
-        return Response(res_serializer.data, status=status.HTTP_201_CREATED)
-
-    except Exception as e:
-        logger.error("Failed to create capital exposure analysis: %s", e, exc_info=True)
-        return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    analysis = CapitalExposureAnalysisService.get_current_analysis(int(workspace_id))
+    if not analysis:
+        return Response({
+            'detail': 'Phân tích vốn chưa sẵn sàng cho bộ dữ liệu hiện tại.',
+            'code': 'CAPITAL_ANALYSIS_PENDING',
+        }, status=status.HTTP_409_CONFLICT)
+    return Response(CapitalExposureAnalysisSerializer(analysis).data, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -248,9 +143,13 @@ def list_capital_exposure_items(request, analysis_id):
     risk_level = request.query_params.get('risk_level')
     aging_bucket = request.query_params.get('aging_bucket')
     aging_priority = request.query_params.get('aging_priority')
+    capital_band = request.query_params.get('capital_band')
     search = request.query_params.get('search')
-    page = int(request.query_params.get('page', 1))
-    limit = int(request.query_params.get('limit', 500))
+    try:
+        page = max(1, int(request.query_params.get('page', 1)))
+        limit = min(100, max(1, int(request.query_params.get('limit', 50))))
+    except (TypeError, ValueError):
+        return Response({'detail': 'page và limit phải là số nguyên hợp lệ.'}, status=status.HTTP_400_BAD_REQUEST)
     sort = request.query_params.get('sort', '-risk_weighted_exposure')
 
     items, pagination_meta = CapitalExposureRepository.list_sku_items(
@@ -258,6 +157,7 @@ def list_capital_exposure_items(request, analysis_id):
         risk_level=risk_level,
         aging_bucket=aging_bucket,
         aging_priority=aging_priority,
+        capital_band=capital_band,
         search=search,
         page=page,
         limit=limit,

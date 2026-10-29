@@ -236,8 +236,12 @@ def record_prediction(model='xgboost', model_version='v1', status='success', dur
     """Safely record prediction & inference metrics."""
     try:
         PREDICTION_TOTAL.labels(model=model, model_version=model_version, status=status).inc()
-        if status == 'failed' and error_type:
-            PREDICTION_FAILED_TOTAL.labels(model=model, model_version=model_version, error_type=error_type).inc()
+        if status == 'failed':
+            PREDICTION_FAILED_TOTAL.labels(
+                model=model,
+                model_version=model_version,
+                error_type=error_type or 'unknown',
+            ).inc()
         if duration is not None:
             PREDICTION_DURATION_SECONDS.labels(model=model, model_version=model_version).observe(duration)
         if inference_duration is not None:

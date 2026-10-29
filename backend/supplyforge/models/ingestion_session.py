@@ -26,6 +26,7 @@ class IngestionSession(models.Model):
         ('COMPLETED', 'Completed'),
         ('FAILED', 'Failed'),
         ('CANCELLED', 'Cancelled'),
+        ('ARCHIVED', 'Archived'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -118,6 +119,21 @@ class IngestionSession(models.Model):
     class Meta:
         db_table = 'ingestion_sessions'
         ordering = ['-created_at']
+        indexes = [
+            # Session history and active-work monitoring are tenant-scoped.
+            models.Index(
+                fields=['workspace', 'created_at'],
+                name='ingest_ws_created_idx',
+            ),
+            models.Index(
+                fields=['workspace', 'status', 'created_at'],
+                name='ingest_ws_status_created_idx',
+            ),
+            models.Index(
+                fields=['workspace', 'file_hash', 'status'],
+                name='ingest_ws_hash_status_idx',
+            ),
+        ]
 
     def __str__(self):
         return f"[{self.status}] {self.original_filename} ({self.total_rows or '?'} rows)"

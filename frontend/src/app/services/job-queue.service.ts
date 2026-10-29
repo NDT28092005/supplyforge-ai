@@ -47,8 +47,9 @@ export class JobQueueService {
     return this.http.post<any>(`${this.apiUrl}/api/v2/jobs/upload`, formData);
   }
 
-  getJobsList(): Observable<{ jobs: BackgroundJobDto[] }> {
-    return this.http.get<{ jobs: BackgroundJobDto[] }>(`${this.apiUrl}/api/v2/jobs/`).pipe(
+  getJobsList(activeOnly: boolean = false): Observable<{ jobs: BackgroundJobDto[] }> {
+    const suffix = activeOnly ? '?active_only=true' : '';
+    return this.http.get<{ jobs: BackgroundJobDto[] }>(`${this.apiUrl}/api/v2/jobs/${suffix}`).pipe(
       catchError(err => {
         console.error('Error fetching jobs:', err);
         return of({ jobs: [] });

@@ -7,7 +7,7 @@ groups:
         labels:
           severity: P2
           service: backend
-          environment: production
+          environment: local
           team: devops
         annotations:
           summary: "SupplyForge Backend API P95 latency is high (>1s)"
@@ -21,7 +21,7 @@ groups:
         labels:
           severity: P2
           service: backend
-          environment: production
+          environment: local
           team: devops
         annotations:
           summary: "SupplyForge Backend API 5xx Error Rate is high (>5%)"

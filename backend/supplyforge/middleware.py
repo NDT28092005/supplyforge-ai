@@ -4,15 +4,71 @@ import logging
 import re
 import threading
 import time
+import uuid
 from django.core.cache import cache
 from django.conf import settings
 from django.db import models
 from django.http import JsonResponse
 from supplyforge.permissions import get_user_permissions
 from supplyforge.request_identity import get_client_ip
+from config.logging_config import reset_request_id, set_request_id
 
 logger = logging.getLogger(__name__)
 _thread_locals = threading.local()
+
+
+class RequestObservabilityMiddleware:
+    """Return a correlation ID and one privacy-safe access log per API call."""
+
+    _REQUEST_ID_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$')
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+        self.http_logger = logging.getLogger('supplyforge.http')
+
+    def __call__(self, request):
+        supplied_id = (request.headers.get('X-Request-ID') or '').strip()
+        request_id = (
+            supplied_id
+            if self._REQUEST_ID_PATTERN.fullmatch(supplied_id)
+            else str(uuid.uuid4())
+        )
+        request.request_id = request_id
+        token = set_request_id(request_id)
+        started_at = time.perf_counter()
+        response = None
+        try:
+            response = self.get_response(request)
+            return response
+        except Exception:
+            self.http_logger.exception(
+                'http_request_failed',
+                extra={
+                    'event': 'http_request_failed',
+                    'request_id': request_id,
+                    'method': request.method,
+                    # Never log the query string because it may contain PII.
+                    'path': request.path_info,
+                },
+            )
+            raise
+        finally:
+            duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+            if response is not None:
+                response['X-Request-ID'] = request_id
+            if request.path_info.startswith('/api/'):
+                self.http_logger.info(
+                    'http_request_completed',
+                    extra={
+                        'event': 'http_request_completed',
+                        'request_id': request_id,
+                        'method': request.method,
+                        'path': request.path_info,
+                        'status_code': getattr(response, 'status_code', 500),
+                        'duration_ms': duration_ms,
+                    },
+                )
+            reset_request_id(token)
 
 
 def get_current_tenant_id():

@@ -80,6 +80,7 @@ class DatasetVersion(models.Model):
                 fields=['workspace', 'created_at'],
                 name='dataset_ver_workspa_9f5783_idx',
             ),
+            models.Index(fields=['status'], name='dataset_version_status_idx'),
         ]
 
     def __str__(self):

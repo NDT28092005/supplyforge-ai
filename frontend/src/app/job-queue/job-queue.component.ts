@@ -1,4 +1,4 @@
-import { AfterViewChecked, Component, ElementRef, OnDestroy, OnInit, QueryList, ViewChildren } from '@angular/core';
+import { AfterViewChecked, Component, ElementRef, HostListener, OnDestroy, OnInit, QueryList, ViewChildren } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { JobQueueService, BackgroundJobDto } from '../services/job-queue.service';
@@ -40,7 +40,6 @@ export class JobQueueComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   ngOnInit(): void {
     this.loadJobs();
-    this.startPolling();
   }
 
   ngOnDestroy(): void {
@@ -66,6 +65,7 @@ export class JobQueueComponent implements OnInit, OnDestroy, AfterViewChecked {
         this.jobs = res.jobs || [];
         this.categorizeJobs();
         this.isLoading = false;
+        this.syncPolling();
       },
       error: (err) => {
         this.errorMessage = 'Không thể tải danh sách hàng chờ xử lý.';
@@ -80,14 +80,46 @@ export class JobQueueComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   startPolling(): void {
+    if (this.pollSub || this.activeJobs.length === 0 || !this.isDocumentVisible()) return;
     this.pollSub = interval(3000).pipe(
-      switchMap(() => this.jobQueueService.getJobsList())
+      switchMap(() => this.jobQueueService.getJobsList(true))
     ).subscribe({
       next: (res) => {
-        this.jobs = res.jobs || [];
+        const active = res.jobs || [];
+        const activeIds = new Set(active.map(job => job.jobId));
+        if (this.activeJobs.some(job => !activeIds.has(job.jobId))) {
+          this.stopPolling();
+          this.loadJobs();
+          return;
+        }
+        const historical = this.jobs.filter(job => !['PENDING', 'RUNNING', 'CANCEL_REQUESTED'].includes(job.status));
+        this.jobs = [...active, ...historical];
         this.categorizeJobs();
+        this.syncPolling();
       }
     });
+  }
+
+  @HostListener('document:visibilitychange')
+  onVisibilityChange(): void {
+    this.syncPolling();
+  }
+
+  private syncPolling(): void {
+    if (this.activeJobs.length > 0 && this.isDocumentVisible()) {
+      this.startPolling();
+    } else {
+      this.stopPolling();
+    }
+  }
+
+  private stopPolling(): void {
+    this.pollSub?.unsubscribe();
+    this.pollSub = undefined;
+  }
+
+  private isDocumentVisible(): boolean {
+    return typeof document === 'undefined' || document.visibilityState === 'visible';
   }
 
   onCancelJob(jobId: string): void {

@@ -7,7 +7,7 @@ groups:
         expr: sum by (pipeline, source_type) (rate(supplyforge_ingestion_total[5m]))
 
       - record: supplyforge:business:ingestion_failure_rate
-        expr: sum by (pipeline, source_type) (rate(supplyforge_ingestion_failed_total[5m])) / sum by (pipeline, source_type) (rate(supplyforge_ingestion_total[5m]))
+        expr: sum by (pipeline, source_type) (rate(supplyforge_ingestion_failed_total[5m])) / clamp_min(sum by (pipeline, source_type) (rate(supplyforge_ingestion_total[5m])), 0.000001)
 
       - record: supplyforge:business:ingestion_duration:p95
         expr: histogram_quantile(0.95, sum by (le, pipeline, source_type) (rate(supplyforge_ingestion_duration_seconds_bucket[5m])))
@@ -17,7 +17,7 @@ groups:
         expr: sum by (model, model_version) (rate(supplyforge_prediction_total[5m]))
 
       - record: supplyforge:business:prediction_failure_rate
-        expr: sum by (model, model_version) (rate(supplyforge_prediction_failed_total[5m])) / sum by (model, model_version) (rate(supplyforge_prediction_total[5m]))
+        expr: sum by (model, model_version) (rate(supplyforge_prediction_failed_total[5m])) / clamp_min(sum by (model, model_version) (rate(supplyforge_prediction_total[5m])), 0.000001)
 
       - record: supplyforge:business:model_inference_duration:p95
         expr: histogram_quantile(0.95, sum by (le, model, model_version) (rate(supplyforge_model_inference_duration_seconds_bucket[5m])))
@@ -27,7 +27,7 @@ groups:
         expr: sum by (model_version, risk_level) (rate(supplyforge_risk_assessment_total[5m]))
 
       - record: supplyforge:business:risk_assessment_failure_rate
-        expr: sum by (model_version) (rate(supplyforge_risk_assessment_failed_total[5m])) / sum by (model_version) (rate(supplyforge_risk_assessment_total[5m]))
+        expr: sum by (model_version) (rate(supplyforge_risk_assessment_failed_total[5m])) / clamp_min(sum by (model_version) (rate(supplyforge_risk_assessment_total[5m])), 0.000001)
 
       # Decision Engine
       - record: supplyforge:business:decision_generation_rate
@@ -44,10 +44,25 @@ groups:
 
       # Cache
       - record: supplyforge:business:cache_hit_rate
-        expr: sum by (cache_area) (rate(supplyforge_cache_hit_total[5m])) / (sum by (cache_area) (rate(supplyforge_cache_hit_total[5m])) + sum by (cache_area) (rate(supplyforge_cache_miss_total[5m])))
+        expr: sum by (cache_area) (rate(supplyforge_cache_hit_total[5m])) / clamp_min(sum by (cache_area) (rate(supplyforge_cache_hit_total[5m])) + sum by (cache_area) (rate(supplyforge_cache_miss_total[5m])), 0.000001)
 
       - record: supplyforge:business:cache_miss_rate
-        expr: sum by (cache_area) (rate(supplyforge_cache_miss_total[5m])) / (sum by (cache_area) (rate(supplyforge_cache_hit_total[5m])) + sum by (cache_area) (rate(supplyforge_cache_miss_total[5m])))
+        expr: sum by (cache_area) (rate(supplyforge_cache_miss_total[5m])) / clamp_min(sum by (cache_area) (rate(supplyforge_cache_hit_total[5m])) + sum by (cache_area) (rate(supplyforge_cache_miss_total[5m])), 0.000001)
 
       - record: supplyforge:business:cache_error_rate
         expr: sum by (cache_area) (rate(supplyforge_cache_error_total[5m]))
+
+      # Persisted DSS snapshot metrics, exported by the Django collector.
+      - record: supplyforge:business:critical_high_skus
+        # Each application replica reads the same persisted portfolio. Use max
+        # rather than sum so scaling web workers does not multiply business KPIs.
+        expr: sum(max by (risk_class) (supplyforge_business_portfolio_skus{risk_class=~"CRITICAL|HIGH_RISK"}))
+
+      - record: supplyforge:business:risk_weighted_exposure_vnd
+        expr: max(supplyforge_business_capital_exposure_vnd{metric="risk_weighted_exposure"})
+
+      - record: supplyforge:business:dataset_freshness_days
+        expr: max(supplyforge_business_dataset_freshness_days)
+
+      - record: supplyforge:business:action_backlog_total
+        expr: sum(max by (priority_tier) (supplyforge_business_action_backlog_total))

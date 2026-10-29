@@ -9,13 +9,13 @@ groups:
         expr: sum(rate(django_http_requests_total_by_method_total[5m]))
 
       - record: supplyforge:api:error_rate
-        expr: sum(rate(django_http_responses_total_by_status_name_total{status=~"5.*|5xx"}[5m])) / sum(rate(django_http_responses_total_by_status_name_total[5m]))
+        expr: sum(rate(django_http_responses_total_by_status_name_total{status=~"5.*|5xx"}[5m])) / clamp_min(sum(rate(django_http_responses_total_by_status_name_total[5m])), 0.000001)
 
       - record: supplyforge:api:error_rate:5m
-        expr: (sum(rate(django_http_requests_total_by_status_5xx_total[5m])) / sum(rate(django_http_requests_total_by_method_total[5m]))) * 100
+        expr: sum(rate(django_http_requests_total_by_status_5xx_total[5m])) / clamp_min(sum(rate(django_http_requests_total_by_method_total[5m])), 0.000001)
 
       - record: supplyforge:api:availability:ratio
-        expr: 1 - (sum(rate(django_http_requests_total_by_status_5xx_total[5m])) / sum(rate(django_http_requests_total_by_method_total[5m])))
+        expr: 1 - (sum(rate(django_http_requests_total_by_status_5xx_total[5m])) / clamp_min(sum(rate(django_http_requests_total_by_method_total[5m])), 0.000001))
 
       - record: supplyforge:api:request_duration:p50
         expr: histogram_quantile(0.50, sum(rate(django_http_requests_latency_seconds_bucket[5m])) by (le))

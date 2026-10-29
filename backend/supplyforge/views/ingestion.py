@@ -12,6 +12,7 @@ import logging
 import os
 import json
 
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -143,6 +144,33 @@ def ingestion_upload(request):
         file_hash=file_hash,
         status__in=['PROFILED', 'COMPLETED', 'PROCESSING', 'MAPPING']
     ).order_by('-created_at').first()
+
+    # Compatibility recovery for workspaces cleared before sessions were
+    # retired. A completed upload without any operational facts is not an
+    # idempotent retry; it is a historical fingerprint that must not block a
+    # deliberate re-import of the same CSV.
+    if existing_session and existing_session.status == 'COMPLETED':
+        from supplyforge.models import Order, Product, SlowMovingRiskAssessment
+
+        active_user_id = str(request.user_id)
+        has_operational_data = (
+            Product.objects.filter(user_id=active_user_id).exists()
+            or Order.objects.filter(user_id=active_user_id).exists()
+            or SlowMovingRiskAssessment.objects.filter(
+                session__workspace_id=workspace.id,
+            ).exists()
+        )
+        if not has_operational_data:
+            logger.info(
+                'Retiring legacy cleared dataset session %s before re-import in workspace %s.',
+                existing_session.id,
+                workspace.id,
+            )
+            DynamicFileImportService.clear_data(
+                active_user_id,
+                workspace_id=workspace.id,
+            )
+            existing_session = None
 
     if existing_session:
         return Response({
@@ -305,12 +333,61 @@ def ingestion_session_detail(request, session_id):
 
 @api_view(['GET'])
 def ingestion_session_list(request):
-    """List all ingestion sessions, optionally filtered by workspace."""
+    """Return a bounded, tenant-scoped ingestion history page.
+
+    V2 uses an envelope with pagination metadata.  V1 retains its historical
+    top-level list shape while still honoring the bounded page parameters so
+    legacy callers cannot trigger an unbounded history scan.
+    """
     workspace, context_error = _require_tenant_context(request)
     if context_error:
         return context_error
-    sessions = IngestionSession.objects.filter(workspace_id=workspace.id)[:50]
-    return Response([_serialize_session(s) for s in sessions])
+
+    try:
+        page = max(1, int(request.query_params.get('page', 1)))
+        page_size = min(
+            100,
+            max(1, int(request.query_params.get('pageSize', request.query_params.get('page_size', 20)))),
+        )
+    except (TypeError, ValueError):
+        return Response(
+            {'error': 'page và pageSize phải là số nguyên hợp lệ.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    sessions = IngestionSession.objects.filter(
+        workspace_id=workspace.id,
+    ).select_related('dataset_version_record').order_by('-created_at')
+
+    requested_status = (request.query_params.get('status') or '').strip().upper()
+    if requested_status:
+        valid_statuses = {choice for choice, _ in IngestionSession.STATUS_CHOICES}
+        if requested_status not in valid_statuses:
+            return Response(
+                {'error': 'status không hợp lệ.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        sessions = sessions.filter(status=requested_status)
+
+    total_items = sessions.count()
+    offset = (page - 1) * page_size
+    items = [_serialize_session_summary(item) for item in sessions[offset:offset + page_size]]
+    pagination = {
+        'page': page,
+        'pageSize': page_size,
+        'totalItems': total_items,
+        'totalPages': (total_items + page_size - 1) // page_size,
+        'hasNext': offset + page_size < total_items,
+        'hasPrevious': page > 1,
+    }
+
+    if request.path_info.startswith('/api/v1/'):
+        response = Response(items)
+        response['X-Total-Count'] = str(total_items)
+        response['X-Page'] = str(page)
+        response['X-Page-Size'] = str(page_size)
+        return response
+    return Response({'items': items, 'pagination': pagination})
 
 
 def _serialize_session(session: IngestionSession) -> dict:
@@ -349,6 +426,55 @@ def _serialize_session(session: IngestionSession) -> dict:
             'skuColumnDetected': session.sku_column_detected,
             'missingValues': session.missing_values_json,
             'previewRows': session.preview_rows_json,
+        },
+        'createdAt': session.created_at.isoformat() if session.created_at else None,
+        'updatedAt': session.updated_at.isoformat() if session.updated_at else None,
+        'datasetVersion': version.version_label if version else session.dataset_version,
+        'dataAsOf': version.data_as_of.isoformat() if version and version.data_as_of else None,
+        'isStale': not bool(version and version.status == 'ACTIVE'),
+        'errorCode': session.error_code,
+        'errorMessage': (
+            'Không thể hoàn tất xử lý tệp CSV.'
+            if session.status == 'FAILED' and session.error_message
+            else session.error_message
+        ),
+    }
+
+
+def _serialize_session_summary(session: IngestionSession) -> dict:
+    """Compact history representation; full profile data belongs to detail."""
+    date_range = {}
+    if session.date_range_start or session.date_range_end:
+        date_range = {
+            'start': session.date_range_start.isoformat() if session.date_range_start else None,
+            'end': session.date_range_end.isoformat() if session.date_range_end else None,
+            'spanDays': (
+                (session.date_range_end - session.date_range_start).days
+                if session.date_range_start and session.date_range_end else None
+            ),
+        }
+
+    try:
+        version = session.dataset_version_record
+    except ObjectDoesNotExist:
+        version = None
+
+    return {
+        'sessionId': str(session.id),
+        'status': session.status,
+        'sessionType': session.session_type,
+        'file': {
+            'originalFilename': session.original_filename,
+            'fileSizeBytes': session.file_size_bytes,
+            'fileSizeHuman': humanize_bytes(session.file_size_bytes),
+        },
+        'profile': {
+            'totalRows': session.total_rows,
+            'totalColumns': session.total_columns,
+            'dateRange': date_range,
+            'dateColumnDetected': session.date_column_detected,
+            'uniqueSkuCount': session.unique_sku_count,
+            'skuColumnDetected': session.sku_column_detected,
         },
         'createdAt': session.created_at.isoformat() if session.created_at else None,
         'updatedAt': session.updated_at.isoformat() if session.updated_at else None,

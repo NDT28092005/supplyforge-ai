@@ -2,12 +2,12 @@ groups:
   - name: supplyforge-prometheus-self-monitoring
     rules:
       - alert: PrometheusTargetDown
-        expr: up == 0
+        expr: up{monitoring_required="true"} == 0
         for: 2m
         labels:
           severity: P2
           service: monitoring
-          environment: production
+          environment: local
           team: platform
         annotations:
           summary: "Prometheus target '{{ $labels.job }}' is DOWN"
@@ -16,12 +16,15 @@ groups:
           dashboard_url: "http://localhost:3001/d/supplyforge-monitoring/prometheus-self-monitoring"
 
       - alert: PrometheusScrapeFailure
-        expr: rate(prometheus_target_scrapes_failed_total[5m]) > 0
+        # `up` is the stable scrape-success signal and inherits the static
+        # monitoring_required label; older prometheus_target_* failure counters
+        # are version-specific and did not cover every scrape failure mode.
+        expr: min_over_time(up{monitoring_required="true"}[5m]) == 0
         for: 5m
         labels:
           severity: P2
           service: monitoring
-          environment: production
+          environment: local
           team: platform
         annotations:
           summary: "Prometheus repeated scrape failures for target '{{ $labels.job }}'"
@@ -35,7 +38,7 @@ groups:
         labels:
           severity: P3
           service: monitoring
-          environment: production
+          environment: local
           team: platform
         annotations:
           summary: "Prometheus target '{{ $labels.job }}' scrape latency is high (>5s)"
@@ -49,7 +52,7 @@ groups:
         labels:
           severity: P1
           service: monitoring
-          environment: production
+          environment: local
           team: platform
         annotations:
           summary: "Prometheus TSDB head series count is high (>100k series)"
@@ -63,7 +66,7 @@ groups:
         labels:
           severity: P1
           service: monitoring
-          environment: production
+          environment: local
           team: platform
         annotations:
           summary: "Prometheus TSDB Write-Ahead-Log (WAL) corruption detected"
@@ -77,7 +80,7 @@ groups:
         labels:
           severity: P2
           service: monitoring
-          environment: production
+          environment: local
           team: platform
         annotations:
           summary: "Prometheus TSDB is rejecting out-of-order samples"
@@ -91,7 +94,7 @@ groups:
         labels:
           severity: P2
           service: monitoring
-          environment: production
+          environment: local
           team: platform
         annotations:
           summary: "Prometheus Recording/Alert Rule evaluation failed"
@@ -105,7 +108,7 @@ groups:
         labels:
           severity: P3
           service: monitoring
-          environment: production
+          environment: local
           team: platform
         annotations:
           summary: "Prometheus Rule Group '{{ $labels.rule_group }}' evaluation is slow"
@@ -119,7 +122,7 @@ groups:
         labels:
           severity: P3
           service: monitoring
-          environment: production
+          environment: local
           team: platform
         annotations:
           summary: "Prometheus Query Engine is experiencing heavy query load (>50 qps)"
@@ -133,7 +136,7 @@ groups:
         labels:
           severity: P3
           service: monitoring
-          environment: production
+          environment: local
           team: platform
         annotations:
           summary: "Prometheus process has restarted multiple times"
@@ -147,7 +150,7 @@ groups:
         labels:
           severity: P3
           service: monitoring
-          environment: production
+          environment: local
           team: platform
         annotations:
           summary: "Prometheus process memory usage is high (>2GB)"

@@ -37,10 +37,18 @@ print(f'  SUCCESS: {len(dashboards)} Grafana JSON dashboards validated.')
 
 echo ""
 echo "[5/5] Running Observability Telemetry Unit Tests..."
+export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/supplyforge-matplotlib}"
+mkdir -p "${MPLCONFIGDIR}"
 if [ -f "${ROOT_DIR}/backend/.venv/bin/python" ]; then
-    ${ROOT_DIR}/backend/.venv/bin/python backend/manage.py test supplyforge.tests.test_metrics --noinput
+    ${ROOT_DIR}/backend/.venv/bin/python backend/manage.py test \
+        supplyforge.tests.test_metrics \
+        supplyforge.tests.test_business_metrics_collector \
+        --noinput
 else
-    python3 backend/manage.py test supplyforge.tests.test_metrics --noinput
+    python3 backend/manage.py test \
+        supplyforge.tests.test_metrics \
+        supplyforge.tests.test_business_metrics_collector \
+        --noinput
 fi
 
 echo ""

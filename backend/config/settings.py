@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
+from config.logging_config import build_logging_config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -72,11 +73,12 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
-    'supplyforge',
+    'supplyforge.apps.SupplyforgeConfig',
 ]
 
 MIDDLEWARE = [
     'django_prometheus.middleware.PrometheusBeforeMiddleware',
+    'supplyforge.middleware.RequestObservabilityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -364,7 +366,16 @@ else:
         }
     }
 
-if 'test' in os.sys.argv or os.getenv('CELERY_TASK_ALWAYS_EAGER') == 'True':
+LOCAL_SQLITE_DEVELOPMENT = APP_ENV == 'development' and os.getenv('USE_SQLITE') == '1'
+CELERY_EAGER_REQUESTED = os.getenv('CELERY_TASK_ALWAYS_EAGER', '').lower() in {
+    '1', 'true', 'yes',
+}
+
+# SQLite is the supported single-process development setup. Execute background
+# tasks eagerly there so imports can materialize their dashboard read models
+# without a separately managed Redis/Celery stack. Deployed environments keep
+# the broker-backed worker path.
+if IS_TEST_RUN or LOCAL_SQLITE_DEVELOPMENT or CELERY_EAGER_REQUESTED:
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
     CELERY_RESULT_BACKEND = 'cache+memory://'
@@ -509,6 +520,13 @@ RATE_LIMIT_WINDOW_SECONDS = int(os.getenv('RATE_LIMIT_WINDOW_SECONDS', '60'))
 RATE_LIMIT_API_REQUESTS = int(os.getenv('RATE_LIMIT_API_REQUESTS', '120'))
 RATE_LIMIT_AUTH_REQUESTS = int(os.getenv('RATE_LIMIT_AUTH_REQUESTS', '20'))
 RATE_LIMIT_UPLOAD_REQUESTS = int(os.getenv('RATE_LIMIT_UPLOAD_REQUESTS', '10'))
+
+# Logs are machine-readable in deployed environments so API traces can be
+# correlated by X-Request-ID without recording request payloads or PII.
+LOG_FORMAT = os.getenv('LOG_FORMAT', 'json').lower()
+if LOG_FORMAT not in {'json', 'text'}:
+    raise ImproperlyConfigured('LOG_FORMAT must be either json or text.')
+LOGGING = build_logging_config(json_format=LOG_FORMAT == 'json')
 
 # ── Email Delivery Configuration (SMTP & SaaS Mail Provider) ─────────
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')

@@ -63,6 +63,12 @@ class DecisionRecord(models.Model):
     class Meta:
         db_table = 'decision_records'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['workspace_id', 'status', 'dataset_version', 'priority_tier'],
+                name='decision_ws_stat_ver_pri_idx',
+            ),
+        ]
 
     def __str__(self):
         return f"Decision({self.decision_id}, SKU={self.sku}, Action={self.action_type}, Status={self.status})"

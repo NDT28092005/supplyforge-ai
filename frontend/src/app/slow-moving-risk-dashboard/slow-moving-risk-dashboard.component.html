@@ -85,11 +85,11 @@
         <div class="flex items-center gap-2 shrink-0">
           <button (click)="exportReport('csv')"
             class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
-            <span>Xuất CSV</span>
+            <span>Xuất trang hiện tại</span>
           </button>
           <button (click)="exportReport('excel')"
             class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
-            <span>Xuất Excel</span>
+            <span>Xuất CSV (Excel)</span>
           </button>
         </div>
       </div>
@@ -98,13 +98,13 @@
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
         <!-- Search Input -->
         <div class="col-span-1 sm:col-span-2">
-          <input type="text" [(ngModel)]="searchTerm" placeholder="Tìm theo Mã sản phẩm, Tên hoặc Danh mục..."
+          <input type="text" [(ngModel)]="searchTerm" (keyup.enter)="onFiltersChanged()" (blur)="onFiltersChanged()" placeholder="Tìm theo Mã sản phẩm, Tên hoặc Danh mục..."
             class="w-full bg-white border border-slate-200 text-slate-900 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400" />
         </div>
 
         <!-- Capital Range Filter -->
         <div>
-          <select [(ngModel)]="capitalFilter"
+          <select [(ngModel)]="capitalFilter" (ngModelChange)="onFiltersChanged()"
             class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400">
             <option value="">Khoảng vốn đọng: Tất cả</option>
             <option value="LOW">Dưới 10 triệu VND</option>
@@ -115,7 +115,7 @@
 
         <!-- Aging Filter -->
         <div>
-          <select [(ngModel)]="agingFilter"
+          <select [(ngModel)]="agingFilter" (ngModelChange)="onFiltersChanged()"
             class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400">
             <option value="">Số ngày tồn kho: Tất cả</option>
             <option value="FRESH">Dưới 30 ngày</option>
@@ -127,7 +127,7 @@
 
         <!-- Sort Select -->
         <div>
-          <select [(ngModel)]="sortField"
+          <select [(ngModel)]="sortField" (ngModelChange)="onFiltersChanged()"
             class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400">
             <option value="probabilityValue">Sắp xếp: Xác suất rủi ro</option>
             <option value="capitalExposureVal">Sắp xếp: Vốn đọng (VND)</option>
@@ -153,7 +153,7 @@
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 bg-white">
-          <tr *ngFor="let item of filteredItems" (click)="openDrawer(item)"
+          <tr *ngFor="let item of filteredItems; trackBy: trackBySku" (click)="openDrawer(item)"
             class="hover:bg-slate-50 transition-colors cursor-pointer">
 
             <td class="py-3.5 px-4">
@@ -201,6 +201,21 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500">
+      <span>Hiển thị {{ pageStart }}-{{ pageEnd }} trên {{ totalItems }} SKU</span>
+      <div class="flex items-center gap-2">
+        <button type="button" (click)="changePage(page - 1)" [disabled]="page === 1 || tableLoading"
+          class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors">
+          Trang trước
+        </button>
+        <span class="font-mono text-slate-700">{{ page }} / {{ totalPages }}</span>
+        <button type="button" (click)="changePage(page + 1)" [disabled]="page >= totalPages || tableLoading"
+          class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors">
+          Trang sau
+        </button>
+      </div>
     </div>
 
   </div>

@@ -9,7 +9,14 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(_
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from supplyforge.models import User, Workspace, IngestionSession, SlowMovingRiskAssessment
+from supplyforge.models import (
+    CapitalExposureAnalysisRecord,
+    CapitalExposureItemRecord,
+    IngestionSession,
+    SlowMovingRiskAssessment,
+    User,
+    Workspace,
+)
 from supplyforge.services.cache_policy import CachePolicy
 from supplyforge.services.query_service import DashboardQueryService
 from supplyforge.services.lakehouse_ingestion import LakehouseIngestionService
@@ -61,11 +68,12 @@ class QueryServiceTestCase(TestCase):
                     'dsls': 100 if i <= 5 else 30
                 }
             )
+        LakehouseIngestionService.materialize_dashboard_gold(version)
 
     def test_executive_summary_cache_miss_then_hit(self):
         """Verify first call results in MISS and second call results in HIT."""
         summary1, status1 = DashboardQueryService.get_executive_summary(self.workspace1.id)
-        self.assertIn(status1, ['MISS', 'HIT', 'REFRESHED'])
+        self.assertIn(status1, ['MISS_GOLD', 'HIT', 'REFRESHED'])
         self.assertTrue(summary1['hasData'])
         self.assertEqual(summary1['totalSkus'], 10)
         self.assertEqual(summary1['datasetVersion'], 'v1.0')
@@ -103,8 +111,9 @@ class QueryServiceTestCase(TestCase):
         new_version = CachePolicy.bump_workspace_version(self.workspace1.id)
         self.assertNotEqual(str(v1), str(new_version))
 
-        # Query again, should be cache MISS (or lock fetch) under new key version
+        # Query again reads the worker-published gold aggregate under the new key.
         summary2, status2 = DashboardQueryService.get_executive_summary(self.workspace1.id)
+        self.assertEqual(status2, 'MISS_GOLD')
         self.assertEqual(summary2['cacheVersion'], str(new_version))
 
     def test_workspace_isolation(self):
@@ -119,6 +128,9 @@ class QueryServiceTestCase(TestCase):
             risk_score=10.0,
             evidence={'capital_exposure_vnd': 50000.0}
         )
+        version2 = LakehouseIngestionService.prepare_version(self.session2)
+        LakehouseIngestionService.promote(version2)
+        LakehouseIngestionService.materialize_dashboard_gold(version2)
 
         sum1, _ = DashboardQueryService.get_executive_summary(self.workspace1.id)
         sum2, _ = DashboardQueryService.get_executive_summary(self.workspace2.id)
@@ -144,7 +156,7 @@ class QueryServiceTestCase(TestCase):
                 )
 
         save_dashboard.assert_called_once()
-        self.assertEqual(cache_status, 'MISS')
+        self.assertEqual(cache_status, 'MISS_GOLD')
         self.assertTrue(summary['hasData'])
         self.assertEqual(summary['totalSkus'], 10)
         self.assertEqual(summary['datasetVersion'], 'v1.0')
@@ -152,13 +164,121 @@ class QueryServiceTestCase(TestCase):
         self.assertEqual(summary['agedSkuCount'], 5)
         self.assertEqual(summary['riskCapitalByClassVnd']['CRITICAL'], 600000.0)
 
-    def test_failopen_on_redis_error(self):
-        """Verify failopen behavior direct to MySQL when cache.get raises Exception."""
+    def test_redis_error_returns_gold_without_an_orm_sku_scan(self):
+        """Redis failures must serve gold data, never calculate inside HTTP."""
         with patch.object(cache, 'get', side_effect=RuntimeError("Redis connection dropped")):
             summary, status = DashboardQueryService.get_executive_summary(self.workspace1.id)
-            self.assertEqual(status, 'FAILOVER_MYSQL')
+            self.assertEqual(status, 'STALE_GOLD')
             self.assertTrue(summary['hasData'])
             self.assertEqual(summary['totalSkus'], 10)
+
+    def test_dashboard_uses_persisted_active_read_models_when_gold_is_missing(self):
+        """A restart/cache loss must not send a valid active portfolio to import."""
+        version = self.session1.dataset_version_record
+        version.manifest_json = {}
+        version.save(update_fields=['manifest_json', 'updated_at'])
+        cache.clear()
+
+        analysis = CapitalExposureAnalysisRecord.objects.create(
+            analysis_id='query-service-persisted-fallback',
+            merchant_id=f'workspace:{self.workspace1.id}',
+            dataset_version=f'session:{self.session1.id}',
+            status='COMPLETED',
+            total_inventory_value=5_500_000.0,
+            risk_distribution=[
+                {'group': 'CRITICAL', 'sku_count': 3, 'inventory_value': 600_000.0},
+                {'group': 'HIGH_RISK', 'sku_count': 3, 'inventory_value': 1_500_000.0},
+                {'group': 'MEDIUM_RISK', 'sku_count': 0, 'inventory_value': 0.0},
+                {'group': 'LOW_RISK', 'sku_count': 4, 'inventory_value': 3_400_000.0},
+            ],
+            aging_distribution=[
+                {'group': 'AT_RISK', 'sku_count': 1, 'inventory_value': 400_000.0},
+                {'group': 'CRITICAL_AGING', 'sku_count': 2, 'inventory_value': 500_000.0},
+            ],
+        )
+        CapitalExposureItemRecord.objects.create(
+            analysis=analysis,
+            sku='SKU_03',
+            product_name='Product 3',
+            inventory_value=300_000.0,
+            capital_exposure=300_000.0,
+            risk_weighted_exposure=270_000.0,
+            probability_adjusted_exposure=240_000.0,
+            aging_days=120,
+            aging_bucket='STALE',
+            aging_risk_level='AT_RISK',
+            slow_moving_risk_class='CRITICAL',
+            risk_probability=0.9,
+            aging_priority='P1',
+        )
+
+        summary, cache_status = DashboardQueryService.get_executive_summary(
+            self.workspace1.id,
+        )
+
+        self.assertEqual(cache_status, 'MISS_PERSISTED')
+        self.assertTrue(summary['hasData'])
+        self.assertTrue(summary['isDegraded'])
+        self.assertEqual(summary['capitalStatus'], 'PERSISTED_READ_MODEL')
+        self.assertEqual(summary['totalSkus'], 10)
+        self.assertEqual(summary['criticalCount'], 3)
+        self.assertEqual(summary['atRiskCapitalVnd'], 2_100_000.0)
+        self.assertEqual(summary['agedCapitalVnd'], 900_000.0)
+        self.assertEqual(summary['agedSkuCount'], 3)
+        self.assertEqual(summary['topRiskSkus'][0]['sku'], 'SKU_03')
+
+    def test_dashboard_keeps_risk_data_visible_while_capital_analysis_is_pending(self):
+        """Risk evidence is usable before the worker publishes capital totals."""
+        version = self.session1.dataset_version_record
+        version.manifest_json = {}
+        version.save(update_fields=['manifest_json', 'updated_at'])
+        cache.clear()
+
+        summary, cache_status = DashboardQueryService.get_executive_summary(
+            self.workspace1.id,
+        )
+
+        self.assertEqual(cache_status, 'MISS_PERSISTED')
+        self.assertTrue(summary['hasData'])
+        self.assertEqual(summary['capitalStatus'], 'RISK_READ_MODEL_ONLY')
+        self.assertEqual(summary['totalSkus'], 10)
+        self.assertEqual(summary['criticalCount'], 3)
+
+    def test_dashboard_uses_latest_risk_session_when_legacy_import_has_no_version(self):
+        """Legacy synchronous imports persist risks before lake versioning exists."""
+        self.session1.dataset_version_record.delete()
+        cache.clear()
+
+        summary, cache_status = DashboardQueryService.get_executive_summary(
+            self.workspace1.id,
+        )
+
+        self.assertEqual(cache_status, 'MISS_PERSISTED')
+        self.assertTrue(summary['hasData'])
+        self.assertEqual(summary['totalSkus'], 10)
+        self.assertEqual(summary['criticalCount'], 3)
+        self.assertEqual(summary['datasetVersion'], 'v1.0')
+        self.assertEqual(summary['capitalStatus'], 'RISK_READ_MODEL_ONLY')
+
+    def test_dashboard_repairs_a_cached_empty_payload_for_an_active_portfolio(self):
+        """An old negative cache entry must not block an existing workspace."""
+        version = self.session1.dataset_version_record
+        version.manifest_json = {}
+        version.save(update_fields=['manifest_json', 'updated_at'])
+        cache.clear()
+        cache_key = (
+            f'sf:v2:ws:{self.workspace1.id}:v'
+            f'{CachePolicy.get_workspace_version(self.workspace1.id)}:dashboard:summary'
+        )
+        cache.set(cache_key, {'hasData': False}, CachePolicy.TTL_DASHBOARD_SUMMARY)
+
+        summary, cache_status = DashboardQueryService.get_executive_summary(
+            self.workspace1.id,
+        )
+
+        self.assertEqual(cache_status, 'HIT_REPAIRED')
+        self.assertTrue(summary['hasData'])
+        self.assertEqual(summary['totalSkus'], 10)
 
     def test_query_dashboard_summary_api(self):
         """Test GET /api/v2/query/dashboard-summary endpoint and custom response headers."""
@@ -171,9 +291,11 @@ class QueryServiceTestCase(TestCase):
         self.assertIn('X-Cache-Version', response.headers)
         self.assertIn('X-Response-Time-ms', response.headers)
 
-    def test_cache_refresh_api(self):
-        """Test POST /api/v2/query/cache-refresh endpoint."""
+    @patch('supplyforge.tasks.warm_workspace_cache.delay')
+    def test_cache_refresh_api(self, warm_cache):
+        """Test POST /api/v2/query/cache-refresh queues worker-side warming."""
         response = self.client.post('/api/v2/query/cache-refresh', {'workspace_id': self.workspace1.id}, format='json')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['status'], 'SUCCESS')
-        self.assertEqual(response.headers.get('X-Cache-Status'), 'REFRESHED')
+        self.assertEqual(response.data['status'], 'QUEUED')
+        self.assertEqual(response.headers.get('X-Cache-Status'), 'QUEUED')
+        warm_cache.assert_called_once_with(self.workspace1.id)

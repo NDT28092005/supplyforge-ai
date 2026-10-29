@@ -14,7 +14,11 @@ from rest_framework import status
 
 from supplyforge.models import BackgroundJob, IngestionSession, Workspace
 from supplyforge.services.csv_profiler import StreamingCSVProfiler, humanize_bytes
-from supplyforge.services.ingestion_jobs import create_or_get_import_job, dispatch_import_job
+from supplyforge.services.ingestion_jobs import (
+    ImportJobDispatchError,
+    create_or_get_import_job,
+    dispatch_import_job,
+)
 from supplyforge.services.s3_multipart_ingestion import (
     MultipartUploadError,
     S3MultipartIngestionService,
@@ -172,8 +176,15 @@ def enqueue_upload_job(request):
 
     job, _ = create_or_get_import_job(session, idempotency_key)
 
-    # Dispatch background job task (Celery + Threading fallback)
-    _dispatch_background_job(str(job.id))
+    try:
+        _dispatch_background_job(str(job.id))
+    except ImportJobDispatchError:
+        return Response({
+            'error': 'Không thể đưa tệp vào hàng chờ xử lý. Vui lòng thử lại sau.',
+            'code': 'QUEUE_UNAVAILABLE',
+            'jobId': str(job.id),
+            'sessionId': str(session.id),
+        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
     return Response({
         'jobId': str(job.id),
@@ -271,7 +282,13 @@ def list_jobs(request):
             'error': 'Yêu cầu cần Authorization Bearer token và workspace hợp lệ.',
             'code': 'UNAUTHENTICATED',
         }, status=status.HTTP_401_UNAUTHORIZED)
-    jobs = BackgroundJob.objects.filter(workspace=workspace).order_by('-created_at')[:50]
+    active_only = str(request.query_params.get('active_only', '')).lower() in {'1', 'true', 'yes'}
+    jobs_query = BackgroundJob.objects.filter(workspace=workspace).select_related(
+        'ingestion_session__dataset_version_record',
+    )
+    if active_only:
+        jobs_query = jobs_query.filter(status__in=['PENDING', 'RUNNING', 'CANCEL_REQUESTED'])
+    jobs = jobs_query.order_by('-created_at')[:50]
 
     data = []
     now = timezone.now()
@@ -315,7 +332,7 @@ def list_jobs(request):
         job_payload.update(_execution_metadata(job))
         data.append(job_payload)
 
-    return Response({'jobs': data}, status=status.HTTP_200_OK)
+    return Response({'jobs': data, 'activeOnly': active_only}, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -457,7 +474,15 @@ def retry_job(request, job_id):
     }
     job.save(update_fields=['status', 'progress_pct', 'error_message', 'completed_at', 'current_stage', 'stages_json', 'ingestion_session', 'updated_at'])
 
-    task_id = _dispatch_background_job(str(job.id))
+    try:
+        task_id = _dispatch_background_job(str(job.id))
+    except ImportJobDispatchError:
+        return Response({
+            'jobId': str(job.id),
+            'status': 'FAILED',
+            'error': 'Không thể gửi lại công việc vào hàng chờ xử lý. Vui lòng thử lại sau.',
+            'code': 'QUEUE_UNAVAILABLE',
+        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
     job.celery_task_id = task_id
     job.save(update_fields=['celery_task_id', 'updated_at'])
 

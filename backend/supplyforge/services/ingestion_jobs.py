@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import logging
-import threading
 
 from django.db import transaction
 
 from supplyforge.models import BackgroundJob, IngestionSession
 
 logger = logging.getLogger(__name__)
+
+
+class ImportJobDispatchError(RuntimeError):
+    """Raised when the configured asynchronous worker cannot accept a job."""
 
 
 IMPORT_STAGES = {
@@ -55,25 +58,19 @@ def create_or_get_import_job(
 
 
 def dispatch_import_job(job: BackgroundJob) -> str:
-    """Queue the job, with the existing development fallback when Celery is absent."""
+    """Queue an import job without ever moving worker execution into HTTP."""
     from supplyforge.tasks import run_import_pipeline
 
     try:
         async_result = run_import_pipeline.delay(str(job.id))
         task_id = str(async_result.id)
-    except Exception as exc:  # pragma: no cover - exercised only without a broker
-        logger.warning(
-            'Celery dispatch failed for import job %s: %s; using thread fallback.',
-            job.id,
-            exc,
+    except Exception as exc:
+        logger.exception('Celery dispatch failed for import job %s.', job.id)
+        BackgroundJob.objects.filter(id=job.id).update(
+            status='FAILED',
+            error_message='Không thể kết nối hàng chờ xử lý. Vui lòng thử lại sau.',
         )
-        thread = threading.Thread(
-            target=run_import_pipeline,
-            args=(str(job.id),),
-            daemon=True,
-        )
-        thread.start()
-        task_id = 'thread-executor'
+        raise ImportJobDispatchError('Không thể kết nối hàng chờ xử lý.') from exc
 
     BackgroundJob.objects.filter(id=job.id).update(celery_task_id=task_id)
     return task_id

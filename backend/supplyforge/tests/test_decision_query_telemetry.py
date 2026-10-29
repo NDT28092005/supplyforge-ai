@@ -97,14 +97,14 @@ class QueryCacheTelemetryTest(TestCase):
     def setUp(self):
         cache.clear()
 
-    @patch("supplyforge.services.query_service.DashboardQueryService._calculate_executive_summary")
-    def test_ac05_ac06_cache_hit_miss_telemetry(self, mock_calc):
+    @patch("supplyforge.services.query_service.DashboardQueryService._active_gold_dashboard_summary")
+    def test_ac05_ac06_cache_hit_miss_telemetry(self, mock_gold):
         """AC-05 & AC-06: Verify Cache MISS and Cache HIT record metrics accurately."""
-        mock_calc.return_value = {"hasData": False, "totalSkus": 0}
+        mock_gold.return_value = {"hasData": False, "totalSkus": 0}
 
         before_miss = CACHE_MISS_TOTAL.labels(cache_area="dashboard", operation="get")._value.get()
         res1, status1 = DashboardQueryService.get_executive_summary(workspace_id=999)
-        self.assertEqual(status1, "MISS")
+        self.assertEqual(status1, "MISS_GOLD")
 
         after_miss = CACHE_MISS_TOTAL.labels(cache_area="dashboard", operation="get")._value.get()
         self.assertEqual(after_miss, before_miss + 1)
@@ -132,15 +132,15 @@ class QueryCacheTelemetryTest(TestCase):
         self.assertEqual(after_warm, before_warm + 1)
 
     @patch("django.core.cache.cache.get")
-    @patch("supplyforge.services.query_service.DashboardQueryService._calculate_executive_summary")
-    def test_ac07_cache_error_telemetry(self, mock_calc, mock_cache_get):
-        """AC-07: Verify Redis error records cache error metric and falls back to MySQL."""
+    @patch("supplyforge.services.query_service.DashboardQueryService._active_gold_dashboard_summary")
+    def test_ac07_cache_error_telemetry(self, mock_gold, mock_cache_get):
+        """AC-07: Redis error serves gold data without an HTTP SKU scan."""
         mock_cache_get.side_effect = Exception("Redis Connection Refused")
-        mock_calc.return_value = {"hasData": False, "totalSkus": 0}
+        mock_gold.return_value = {"hasData": False, "totalSkus": 0}
 
         before_err = CACHE_ERROR_TOTAL.labels(cache_area="dashboard", operation="get")._value.get()
         res, status = DashboardQueryService.get_executive_summary(workspace_id=999)
         after_err = CACHE_ERROR_TOTAL.labels(cache_area="dashboard", operation="get")._value.get()
 
-        self.assertEqual(status, "FAILOVER_MYSQL")
+        self.assertEqual(status, "STALE_GOLD")
         self.assertEqual(after_err, before_err + 1)

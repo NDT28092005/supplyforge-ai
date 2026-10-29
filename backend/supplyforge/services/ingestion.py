@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Min, Max
+from django.utils import timezone
 from supplyforge.models import ArchivedDataSet, IngestionSession, Order, OrderItem, Product
 from supplyforge.metrics import record_ingestion
 from supplyforge.services.storage_backend import StorageBackend
@@ -939,6 +940,15 @@ class DynamicFileImportService:
                 InventoryFinancialEngineService.calculate_aging_and_hidden_costs(user_id)
                 if session_obj:
                     _auto_populate_assessments_from_products(str(session_obj.id))
+                    # Capital exposure is a persisted read model. Queue it only
+                    # after this import transaction commits, so workers never
+                    # calculate against a partial operational dataset.
+                    from supplyforge.tasks import run_capital_exposure_analysis
+
+                    transaction.on_commit(
+                        lambda workspace_id=session_obj.workspace_id:
+                        run_capital_exposure_analysis.delay(workspace_id)
+                    )
             except Exception as exc:
                 print(f"[Import Pipeline] Auto-run analytics warning: {exc}")
 
@@ -1042,21 +1052,58 @@ class DynamicFileImportService:
         Order.objects.filter(user_id=user_key).delete()
         Product.objects.filter(user_id=user_key).delete()
 
-        # Derived records are invalid after a replacement. Keep the raw ingestion
-        # sessions and feature/archive history for reproducibility and training.
+        # Derived records are invalid after a replacement. Keep the immutable
+        # ingestion history, but retire its active projection so the same file
+        # can be intentionally loaded again after a user clears the workspace.
         if workspace_id:
             from supplyforge.models import (
+                BackgroundJob,
+                DatasetVersion,
                 RiskExplanationRecord,
                 RiskMonitoringRun,
                 SlowMovingRiskAssessment,
             )
+            from supplyforge.services.cache_policy import CachePolicy
 
             previous_sessions = IngestionSession.objects.filter(workspace_id=workspace_id)
             if current_session_id:
                 previous_sessions = previous_sessions.exclude(id=current_session_id)
+
             SlowMovingRiskAssessment.objects.filter(session__in=previous_sessions).delete()
             RiskExplanationRecord.objects.filter(session__in=previous_sessions).delete()
             RiskMonitoringRun.objects.filter(session__in=previous_sessions).delete()
+
+            # A clear/replacement must not leave a prior gold aggregate active;
+            # otherwise the dashboard can continue serving the retired dataset.
+            DatasetVersion.objects.filter(
+                workspace_id=workspace_id,
+                ingestion_session__in=previous_sessions,
+                status=DatasetVersion.STATUS_ACTIVE,
+            ).update(
+                status=DatasetVersion.STATUS_SUPERSEDED,
+                superseded_at=timezone.now(),
+            )
+
+            # Retain the session and source lineage for audit/training, while
+            # removing it from the idempotency window for a deliberate reload.
+            retired_sessions = previous_sessions.filter(status__in=[
+                'UPLOADING', 'PROFILING', 'PROFILED', 'MAPPING', 'QUEUED',
+                'PROCESSING', 'COMPLETED',
+            ])
+            BackgroundJob.objects.filter(
+                workspace_id=workspace_id,
+                ingestion_session__in=retired_sessions,
+                status__in=['PENDING', 'RUNNING'],
+            ).update(
+                status='CANCELLED',
+                error_message='Bộ dữ liệu đã được thay thế hoặc xóa bởi người dùng.',
+            )
+            retired_sessions.update(
+                status='ARCHIVED',
+                error_code='DATASET_RETIRED',
+                error_message='Phiên đã được lưu trữ sau khi bộ dữ liệu hiện hành bị xóa hoặc thay thế.',
+            )
+            CachePolicy.bump_workspace_version(workspace_id)
 
         return archive
 

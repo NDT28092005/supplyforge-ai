@@ -21,7 +21,10 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(o
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from supplyforge.models import IngestionSession, SlowMovingRiskAssessment, User, Workspace
 from supplyforge.models.capital_exposure import CapitalExposureAnalysisRecord, CapitalExposureItemRecord
+from supplyforge.services.capital_exposure_service import CapitalExposureAnalysisService
+from supplyforge.views.auth import generate_access_token
 from src.analytics.capital_exposure_repository import CapitalExposureRepository
 
 
@@ -151,8 +154,8 @@ class TestCapitalExposureApiPersistence(TestCase):
         self.assertEqual(res6.status_code, 200)
         self.assertIn("risk_distribution", res6.data)
 
-    def test_ac07_ac10_ac13_create_api_and_zero_recalculation(self):
-        """AC-07, AC-10, AC-13: Create API endpoint, consistency and zero recalculation drift."""
+    def test_create_api_requires_an_authenticated_workspace(self):
+        """The worker-only analysis queue rejects legacy client-supplied scope."""
         payload = {
             "merchant_id": "merchant_test_create",
             "dataset_version": "v2.0",
@@ -165,11 +168,89 @@ class TestCapitalExposureApiPersistence(TestCase):
             content_type="application/json"
         )
 
-        self.assertEqual(res.status_code, 201)
-        created_aid = res.data["analysis_id"]
-        self.assertEqual(res.data["merchant_id"], "merchant_test_create")
-        self.assertEqual(res.data["dataset_version"], "v2.0")
+        self.assertEqual(res.status_code, 401)
+        self.assertEqual(res.data['detail'], 'Yêu cầu cần workspace đã xác thực.')
 
-        # Verify items were persisted
-        item_count = CapitalExposureItemRecord.objects.filter(analysis_id=created_aid).count()
-        self.assertGreater(item_count, 0)
+    def test_latest_endpoint_returns_only_the_workspace_current_analysis(self):
+        user = User.objects.create(
+            email='capital-latest@example.com',
+            status=User.STATUS_ACTIVE,
+            is_email_verified=True,
+        )
+        workspace = Workspace.objects.create(
+            name='Capital Latest Workspace',
+            slug='capital-latest-workspace',
+            owner=user,
+        )
+        session = IngestionSession.objects.create(
+            workspace=workspace,
+            original_filename='orders.csv',
+            status='COMPLETED',
+        )
+        SlowMovingRiskAssessment.objects.create(
+            session=session,
+            sku='SKU-LATEST',
+            product_name='Latest product',
+            risk_class='HIGH_RISK',
+            risk_probability=0.8,
+            risk_score=80,
+        )
+        analysis = CapitalExposureRepository.save_analysis(
+            summary_payload=self.sample_summary_payload,
+            sku_assessment_records=self.sample_sku_records,
+            merchant_id=f'workspace:{workspace.id}',
+            dataset_version=f'session:{session.id}',
+        )
+        self.client.defaults['HTTP_AUTHORIZATION'] = (
+            f'Bearer {generate_access_token(user, workspace.id)}'
+        )
+
+        response = self.client.get('/api/capital-exposure/analyses/latest')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['analysis_id'], str(analysis.analysis_id))
+
+    def test_service_materializes_current_analysis_once(self):
+        """A completed risk session can always backfill its capital read model."""
+        user = User.objects.create(
+            email='capital-materialize@example.com',
+            status=User.STATUS_ACTIVE,
+            is_email_verified=True,
+        )
+        workspace = Workspace.objects.create(
+            name='Capital Materialization Workspace',
+            slug='capital-materialization-workspace',
+            owner=user,
+        )
+        session = IngestionSession.objects.create(
+            workspace=workspace,
+            original_filename='orders.csv',
+            status='COMPLETED',
+        )
+        SlowMovingRiskAssessment.objects.create(
+            session=session,
+            sku='SKU-MATERIALIZE',
+            product_name='Materialized product',
+            risk_class='HIGH_RISK',
+            risk_probability=0.8,
+            risk_score=80,
+            evidence={
+                'stock_quantity': 12,
+                'unit_cost': 100_000,
+                'dsls': 91,
+            },
+        )
+
+        first = CapitalExposureAnalysisService.ensure_current_analysis(workspace.id)
+        second = CapitalExposureAnalysisService.ensure_current_analysis(workspace.id)
+
+        self.assertIsNotNone(first)
+        self.assertEqual(first.analysis_id, second.analysis_id)
+        self.assertEqual(
+            CapitalExposureAnalysisRecord.objects.filter(
+                merchant_id=f'workspace:{workspace.id}',
+                dataset_version=f'session:{session.id}',
+            ).count(),
+            1,
+        )
+        self.assertEqual(CapitalExposureItemRecord.objects.filter(analysis=first).count(), 1)

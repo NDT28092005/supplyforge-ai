@@ -144,11 +144,11 @@
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "yellow", "value": 1.0 },
-              { "color": "red", "value": 5.0 }
+              { "color": "yellow", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
             ]
           },
-          "unit": "percent"
+          "unit": "percentunit"
         },
         "overrides": []
       },
@@ -164,13 +164,13 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "supplyforge:celery:failure_rate:5m",
+          "expr": "max(supplyforge:celery:failure_rate:5m)",
           "legendFormat": "Task Failure Rate",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Task Failure Rate (%)",
+      "title": "Worst Queue Failure Rate",
       "type": "stat"
     },
     {

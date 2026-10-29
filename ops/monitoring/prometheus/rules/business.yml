@@ -7,7 +7,7 @@ groups:
         labels:
           severity: P2
           service: business
-          environment: production
+          environment: local
           team: devops
         annotations:
           summary: "Data Ingestion failure rate is high (>10%)"
@@ -21,10 +21,62 @@ groups:
         labels:
           severity: P3
           service: business
-          environment: production
+          environment: local
           team: devops
         annotations:
           summary: "Cache error rate is elevated (>5 errors)"
           description: "Cache area '{{ $labels.cache_area }}' has recorded more than 5 errors in 5 minutes. Inspect Redis connectivity."
           runbook_url: "https://github.com/NDT28092005/supplyforge-ai/blob/main/ops/docs/runbooks/cache-error.md"
           dashboard_url: "http://localhost:3001/d/supplyforge-business/business-overview"
+
+      - alert: SupplyForgeActiveDatasetStale
+        expr: supplyforge:business:dataset_freshness_days > 30
+        for: 15m
+        labels:
+          severity: P2
+          service: business
+          environment: local
+          team: data
+        annotations:
+          summary: "Bộ dữ liệu đang hoạt động đã quá 30 ngày"
+          description: "Dữ liệu phục vụ phân tích rủi ro không còn đủ mới. Cần nạp và xác thực bộ dữ liệu bán hàng mới trước khi sử dụng khuyến nghị."
+          dashboard_url: "http://localhost:3001/d/supplyforge-07-business-domain-kpis/supplyforge-business-risk-decision-operations"
+
+      - alert: SupplyForgeBusinessSnapshotUnavailable
+        expr: max(supplyforge_business_snapshot_up) < 1
+        for: 10m
+        labels:
+          severity: P2
+          service: business
+          environment: local
+          team: data
+        annotations:
+          summary: "Không thể đọc trạng thái nghiệp vụ đã lưu"
+          description: "Collector không thể tổng hợp dataset, danh mục rủi ro và vốn từ cơ sở dữ liệu. Các KPI nghiệp vụ trên dashboard không còn đáng tin cậy."
+          dashboard_url: "http://localhost:3001/d/supplyforge-07-business-domain-kpis/supplyforge-business-risk-decision-operations"
+
+      - alert: SupplyForgeDataQualityDegraded
+        expr: min(supplyforge_business_dataset_quality_score{stat="minimum"}) > 0 and min(supplyforge_business_dataset_quality_score{stat="minimum"}) < 70
+        for: 15m
+        labels:
+          severity: P2
+          service: business
+          environment: local
+          team: data
+        annotations:
+          summary: "Chất lượng bộ dữ liệu hoạt động dưới ngưỡng 70/100"
+          description: "Không nên diễn giải kết quả rủi ro như quyết định vận hành cho đến khi lỗi dữ liệu được xử lý."
+          dashboard_url: "http://localhost:3001/d/supplyforge-07-business-domain-kpis/supplyforge-business-risk-decision-operations"
+
+      - alert: SupplyForgePriorityActionBacklogHigh
+        expr: sum(max by (priority_tier) (supplyforge_business_action_backlog_total{priority_tier=~"P1|P2"})) > 20
+        for: 30m
+        labels:
+          severity: P2
+          service: business
+          environment: local
+          team: operations
+        annotations:
+          summary: "Hàng chờ hành động ưu tiên P1/P2 đang tăng"
+          description: "Có hơn 20 khuyến nghị hành động ưu tiên cao chưa được rà soát hoặc xử lý."
+          dashboard_url: "http://localhost:3001/d/supplyforge-07-business-domain-kpis/supplyforge-business-risk-decision-operations"

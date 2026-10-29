@@ -7,7 +7,7 @@ groups:
         labels:
           severity: P1
           service: mysql
-          environment: production
+          environment: local
           team: devops
         annotations:
           summary: "SupplyForge MySQL Exporter/Server is DOWN"
@@ -21,7 +21,7 @@ groups:
         labels:
           severity: P2
           service: mysql
-          environment: production
+          environment: local
           team: devops
         annotations:
           summary: "SupplyForge MySQL connection pool is saturated (>85%)"

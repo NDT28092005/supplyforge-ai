@@ -12,7 +12,9 @@ RUN npm run build
 # Stage 2: Serve compiled SPA via Nginx
 FROM nginx:1.25-alpine
 
-# Copy Nginx server configuration
+# Install the http-level settings before the server configuration.  Rate-limit
+# zones must live in nginx.conf, not in a virtual-host file.
+COPY nginx-main.conf /etc/nginx/nginx.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy static assets to Nginx web root

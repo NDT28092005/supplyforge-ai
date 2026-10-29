@@ -1,9 +1,20 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { EMPTY, Observable } from 'rxjs';
-import { expand, map, reduce } from 'rxjs/operators';
+import { Observable } from 'rxjs';
 import { environment } from '../environments/environment';
 import { AuthService } from './auth.service';
+
+export interface IngestionSessionPage {
+  items: any[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  };
+}
 
 @Injectable({
   providedIn: 'root'
@@ -101,12 +112,18 @@ export class ApiService {
     return this.http.post(`${this.apiUrl}/api/v2/ingestion/sessions/${sessionId}/cancel`, {});
   }
 
-  listIngestionSessions(workspaceId: number = 1): Observable<any> {
-    return this.http.get(`${this.apiUrl}/api/v1/ingestion/sessions?workspaceId=${workspaceId}`);
+  listIngestionSessions(page: number = 1, pageSize: number = 20, status?: string): Observable<IngestionSessionPage> {
+    let params = new HttpParams()
+      .set('page', page.toString())
+      .set('pageSize', Math.min(100, Math.max(1, pageSize)).toString());
+    if (status) {
+      params = params.set('status', status);
+    }
+    return this.http.get<IngestionSessionPage>(`${this.apiUrl}/api/v2/ingestion/sessions`, { params });
   }
 
-  getIngestionSessions(workspaceId: string): Observable<any> {
-    return this.http.get(`${this.apiUrl}/api/v1/ingestion/sessions?workspaceId=${workspaceId}`);
+  getIngestionSessions(page: number = 1, pageSize: number = 20, status?: string): Observable<IngestionSessionPage> {
+    return this.listIngestionSessions(page, pageSize, status);
   }
 
   // ── Module 01 Task 02 Dataset Profiling ─────────────────────────────
@@ -575,32 +592,6 @@ export class ApiService {
     return this.http.get(`${this.apiUrl}/api/v1/risk/assessments/list`, { params });
   }
 
-  /**
-   * Retrieves every persisted assessment. The risk API is deliberately
-   * paginated, so dashboards must not mistake its first page for a complete
-   * portfolio when a merchant has more than 500 SKUs.
-   */
-  getAllM3RiskAssessments(params: any = {}, pageSize = 500): Observable<any> {
-    const baseParams = { ...params, limit: pageSize, offset: 0 };
-    return this.getM3RiskAssessments(baseParams).pipe(
-      expand((response: any) => {
-        const page = Array.isArray(response?.assessments) ? response.assessments : [];
-        const nextOffset = Number(response?.offset || 0) + page.length;
-        const total = Number(response?.total_count || 0);
-        return page.length > 0 && nextOffset < total
-          ? this.getM3RiskAssessments({ ...params, limit: pageSize, offset: nextOffset })
-          : EMPTY;
-      }),
-      reduce((all: any[], response: any) => all.concat(response?.assessments || []), []),
-      map((assessments: any[]) => ({
-        total_count: assessments.length,
-        limit: pageSize,
-        offset: 0,
-        assessments
-      }))
-    );
-  }
-
   getM3RiskAssessmentDetail(id: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/api/v1/risk/assessments/${id}`);
   }
@@ -657,6 +648,10 @@ export class ApiService {
     return this.http.post(`${this.apiUrl}/api/capital-exposure/analyses`, payload);
   }
 
+  getLatestCapitalExposureAnalysis(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/capital-exposure/analyses/latest`);
+  }
+
   getCapitalExposureAnalysis(analysisId: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/api/capital-exposure/analyses/${analysisId}`);
   }
@@ -667,33 +662,6 @@ export class ApiService {
 
   listCapitalExposureItems(analysisId: string, params: any = {}): Observable<any> {
     return this.http.get(`${this.apiUrl}/api/capital-exposure/analyses/${analysisId}/items`, { params });
-  }
-
-  /** Loads all pages of a capital analysis before calculating client KPIs. */
-  getAllCapitalExposureItems(analysisId: string, params: any = {}, pageSize = 500): Observable<any> {
-    const baseParams = { ...params, limit: pageSize, page: 1 };
-    return this.listCapitalExposureItems(analysisId, baseParams).pipe(
-      expand((response: any) => response?.pagination?.has_next
-        ? this.listCapitalExposureItems(analysisId, {
-          ...params,
-          limit: pageSize,
-          page: Number(response.pagination.current_page || 1) + 1
-        })
-        : EMPTY),
-      reduce((all: any[], response: any) => all.concat(response?.items || []), []),
-      map((items: any[]) => ({
-        analysis_id: analysisId,
-        pagination: {
-          total_items: items.length,
-          total_pages: Math.ceil(items.length / pageSize),
-          current_page: 1,
-          limit: pageSize,
-          has_next: false,
-          has_previous: false
-        },
-        items
-      }))
-    );
   }
 
   getCapitalExposureSkuDetail(analysisId: string, skuId: string): Observable<any> {

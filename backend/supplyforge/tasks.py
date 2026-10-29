@@ -364,6 +364,11 @@ def _stage_ml_inference(job: BackgroundJob, context: dict) -> dict:
     try:
         if session:
             _auto_populate_assessments_from_products(str(session.id))
+            # The capital read model is calculated by the worker immediately
+            # after risk assessments are persisted, never by a dashboard GET.
+            from supplyforge.services.capital_exposure_service import CapitalExposureAnalysisService
+
+            CapitalExposureAnalysisService.ensure_current_analysis(job.workspace_id)
         context['ml_result'] = {'status': 'SUCCESS'}
     except Exception as e:
         logger.warning(f"Batch ML Inference notice for job {job.id}: {e}")
@@ -400,6 +405,31 @@ def _stage_ml_inference(job: BackgroundJob, context: dict) -> dict:
 
     _update_stage_progress(job, 'ML_INFERENCE', 100, 'COMPLETED', 95)
     return context
+
+
+@shared_task(bind=True, queue='data_worker', max_retries=2, default_retry_delay=60)
+def run_capital_exposure_analysis(self, workspace_id: int) -> dict:
+    """Backfill a capital read model without making an HTTP worker calculate it."""
+    from supplyforge.services.capital_exposure_service import CapitalExposureAnalysisService
+
+    try:
+        analysis = CapitalExposureAnalysisService.ensure_current_analysis(int(workspace_id))
+        return {
+            'status': 'COMPLETED' if analysis else 'SKIPPED',
+            'analysis_id': str(analysis.analysis_id) if analysis else None,
+        }
+    except Exception as exc:
+        logger.exception('Capital exposure analysis failed for workspace %s.', workspace_id)
+        raise self.retry(exc=exc)
+
+
+@shared_task(queue='data_worker')
+def warm_workspace_cache(workspace_id: int) -> dict:
+    """Run cache warming in a worker, never in the API process."""
+    from supplyforge.services.cache_warming_service import CacheWarmingService
+
+    CacheWarmingService.warm_workspace_cache(int(workspace_id))
+    return {'status': 'QUEUED_AND_WARMED', 'workspace_id': int(workspace_id)}
 
 
 def _stage_finalize(job: BackgroundJob, context: dict) -> dict:

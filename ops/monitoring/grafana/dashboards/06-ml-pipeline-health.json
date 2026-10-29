@@ -88,7 +88,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(supplyforge_prediction_duration_seconds_bucket[5m])) by (le))",
+          "expr": "max(supplyforge:business:model_inference_duration:p95)",
           "legendFormat": "P95 Inference Latency",
           "range": true,
           "refId": "A"
@@ -126,13 +126,13 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "supplyforge_feature_missing_rate",
-          "legendFormat": "Missing Rate",
+          "expr": "max(supplyforge:business:prediction_failure_rate)",
+          "legendFormat": "Prediction Failure Rate",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Feature Missing Rate (%)",
+      "title": "Prediction Failure Rate",
       "type": "stat"
     },
     {
@@ -159,13 +159,13 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "supplyforge_model_governance_info",
-          "legendFormat": "v{{ model_version }} (Feature: {{ feature_version }})",
+          "expr": "count(count by (model, model_version) (supplyforge_prediction_total))",
+          "legendFormat": "Observed model versions",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Active ML Model Governance",
+      "title": "Observed Model Versions",
       "type": "stat"
     },
     {
@@ -222,13 +222,13 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "supplyforge_risk_distribution_total",
-          "legendFormat": "Risk Level: {{ risk_level }}",
+          "expr": "max by (risk_class) (supplyforge_business_portfolio_skus)",
+          "legendFormat": "{{ risk_class }}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Predicted Risk Level Distribution",
+      "title": "Current Portfolio Risk Distribution",
       "type": "timeseries"
     }
   ],

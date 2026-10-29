@@ -65,3 +65,5 @@ uploads/
 
 .agents/*
 ops/docs/*
+!ops/docs/operations/
+!ops/docs/operations/monitoring-and-load-test.md

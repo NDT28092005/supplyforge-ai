@@ -184,12 +184,15 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
         this.isRefreshing = false;
         if (summary && summary.hasData) {
           this.loading = false;
+          const hasCapitalReadModel = summary.capitalStatus !== 'RISK_READ_MODEL_ONLY';
           this.kpiGrid = {
             monitoredSkus: `${summary.totalSkus} sản phẩm`,
             highRiskSkus: `${summary.criticalCount + summary.highRiskCount} sản phẩm`,
-            totalCapitalExposure: this.formatVndHuman(summary.totalCapitalExposureVnd),
-            atRiskCapital: this.formatVndHuman(summary.atRiskCapitalVnd),
-            agedCapital: this.formatVndHuman(summary.agedCapitalVnd),
+            // A portfolio-level valuation must come from the persisted capital
+            // read model. Do not present an unavailable aggregate as zero.
+            totalCapitalExposure: hasCapitalReadModel ? this.formatVndHuman(summary.totalCapitalExposureVnd) : 'Đang tổng hợp',
+            atRiskCapital: hasCapitalReadModel ? this.formatVndHuman(summary.atRiskCapitalVnd) : 'Đang tổng hợp',
+            agedCapital: hasCapitalReadModel ? this.formatVndHuman(summary.agedCapitalVnd) : 'Đang tổng hợp',
             safePct: `${Math.round(((summary.lowRiskCount || 0) / (summary.totalSkus || 1)) * 100)}%`,
             needActionPct: `${Math.round((((summary.criticalCount || 0) + (summary.highRiskCount || 0)) / (summary.totalSkus || 1)) * 100)}%`
           };
@@ -204,7 +207,11 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
             statusBadge: highRiskCount > 0 ? 'CẦN ƯU TIÊN XỬ LÝ' : 'VẬN HÀNH ỔN ĐỊNH',
             statusLevel: highRiskCount > 0 ? 'HIGH_RISK' : 'SAFE',
             verdictTitle: highRiskCount > 0 ? `Danh mục có ${highRiskCount} SKU thuộc nhóm rủi ro vốn cao` : 'Danh mục đang vận hành ổn định',
-            verdictMessage: highRiskCount > 0 ? `Có ${highRiskCount} SKU rủi ro cao với ${this.formatVndHuman(atRiskVal)} giá trị vốn cần được ưu tiên đánh giá. Trong đó, ${this.formatVndHuman(agedVal)} thuộc nhóm lưu kho trên 90 ngày.` : 'Danh mục đang duy trì tốc độ tiêu thụ phù hợp, chưa ghi nhận giá trị tồn kho lưu kho kéo dài đáng kể.',
+            verdictMessage: highRiskCount > 0
+              ? (hasCapitalReadModel
+                ? `Có ${highRiskCount} SKU rủi ro cao với ${this.formatVndHuman(atRiskVal)} giá trị vốn cần được ưu tiên đánh giá. Trong đó, ${this.formatVndHuman(agedVal)} thuộc nhóm lưu kho trên 90 ngày.`
+                : `Đã xác định ${highRiskCount} SKU thuộc nhóm rủi ro cao. Báo cáo định giá vốn đang được hoàn thiện từ bộ dữ liệu hiện hành.`)
+              : 'Danh mục đang duy trì tốc độ tiêu thụ phù hợp, chưa ghi nhận giá trị tồn kho lưu kho kéo dài đáng kể.',
             takeaways: [
               `Cần ưu tiên lập phương án xử lý cho ${highRiskPctVal}% số sản phẩm bán chậm (${highRiskCount} SKU).`,
               topSkusNames.length > 0 ? `Ưu tiên xử lý ${topSkusNames.length} mặt hàng chiếm vốn lớn nhất (${topSkusNames.join(', ')}).` : `Ưu tiên xử lý các sản phẩm có giá trị tồn đọng cao nhất.`,

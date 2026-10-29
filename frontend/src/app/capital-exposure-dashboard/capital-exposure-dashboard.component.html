@@ -26,6 +26,13 @@
     <button (click)="loadRealCapitalExposureData()" class="px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-semibold text-xs transition-all cursor-pointer">Thử tải lại</button>
   </div>
 
+  <div *ngIf="dataState === 'pending'" role="status" class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
+    <span class="mx-auto block h-7 w-7 rounded-full border-2 border-indigo-200 border-t-indigo-600 animate-spin"></span>
+    <h3 class="text-base font-bold text-slate-900">Đang chuẩn bị bản phân tích vốn</h3>
+    <p class="text-xs sm:text-sm text-slate-500">{{ pendingDescription }}</p>
+    <button (click)="loadRealCapitalExposureData()" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition-all cursor-pointer">Kiểm tra lại</button>
+  </div>
+
   <!-- Thông báo khi chưa có dữ liệu -->
   <div *ngIf="dataState === 'empty'"
     class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
@@ -194,11 +201,11 @@
         <div class="flex items-center gap-2 shrink-0">
           <button (click)="exportReport('csv')"
             class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
-            <span>Xuất CSV</span>
+            <span>Xuất trang hiện tại</span>
           </button>
           <button (click)="exportReport('excel')"
             class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
-            <span>Xuất Excel</span>
+            <span>Xuất CSV (Excel)</span>
           </button>
         </div>
       </div>
@@ -206,12 +213,12 @@
       <!-- Search & Filters -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
         <div class="col-span-1 sm:col-span-2">
-          <input type="text" [(ngModel)]="searchTerm" placeholder="Tìm theo Mã sản phẩm, Tên hoặc Danh mục..."
+          <input type="text" [(ngModel)]="searchTerm" (keyup.enter)="onFiltersChanged()" (blur)="onFiltersChanged()" placeholder="Tìm theo Mã sản phẩm, Tên hoặc Danh mục..."
             class="w-full bg-white border border-slate-200 text-slate-900 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400" />
         </div>
 
         <div>
-          <select [(ngModel)]="capitalFilter"
+          <select [(ngModel)]="capitalFilter" (ngModelChange)="onFiltersChanged()"
             class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400">
             <option value="">Vốn tồn đọng: Tất cả</option>
             <option value="LOW">Dưới 10 triệu VND</option>
@@ -221,7 +228,7 @@
         </div>
 
         <div>
-          <select [(ngModel)]="sortField"
+          <select [(ngModel)]="sortField" (ngModelChange)="onFiltersChanged()"
             class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400">
             <option value="capitalExposureVal">Sắp xếp: Vốn tồn đọng (VND)</option>
             <option value="opportunityCostVal">Sắp xếp: Chi phí cơ hội</option>
@@ -246,7 +253,7 @@
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 bg-white">
-          <tr *ngFor="let item of filteredSkuItems" (click)="openSkuDetail(item)"
+          <tr *ngFor="let item of filteredSkuItems; trackBy: trackBySku" (click)="openSkuDetail(item)"
             class="hover:bg-slate-50 transition-colors cursor-pointer">
 
             <td class="py-3.5 px-4 whitespace-nowrap">
@@ -299,6 +306,21 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500">
+      <span>Hiển thị {{ pageStart }}-{{ pageEnd }} trên {{ totalItems }} SKU</span>
+      <div class="flex items-center gap-2">
+        <button type="button" (click)="changePage(page - 1)" [disabled]="page === 1 || tableLoading"
+          class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors">
+          Trang trước
+        </button>
+        <span class="font-mono text-slate-700">{{ page }} / {{ totalPages }}</span>
+        <button type="button" (click)="changePage(page + 1)" [disabled]="page >= totalPages || tableLoading"
+          class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors">
+          Trang sau
+        </button>
+      </div>
     </div>
 
   </div>

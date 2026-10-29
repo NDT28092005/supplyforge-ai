@@ -55,6 +55,12 @@ class NotificationRecord(models.Model):
     class Meta:
         db_table = 'supplyforge_notification'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['workspace_id', 'is_read', 'severity'],
+                name='notification_ws_read_sev_idx',
+            ),
+        ]
 
     def __str__(self):
         return f"[{self.severity}] {self.title} - Read: {self.is_read}"

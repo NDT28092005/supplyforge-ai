@@ -12,7 +12,6 @@ from rest_framework import status
 
 from supplyforge.services.query_service import DashboardQueryService
 from supplyforge.services.cache_policy import CachePolicy
-from supplyforge.services.cache_warming_service import CacheWarmingService
 
 logger = logging.getLogger(__name__)
 
@@ -64,14 +63,23 @@ def refresh_workspace_cache(request):
 
     workspace_id = request.workspace_id
 
-    CacheWarmingService.warm_workspace_cache(int(workspace_id))
+    from supplyforge.tasks import warm_workspace_cache
+
+    try:
+        warm_workspace_cache.delay(int(workspace_id))
+    except Exception:
+        logger.exception('Could not queue cache refresh for workspace %s.', workspace_id)
+        return Response({
+            'error': 'Không thể kết nối hàng chờ xử lý. Vui lòng thử lại sau.',
+            'code': 'QUEUE_UNAVAILABLE',
+        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
     new_version = str(CachePolicy.get_workspace_version(int(workspace_id)))
 
     res = Response({
-        'status': 'SUCCESS',
-        'message': f'Đã làm mới bộ nhớ đệm cho Workspace {workspace_id}.',
+        'status': 'QUEUED',
+        'message': f'Đã đưa yêu cầu làm mới dữ liệu tổng hợp cho Workspace {workspace_id} vào hàng chờ.',
         'newCacheVersion': new_version
     }, status=status.HTTP_200_OK)
-    res['X-Cache-Status'] = 'REFRESHED'
+    res['X-Cache-Status'] = 'QUEUED'
     res['X-Cache-Version'] = new_version
     return res

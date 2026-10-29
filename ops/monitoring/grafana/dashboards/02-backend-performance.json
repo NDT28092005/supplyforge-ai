@@ -72,7 +72,7 @@
               { "color": "red", "value": 5.0 }
             ]
           },
-          "unit": "percent"
+          "unit": "percentunit"
         },
         "overrides": []
       },
@@ -280,7 +280,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "process_resident_memory_bytes{job=\"django-backend\"}",
+          "expr": "process_resident_memory_bytes{job=\"django-backend-local\"}",
           "legendFormat": "Memory Working Set",
           "range": true,
           "refId": "A"
@@ -294,7 +294,7 @@
       "fieldConfig": {
         "defaults": {
           "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2 },
-          "unit": "percentunit"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -308,13 +308,13 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "rate(process_cpu_seconds_total{job=\"django-backend\"}[5m])",
+          "expr": "rate(process_cpu_seconds_total{job=\"django-backend-local\"}[5m])",
           "legendFormat": "CPU Usage Cores",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Django Backend CPU Utilization",
+      "title": "Django Backend CPU Cores Used",
       "type": "timeseries"
     }
   ],

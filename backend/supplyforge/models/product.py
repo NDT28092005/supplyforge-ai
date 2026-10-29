@@ -53,6 +53,18 @@ class Product(models.Model):
 
     class Meta:
         db_table = 'products'
+        indexes = [
+            # Import reconciliation and product projections are always scoped
+            # by merchant before resolving a SKU.
+            models.Index(
+                fields=['user_id', 'item_sku'],
+                name='product_user_sku_idx',
+            ),
+            models.Index(
+                fields=['user_id', 'created_at'],
+                name='product_user_created_idx',
+            ),
+        ]
 
 
 class SkuMergeHistory(models.Model):

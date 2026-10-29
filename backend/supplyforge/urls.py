@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 from supplyforge import views
 from supplyforge.views.export_views import (
     ExportRiskReportView,
@@ -8,6 +8,10 @@ from supplyforge.views.export_views import (
 )
 
 urlpatterns = [
+    # P1 high-traffic endpoints are versioned in their own module. Legacy
+    # aliases remain below while they are progressively retired.
+    path('api/v2/', include('supplyforge.urls_v2')),
+
     # Root Health Check for Render & Cloud Probes
     path('', views.health_live, name='root_health'),
 
@@ -199,21 +203,6 @@ urlpatterns = [
 
     # ── Module 01 DAT-10 Data Quality Report UI & Readiness Guard ──
     path('api/v1/ingestion/sessions/<uuid:session_id>/generate-quality-report', views.generate_quality_report, name='generate_quality_report_v1'),
-    # ── Background Job Queue (Release 1: Queue v1.0) ──
-    path('api/v2/jobs/upload', views.enqueue_upload_job, name='enqueue_upload_job'),
-    path('api/v2/jobs/upload/initiate', views.initiate_s3_multipart_upload, name='initiate_s3_multipart_upload'),
-    path('api/v2/jobs/<uuid:session_id>/upload/complete', views.complete_s3_multipart_upload, name='complete_s3_multipart_upload'),
-    path('api/v2/jobs', views.list_jobs, name='list_jobs_no_slash'),
-    path('api/v2/jobs/', views.list_jobs, name='list_jobs'),
-    path('api/v2/jobs/<str:job_id>/status', views.get_job_status, name='get_job_status'),
-    path('api/v2/jobs/<str:job_id>/cancel', views.cancel_job, name='cancel_job'),
-    path('api/v2/jobs/<str:job_id>/retry', views.retry_job, name='retry_job'),
-    path('api/v2/jobs/<str:job_id>', views.delete_job, name='delete_job'),
-
-    # ── High-Speed Query & Redis Cache APIs (QUERY Layer) ──
-    path('api/v2/query/dashboard-summary', views.get_cached_dashboard_summary, name='get_cached_dashboard_summary'),
-    path('api/v2/query/cache-refresh', views.refresh_workspace_cache, name='refresh_workspace_cache'),
-
     # ── MLOps Governance: frozen data manifests and manual model promotion ──
     path('api/v2/ml/governance/models', views.model_candidates, name='mlops_model_candidates'),
     path('api/v2/ml/governance/models/<str:version>/evaluate', views.evaluate_model_candidate, name='mlops_evaluate_model'),
@@ -401,6 +390,8 @@ urlpatterns = [
     # ── Module 05 Capital Exposure: M5-09 Capital Exposure API & Persistence ──
     path('api/capital-exposure/analyses', views.create_capital_exposure_analysis, name='create_capital_exposure_analysis_v1'),
     path('api/capital-exposure/analyses/', views.create_capital_exposure_analysis),
+    path('api/capital-exposure/analyses/latest', views.get_latest_capital_exposure_analysis, name='get_latest_capital_exposure_analysis'),
+    path('api/capital-exposure/analyses/latest/', views.get_latest_capital_exposure_analysis),
     path('api/capital-exposure/analyses/<str:analysis_id>/summary', views.get_capital_exposure_summary, name='get_capital_exposure_summary_v1'),
     path('api/capital-exposure/analyses/<str:analysis_id>/summary/', views.get_capital_exposure_summary),
     path('api/capital-exposure/analyses/<str:analysis_id>/aging', views.get_capital_exposure_aging_distribution, name='get_capital_exposure_aging_v1'),

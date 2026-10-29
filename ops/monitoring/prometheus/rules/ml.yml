@@ -7,7 +7,7 @@ groups:
         labels:
           severity: P2
           service: ml
-          environment: production
+          environment: local
           team: devops
         annotations:
           summary: "ML Prediction failure rate is high (>5%)"
@@ -21,7 +21,7 @@ groups:
         labels:
           severity: P2
           service: ml
-          environment: production
+          environment: local
           team: devops
         annotations:
           summary: "ML Model inference P95 duration is high (>2s)"

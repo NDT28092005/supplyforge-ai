@@ -161,6 +161,26 @@ thiếu `DJANGO_SECRET_KEY`.
 
 ## Proposed Changes (6 Phases)
 
+### P1 implementation status
+
+P1 database and request-path work is implemented in the working tree. The
+acceptance contract and local verification commands are maintained in
+[`ops/docs/p1-acceptance.md`](ops/docs/p1-acceptance.md).
+
+| P1 item | Implementation status |
+|:---|:---|
+| Persistent database connections | ✅ Configured before P1; health checks remain enabled. |
+| Query-path indexes | ✅ `0062_p1_query_path_indexes` adds only model-backed indexes for active list/filter/sort paths. |
+| Session history pagination | ✅ V2 envelope, default page size 20, maximum 100, compact rows and joined dataset metadata. V1 retains its list response shape. |
+| Structured request observability | ✅ JSON logs, safe `X-Request-ID`, method/path/status/duration only; no body or query-string logging. |
+| Edge request protection | ✅ Nginx per-IP request/connection limits, streamed CSV proxy, gzip and immutable asset caching. |
+| V2 route modularization | ✅ Queue and dashboard-query routes moved to `supplyforge.urls_v2` with unchanged URLs/names. |
+
+The P1 changes do not run Terraform, provision infrastructure, or enable an
+object-storage provider. Nginx syntax should be checked inside the frontend
+image by the release pipeline because this development host has no Docker
+daemon access.
+
 ---
 
 ## Phase 1: 🔒 Security Hardening (Priority: P0 — Week 1-2)
