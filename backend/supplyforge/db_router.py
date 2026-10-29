@@ -10,6 +10,20 @@ from django.conf import settings
 
 class ReadReplicaRouter:
     def db_for_read(self, model, **hints):
+        # An import is a multi-request workflow: upload writes an
+        # IngestionSession and mapping/profiling reads it immediately after.
+        # Reading these operational records from an asynchronous replica can
+        # falsely report a newly created session as missing.
+        primary_read_models = {
+            'ingestionsession',
+            'datasetversion',
+            'backgroundjob',
+            'slowmovingriskassessment',
+            'riskmonitoringrun',
+            'riskexplanationrecord',
+        }
+        if model._meta.app_label == 'supplyforge' and model._meta.model_name in primary_read_models:
+            return 'default'
         if 'replica' in settings.DATABASES and not hints.get('instance'):
             return 'replica'
         return None

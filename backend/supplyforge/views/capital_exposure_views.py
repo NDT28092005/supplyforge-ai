@@ -28,6 +28,18 @@ from supplyforge.serializers.capital_exposure_serializer import (
 logger = logging.getLogger(__name__)
 
 
+def _analysis_is_visible_to_request(request, analysis_rec):
+    """Restrict authenticated requests to analyses created for their workspace.
+
+    Legacy unauthenticated calls remain available in local development and the
+    older repository tests. Deployed requests always pass tenant context in
+    middleware and therefore cannot enumerate another workspace's analysis.
+    """
+    if not getattr(request, "tenant_context_validated", False):
+        return True
+    return analysis_rec.merchant_id == f"workspace:{request.workspace_id}"
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def create_capital_exposure_analysis(request):
@@ -51,12 +63,40 @@ def create_capital_exposure_analysis(request):
         from datetime import datetime, timedelta
         from django.db.models import Max
 
-        latest_session = IngestionSession.objects.filter(risk_assessments__isnull=False).order_by('-created_at').first()
+        workspace_id = getattr(request, "workspace_id", None)
+        has_tenant_context = bool(getattr(request, "tenant_context_validated", False) and workspace_id)
+        session_queryset = IngestionSession.objects.filter(risk_assessments__isnull=False)
+        if has_tenant_context:
+            # The client never supplies a merchant identifier or version as an
+            # authority boundary. Both are derived from its authenticated
+            # workspace and the active risk-assessment session.
+            session_queryset = session_queryset.filter(workspace_id=workspace_id)
+
+        latest_session = session_queryset.order_by('-created_at').first()
+        if has_tenant_context and not latest_session:
+            return Response({
+                "detail": "Chưa có kết quả đánh giá rủi ro cho bộ dữ liệu hiện tại.",
+                "code": "RISK_ASSESSMENT_REQUIRED",
+            }, status=status.HTTP_409_CONFLICT)
+
+        if has_tenant_context and latest_session:
+            merchant_id = f"workspace:{workspace_id}"
+            dataset_version = f"session:{latest_session.id}"
+            existing = CapitalExposureRepository.get_latest_analysis(
+                merchant_id=merchant_id,
+                dataset_version=dataset_version,
+            )
+            if existing:
+                return Response(CapitalExposureAnalysisSerializer(existing).data, status=status.HTTP_200_OK)
+
         assessments_qs = SlowMovingRiskAssessment.objects.filter(session=latest_session) if latest_session else SlowMovingRiskAssessment.objects.all()
 
         if assessments_qs.exists():
             # Determine reference date from actual data
-            max_order_dt = Order.objects.aggregate(Max('created_at'))['created_at__max']
+            orders = Order.objects.all()
+            if has_tenant_context:
+                orders = orders.filter(user_id=str(request.user_id))
+            max_order_dt = orders.aggregate(Max('created_at'))['created_at__max']
             ref_date = max_order_dt if max_order_dt else datetime.now()
             if hasattr(ref_date, 'tzinfo') and ref_date.tzinfo is not None:
                 ref_date = ref_date.replace(tzinfo=None)
@@ -155,7 +195,7 @@ def get_capital_exposure_analysis(request, analysis_id):
     Retrieves status and metadata for a specific analysis run.
     """
     analysis_rec = CapitalExposureRepository.get_analysis(analysis_id)
-    if not analysis_rec:
+    if not analysis_rec or not _analysis_is_visible_to_request(request, analysis_rec):
         return Response({"detail": f"Analysis run '{analysis_id}' not found."}, status=status.HTTP_404_NOT_FOUND)
 
     serializer = CapitalExposureAnalysisSerializer(analysis_rec)
@@ -170,7 +210,7 @@ def get_capital_exposure_summary(request, analysis_id):
     Retrieves executive summary KPIs for Capital Exposure Dashboard.
     """
     analysis_rec = CapitalExposureRepository.get_analysis(analysis_id)
-    if not analysis_rec:
+    if not analysis_rec or not _analysis_is_visible_to_request(request, analysis_rec):
         return Response({"detail": f"Analysis run '{analysis_id}' not found."}, status=status.HTTP_404_NOT_FOUND)
 
     return Response({
@@ -202,7 +242,7 @@ def list_capital_exposure_items(request, analysis_id):
     Query params: risk_level, aging_bucket, aging_priority, search, page, limit, sort.
     """
     analysis_rec = CapitalExposureRepository.get_analysis(analysis_id)
-    if not analysis_rec:
+    if not analysis_rec or not _analysis_is_visible_to_request(request, analysis_rec):
         return Response({"detail": f"Analysis run '{analysis_id}' not found."}, status=status.HTTP_404_NOT_FOUND)
 
     risk_level = request.query_params.get('risk_level')
@@ -239,6 +279,10 @@ def get_capital_exposure_sku_detail(request, analysis_id, sku_id):
     GET /api/capital-exposure/analyses/{analysis_id}/items/{sku_id}
     Retrieves full financial exposure detail for a single SKU.
     """
+    analysis_rec = CapitalExposureRepository.get_analysis(analysis_id)
+    if not analysis_rec or not _analysis_is_visible_to_request(request, analysis_rec):
+        return Response({"detail": f"Analysis run '{analysis_id}' not found."}, status=status.HTTP_404_NOT_FOUND)
+
     item = CapitalExposureRepository.get_sku_item_detail(analysis_id, sku_id)
     if not item:
         return Response({"detail": f"SKU '{sku_id}' not found in analysis '{analysis_id}'."}, status=status.HTTP_404_NOT_FOUND)
@@ -255,7 +299,7 @@ def get_capital_exposure_aging_distribution(request, analysis_id):
     Retrieves aging risk level breakdown for analysis_id.
     """
     analysis_rec = CapitalExposureRepository.get_analysis(analysis_id)
-    if not analysis_rec:
+    if not analysis_rec or not _analysis_is_visible_to_request(request, analysis_rec):
         return Response({"detail": f"Analysis run '{analysis_id}' not found."}, status=status.HTTP_404_NOT_FOUND)
 
     return Response({
@@ -272,7 +316,7 @@ def get_capital_exposure_risk_distribution(request, analysis_id):
     Retrieves slow-moving risk class breakdown for analysis_id.
     """
     analysis_rec = CapitalExposureRepository.get_analysis(analysis_id)
-    if not analysis_rec:
+    if not analysis_rec or not _analysis_is_visible_to_request(request, analysis_rec):
         return Response({"detail": f"Analysis run '{analysis_id}' not found."}, status=status.HTTP_404_NOT_FOUND)
 
     return Response({

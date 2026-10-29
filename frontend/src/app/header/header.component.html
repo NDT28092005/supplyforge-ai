@@ -1,21 +1,27 @@
 <header class="sf-header" [class.sf-header--app]="isAppRoute">
   <div class="sf-header__inner">
     <button type="button" class="sf-brand" (click)="onLogoClick()" aria-label="Về trang chủ SupplyForge">
-      <span class="sf-brand__mark"><img src="assets/logo.png" alt="" /></span>
+      <span class="sf-brand__mark" aria-hidden="true">
+        <span class="sf-brand__glyph"><i></i><i></i><i></i><i></i></span>
+      </span>
       <span class="sf-brand__copy">
         <strong>SupplyForge<span>AI</span></strong>
-        <small>Inventory intelligence</small>
+        <small>Nền tảng phân tích tồn kho</small>
       </span>
     </button>
 
     <nav class="sf-header__nav" aria-label="Điều hướng chính">
       <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }">Trang chủ</a>
-      <a routerLink="/about" routerLinkActive="is-active">Vì sao SupplyForge</a>
-      <a routerLink="/services" routerLinkActive="is-active">Cách hoạt động</a>
-      <a routerLink="/blog" routerLinkActive="is-active">Góc kiến thức</a>
+      <a routerLink="/about" routerLinkActive="is-active">Giải pháp</a>
+      <a routerLink="/services" routerLinkActive="is-active">Nền tảng</a>
+      <a routerLink="/blog" routerLinkActive="is-active">Thư viện chuyên môn</a>
     </nav>
 
     <div class="sf-header__actions">
+      <button *ngIf="canOpenWorkspace" type="button" class="workspace-button" (click)="openWorkspace()">
+        Trở lại bảng điều hành
+      </button>
+
       <div *ngIf="isAppRoute" class="notification-wrap">
         <button type="button" class="icon-button" (click)="toggleNotificationPanel()" title="Trung tâm thông báo"
           aria-label="Mở trung tâm thông báo" [attr.aria-expanded]="isNotificationOpen">
@@ -55,7 +61,7 @@
       </div>
 
       <ng-container *ngIf="!user">
-        <button type="button" class="demo-button" (click)="onDemoLoginClick()">Xem demo</button>
+        <button type="button" class="demo-button" (click)="onDemoLoginClick()">Trải nghiệm demo</button>
         <button type="button" class="login-button" (click)="onLoginClick()">Đăng nhập <span aria-hidden="true">↗</span></button>
       </ng-container>
 
@@ -80,9 +86,10 @@
   <div *ngIf="isMobileMenuOpen" class="mobile-menu">
     <nav aria-label="Điều hướng trên mobile">
       <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }" (click)="closeMobileMenu()">Trang chủ</a>
-      <a routerLink="/about" routerLinkActive="is-active" (click)="closeMobileMenu()">Vì sao SupplyForge</a>
-      <a routerLink="/services" routerLinkActive="is-active" (click)="closeMobileMenu()">Cách hoạt động</a>
-      <a routerLink="/blog" routerLinkActive="is-active" (click)="closeMobileMenu()">Góc kiến thức</a>
+      <a routerLink="/about" routerLinkActive="is-active" (click)="closeMobileMenu()">Giải pháp</a>
+      <a routerLink="/services" routerLinkActive="is-active" (click)="closeMobileMenu()">Nền tảng</a>
+      <a routerLink="/blog" routerLinkActive="is-active" (click)="closeMobileMenu()">Thư viện chuyên môn</a>
+      <button *ngIf="canOpenWorkspace" type="button" (click)="openWorkspace()">Trở lại bảng điều hành</button>
       <button *ngIf="!user" type="button" (click)="onLoginClick()">Đăng nhập <span aria-hidden="true">↗</span></button>
     </nav>
   </div>

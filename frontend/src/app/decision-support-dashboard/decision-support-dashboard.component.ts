@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, Output, EventEmitter } from '@angular/cor
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
+import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { ApiService } from '../api.service';
 import { DashboardStateService } from '../core/state/dashboard-state.service';
@@ -56,6 +57,7 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
 
   isLoading = false;
   errorMessage = '';
+  dataState: 'loading' | 'ready' | 'empty' | 'error' = 'loading';
 
   decisions: DecisionItem[] = [];
   filteredDecisions: DecisionItem[] = [];
@@ -91,12 +93,13 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
   isSimulating = false;
   sim001Result: any = null;
   sim002Result: any = null;
+  simulationError = '';
 
   // ACT-001 & ACT-002 Action Plan State
   actionPlans: any[] = [];
   isCreatePlanModalOpen = false;
-  planCampaign = 'Chiến dịch xả hàng CRIT-024';
-  planSku = 'CRIT-024';
+  planCampaign = '';
+  planSku = '';
   planDuration = 14;
   planStrategy = 'Giảm giá 15%';
   planOwner = 'Merchant';
@@ -122,7 +125,7 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
 
   // Copilot Assistant State (COP-001 Context Awareness & COP-002 Grounded Answers)
   isCopilotOpen = false;
-  activeCopilotSku = 'CRIT-024';
+  activeCopilotSku = '';
   copilotQuery = '';
   copilotMessages: Array<{ sender: 'user' | 'copilot', text: string, pillars?: string[] }> = [];
   isCopilotLoading = false;
@@ -131,6 +134,7 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
     private apiService: ApiService,
     private http: HttpClient,
     private route: ActivatedRoute,
+    private router: Router,
     private dashboardState: DashboardStateService
   ) {}
 
@@ -153,7 +157,10 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
 
   loadDecisions(): void {
     this.isLoading = true;
+    this.dataState = 'loading';
     this.errorMessage = '';
+    this.decisions = [];
+    this.filteredDecisions = [];
 
     const filters: any = {};
     if (this.selectedRiskClass !== 'ALL') filters.risk_class = this.selectedRiskClass;
@@ -168,133 +175,31 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
           this.applySearchFilter();
           this.calculateKpis();
           this.isLoading = false;
+          this.dataState = 'ready';
         } else {
-          this.loadFromDashboardData();
+          this.isLoading = false;
+          this.dataState = 'empty';
         }
       },
       error: (err: any) => {
-        this.loadFromDashboardData();
+        this.isLoading = false;
+        this.dataState = 'error';
+        this.errorMessage = err?.error?.error || 'Không thể tải các khuyến nghị đã được tạo. Vui lòng thử lại.';
       }
     });
   }
 
-  loadFromDashboardData(): void {
-    this.apiService.getDashboard(1).subscribe({
-      next: (res: any) => {
-        if (!res) {
-          this.decisions = [];
-          this.applySearchFilter();
-          this.calculateKpis();
-          this.isLoading = false;
-          return;
-        }
-        const healthyList = (res.healthySkus || []).map((item: any) => ({ ...item, _riskClass: 'LOW_RISK' }));
-        const watchList = (res.watchlistSkus || []).map((item: any) => ({ ...item, _riskClass: 'MEDIUM_RISK' }));
-        const slowList = (res.slowMovingSkus || []).map((item: any) => ({ ...item, _riskClass: 'HIGH_RISK' }));
-        const deadList = (res.deadStockSkus || []).map((item: any) => ({ ...item, _riskClass: 'HIGH_RISK' }));
-
-        const allSkus = [...deadList, ...slowList, ...watchList, ...healthyList];
-        if (allSkus.length > 0) {
-          this.decisions = allSkus.map((item: any, idx: number) => this.mapDashboardSkuToDecision(item, idx));
-        } else {
-          this.decisions = [];
-        }
-        this.applySearchFilter();
-        this.calculateKpis();
-        this.isLoading = false;
-      },
-      error: () => {
-        this.decisions = [];
-        this.applySearchFilter();
-        this.calculateKpis();
-        this.isLoading = false;
-      }
-    });
-  }
-
-  mapDashboardSkuToDecision(item: any, idx: number): DecisionItem {
-    const riskClass = item._riskClass as string;
-    const cap = item.totalValue || ((item.quantity || 1) * (item.costPrice || 50000));
-    const dsls = item.daysInInventory || 0;
-
-    let action = 'MONITOR';
-    let discountRate = 0.0;
-    let priority = 'P4';
-    let priorityScore = 20;
-
-    if (riskClass === 'HIGH_RISK') {
-      action = dsls > 90 ? 'CLEARANCE' : 'DISCOUNT';
-      discountRate = dsls > 90 ? 0.40 : 0.25;
-      priority = idx < 5 ? 'P1' : 'P2';
-      priorityScore = 95 - idx;
-    } else if (riskClass === 'MEDIUM_RISK') {
-      action = 'PROMOTION';
-      discountRate = 0.15;
-      priority = 'P3';
-      priorityScore = 60;
-    }
-
-    const rec = Math.round(cap * (1.0 - discountRate));
-    const residual = cap - rec;
-    const recRate = 1.0 - discountRate;
-
-    return {
-      decision_id: `DEC-${item.sku || idx + 1}`,
-      sku: item.sku || item.item_sku || item.name || `SKU-${idx + 1}`,
-      risk: {
-        class: riskClass,
-        score: riskClass === 'HIGH_RISK' ? 0.95 : (riskClass === 'MEDIUM_RISK' ? 0.65 : 0.15)
-      },
-      decision: {
-        action: action,
-        discount_rate: discountRate,
-        action_parameters: { discount: `${Math.round(discountRate * 100)}%` },
-        priority: priority,
-        priority_score: priorityScore,
-        priority_rank: idx + 1,
-        urgency: riskClass === 'HIGH_RISK' ? 'Thực thi ngay' : 'Theo dõi & đẩy đơn',
-        confidence: '95.0%',
-        status: 'RECOMMENDED'
-      },
-      financial_impact: {
-        capital_exposure: cap,
-        expected_recovery_value: rec,
-        recovery_rate: recRate,
-        residual_exposure: residual
-      },
-      explanation: {
-        explanation_id: `EXP-${item.sku || idx + 1}`,
-        reason_codes: [`DSLS_${dsls}_DAYS`]
-      },
-      metadata: { dataset_version: 'v1.0', policy_version: 'v1.0', engine_version: 'v1.0' },
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
+  goToImport(): void {
+    this.router.navigate(['/app/import']);
   }
 
   normalizeDecisionsData(data: DecisionItem[]): DecisionItem[] {
-    return data.map((item, idx) => {
-      const cap = item.financial_impact?.capital_exposure || 50000000;
-      let discountRate = item.decision?.discount_rate;
-
-      // Assign dynamic realistic discount rates if missing or unrealistically low (< 5%)
-      if (!discountRate || discountRate < 0.05) {
-        if (item.risk?.class === 'CRITICAL' || item.decision?.action === 'CLEARANCE') {
-          discountRate = 0.40;
-        } else if (item.risk?.class === 'HIGH_RISK' || item.decision?.action === 'DISCOUNT') {
-          discountRate = 0.32 - (idx % 4) * 0.04; // 32%, 28%, 24%, 20%
-        } else if (item.decision?.action === 'BUNDLE') {
-          discountRate = 0.20;
-        } else if (item.risk?.class === 'MEDIUM_RISK' || item.decision?.action === 'PROMOTION') {
-          discountRate = 0.16 - (idx % 3) * 0.02; // 16%, 14%, 12%
-        } else {
-          discountRate = 0.15;
-        }
-      }
-
-      const rec = Math.round(cap * (1.0 - discountRate));
-      const residual = cap - rec;
-      const recRate = 1.0 - discountRate;
+    return data.map((item) => {
+      const cap = Number(item.financial_impact?.capital_exposure ?? 0);
+      const discountRate = item.decision?.discount_rate ?? null;
+      const rec = Number(item.financial_impact?.expected_recovery_value ?? 0);
+      const residual = Number(item.financial_impact?.residual_exposure ?? Math.max(0, cap - rec));
+      const recRate = Number(item.financial_impact?.recovery_rate ?? (cap > 0 ? rec / cap : 0));
 
       return {
         ...item,
@@ -310,182 +215,6 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
         }
       };
     });
-  }
-
-  generateMockDecisions(): DecisionItem[] {
-    const mockList: DecisionItem[] = [
-      // 1. CRIT-024: 40% discount for severely stale stock
-      {
-        decision_id: 'DEC-024',
-        sku: 'CRIT-024',
-        risk: { class: 'HIGH_RISK', score: 0.984 },
-        decision: {
-          action: 'CLEARANCE',
-          discount_rate: 0.40,
-          action_parameters: { discount: '40%' },
-          priority: 'P1',
-          priority_score: 98,
-          priority_rank: 1,
-          urgency: 'Thực thi ngay trong 24h',
-          confidence: '95.8%',
-          status: 'RECOMMENDED'
-        },
-        financial_impact: {
-          capital_exposure: 93800000,
-          expected_recovery_value: 56280000,
-          recovery_rate: 0.60,
-          residual_exposure: 37520000
-        },
-        explanation: {
-          explanation_id: 'EXP-024',
-          reason_codes: ['DSLS_199_DAYS', 'ZERO_RATE_94.9%', 'HIGH_EXPOSURE']
-        },
-        metadata: { dataset_version: 'v1.0', policy_version: 'v1.0', engine_version: 'v1.0' },
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      // 2. CRIT-019: 32% dynamic discount (Recovers 68% = 60.3M)
-      {
-        decision_id: 'DEC-019',
-        sku: 'CRIT-019',
-        risk: { class: 'HIGH_RISK', score: 0.979 },
-        decision: {
-          action: 'DISCOUNT',
-          discount_rate: 0.32,
-          action_parameters: { discount: '32%' },
-          priority: 'P1',
-          priority_score: 96,
-          priority_rank: 2,
-          urgency: 'Thực thi trong 48h',
-          confidence: '94.2%',
-          status: 'RECOMMENDED'
-        },
-        financial_impact: {
-          capital_exposure: 88700000,
-          expected_recovery_value: 60316000,
-          recovery_rate: 0.68,
-          residual_exposure: 28384000
-        },
-        explanation: {
-          explanation_id: 'EXP-019',
-          reason_codes: ['DSLS_204_DAYS', 'HIGH_CAPITAL_TRAPPED']
-        },
-        metadata: { dataset_version: 'v1.0', policy_version: 'v1.0', engine_version: 'v1.0' },
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      // 3. CRIT-017: 20% combo discount
-      {
-        decision_id: 'DEC-017',
-        sku: 'CRIT-017',
-        risk: { class: 'HIGH_RISK', score: 0.972 },
-        decision: {
-          action: 'BUNDLE',
-          discount_rate: 0.20,
-          action_parameters: { combo: 'Tặng kèm phụ kiện' },
-          priority: 'P2',
-          priority_score: 91,
-          priority_rank: 3,
-          urgency: 'Thực thi trong tuần này',
-          confidence: '92.5%',
-          status: 'REVIEWED'
-        },
-        financial_impact: {
-          capital_exposure: 84800000,
-          expected_recovery_value: 67840000,
-          recovery_rate: 0.80,
-          residual_exposure: 16960000
-        },
-        explanation: {
-          explanation_id: 'EXP-017',
-          reason_codes: ['SLOW_VELOCITY', 'HIGH_MARGIN_SAVED']
-        },
-        metadata: { dataset_version: 'v1.0', policy_version: 'v1.0', engine_version: 'v1.0' },
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-    ];
-
-    // Generate remaining items with dynamic discount rates based on risk score & DSLS
-    for (let i = 1; i <= 22; i++) {
-      const pad = i.toString().padStart(3, '0');
-      const cap = Math.round((75 - i * 2.2) * 1000000);
-      const discountPct = Math.min(48, Math.max(15, 38 - (i % 6) * 4));
-      const rate = discountPct / 100.0;
-      const rec = Math.round(cap * (1.0 - rate));
-      mockList.push({
-        decision_id: `DEC-${pad}`,
-        sku: `CRIT-${pad}`,
-        risk: { class: 'HIGH_RISK', score: 0.95 - i * 0.01 },
-        decision: {
-          action: i % 2 === 0 ? 'DISCOUNT' : 'CLEARANCE',
-          discount_rate: rate,
-          action_parameters: {},
-          priority: i <= 5 ? 'P1' : 'P2',
-          priority_score: 90 - i,
-          priority_rank: 3 + i,
-          urgency: 'Thực thi trong 7 ngày',
-          confidence: '90.0%',
-          status: 'RECOMMENDED'
-        },
-        financial_impact: {
-          capital_exposure: cap,
-          expected_recovery_value: rec,
-          recovery_rate: 1.0 - rate,
-          residual_exposure: cap - rec
-        },
-        explanation: { explanation_id: `EXP-${pad}`, reason_codes: [] },
-        metadata: { dataset_version: 'v1.0', policy_version: 'v1.0', engine_version: 'v1.0' },
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-    }
-
-    // 6 WATCH SKUs (Medium Risk - 12% to 18% light discount / promotion)
-    for (let i = 1; i <= 6; i++) {
-      const pad = i.toString().padStart(3, '0');
-      const cap = Math.round((22 - i * 1.5) * 1000000);
-      const discountPct = 12 + (i % 4) * 2; // 12%, 14%, 16%, 18%
-      const rate = discountPct / 100.0;
-      const rec = Math.round(cap * (1.0 - rate));
-      mockList.push({
-        decision_id: `DEC-WATCH-${pad}`,
-        sku: `WATCH-${pad}`,
-        risk: { class: 'MEDIUM_RISK', score: 0.65 - i * 0.02 },
-        decision: {
-          action: 'PROMOTION',
-          discount_rate: rate,
-          action_parameters: {},
-          priority: 'P3',
-          priority_score: 60 - i,
-          priority_rank: 25 + i,
-          urgency: 'Theo dõi & đẩy đơn',
-          confidence: '85.0%',
-          status: 'RECOMMENDED'
-        },
-        financial_impact: {
-          capital_exposure: cap,
-          expected_recovery_value: rec,
-          recovery_rate: 1.0 - rate,
-          residual_exposure: cap - rec
-        },
-        explanation: { explanation_id: `EXP-WATCH-${pad}`, reason_codes: [] },
-        metadata: { dataset_version: 'v1.0', policy_version: 'v1.0', engine_version: 'v1.0' },
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-    }
-
-    return mockList;
-  }
-
-  updateItemDiscount(item: DecisionItem, discountPct: number): void {
-    const rate = Math.min(0.80, Math.max(0.05, discountPct / 100.0));
-    item.decision.discount_rate = rate;
-    item.financial_impact.expected_recovery_value = Math.round(item.financial_impact.capital_exposure * (1.0 - rate));
-    item.financial_impact.recovery_rate = 1.0 - rate;
-    item.financial_impact.residual_exposure = item.financial_impact.capital_exposure - item.financial_impact.expected_recovery_value;
-    this.calculateKpis();
   }
 
   getDiscountPercent(item: DecisionItem): number {
@@ -580,7 +309,7 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
     const rows = this.filteredDecisions.map(d => [
       d.decision_id,
       d.sku,
-      d.risk?.class === 'HIGH_RISK' ? 'Rủi ro cao' : (d.risk?.class === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'An toàn'),
+      d.risk?.class === 'CRITICAL' ? 'Rủi ro rất cao' : (d.risk?.class === 'HIGH_RISK' ? 'Rủi ro cao' : (d.risk?.class === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'Rủi ro thấp')),
       `"${this.translateAction(d.decision?.action)}"`,
       `${this.getDiscountPercent(d)}%`,
       d.decision?.priority || 'P2',
@@ -633,10 +362,13 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
   }
 
   calculateKpis(): void {
-    this.totalAtRiskSkus = this.decisions.length;
-    this.criticalSkus = this.decisions.filter(d => d.risk.class === 'CRITICAL' || d.risk.class === 'HIGH_RISK').length;
-    this.totalCapitalExposure = this.decisions.reduce((acc, d) => acc + d.financial_impact.capital_exposure, 0);
-    this.totalExpectedRecovery = this.decisions.reduce((acc, d) => acc + d.financial_impact.expected_recovery_value, 0);
+    const atRiskDecisions = this.decisions.filter(d => ['CRITICAL', 'HIGH_RISK'].includes(d.risk.class));
+    this.totalAtRiskSkus = atRiskDecisions.length;
+    this.criticalSkus = atRiskDecisions.length;
+    // Portfolio recovery KPIs describe the actionable high-risk cohort, not
+    // every decision record including low-risk monitoring recommendations.
+    this.totalCapitalExposure = atRiskDecisions.reduce((acc, d) => acc + d.financial_impact.capital_exposure, 0);
+    this.totalExpectedRecovery = atRiskDecisions.reduce((acc, d) => acc + d.financial_impact.expected_recovery_value, 0);
     this.highPriorityCount = this.decisions.filter(d => ['P1', 'P2'].includes(d.decision.priority)).length;
     this.pendingDecisionsCount = this.decisions.filter(d => ['RECOMMENDED', 'GENERATED', 'REVIEWED'].includes(d.decision.status)).length;
   }
@@ -663,128 +395,50 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
 
     if (decision.decision.status === 'RECOMMENDED' || decision.decision.status === 'GENERATED') {
       this.apiService.updateDecisionStatus(decision.decision_id, 'REVIEWED', 'merchant', 'Merchant opened decision detail drawer.').subscribe({
-        next: (updated: DecisionItem) => {
-          decision.decision.status = 'REVIEWED';
+      next: (updated: DecisionItem) => {
+          decision.decision.status = updated.decision.status;
           this.calculateKpis();
         },
-        error: () => {
-          decision.decision.status = 'REVIEWED';
-          this.calculateKpis();
-        }
+        error: () => { /* Opening a drawer must not mutate a failed decision update. */ }
       });
     }
   }
 
   runSimulation(): void {
     if (!this.selectedDecision) return;
-    const sku = this.selectedDecision.sku;
     const discountRate = this.simDiscountRate / 100.0;
     const durationDays = this.simDurationDays;
-    const capExp = this.selectedDecision.financial_impact.capital_exposure;
 
     const payload = {
-      sku: sku,
+      decision_id: this.selectedDecision.decision_id,
       discount_rate: discountRate,
       duration_days: durationDays,
-      discount_rates: [0.10, 0.15, 0.20],
-      capital_exposure: capExp
+      discount_rates: [0.10, 0.15, 0.20]
     };
 
     this.isSimulating = true;
+    this.simulationError = '';
+    this.sim001Result = null;
+    this.sim002Result = null;
     this.apiService.simulateDecision(payload).subscribe({
       next: (res: any) => {
         if (res && res.success) {
           this.sim001Result = res.sim_001;
           this.sim002Result = res.sim_002;
         } else {
-          this.computeLocalSimulation();
+          this.simulationError = 'Chưa đủ dữ liệu đầu vào để chạy mô phỏng cho SKU này.';
         }
         this.isSimulating = false;
       },
-      error: () => {
-        this.computeLocalSimulation();
+      error: (err: any) => {
+        this.simulationError = err?.error?.error || err?.error?.detail || 'Chưa đủ dữ liệu đầu vào để chạy mô phỏng cho SKU này.';
         this.isSimulating = false;
       }
     });
-  }
-
-  computeLocalSimulation(): void {
-    if (!this.selectedDecision) return;
-    const capExp = this.selectedDecision.financial_impact.capital_exposure;
-    const discountRate = this.simDiscountRate / 100.0;
-    const durationDays = this.simDurationDays;
-    const unitCost = 70000;
-    const stockQty = Math.max(1, Math.round(capExp / unitCost));
-    const unitPrice = capExp / stockQty;
-
-    const dailyVel = Math.max(0.5, stockQty / 90.0);
-    const elasticityMap: any = { 0.10: 1.10, 0.15: 1.18, 0.20: 1.25 };
-    const demandMult = elasticityMap[discountRate] || (1.0 + discountRate * 1.5);
-
-    const simPrice = Math.round(unitPrice * (1.0 - discountRate));
-    const expectedUnitsSold = Math.min(stockQty, Math.round(dailyVel * demandMult * durationDays * 100) / 100);
-    const expectedRevenue = Math.round(simPrice * expectedUnitsSold);
-    const estimatedRecovery = Math.min(expectedRevenue, capExp);
-    const discountCost = Math.round((unitPrice - simPrice) * expectedUnitsSold);
-    const remainingExposure = Math.max(0, capExp - estimatedRecovery);
-
-    this.sim001Result = {
-      sku: this.selectedDecision.sku,
-      discount_rate: discountRate,
-      discount_percent: `${this.simDiscountRate}%`,
-      duration_days: durationDays,
-      expected_units_sold: expectedUnitsSold,
-      expected_revenue: expectedRevenue,
-      estimated_recovery: estimatedRecovery,
-      discount_cost: discountCost,
-      remaining_exposure: remainingExposure,
-      simulated_price: simPrice
-    };
-
-    const rates = [0.10, 0.15, 0.20];
-    const expSalesRow: number[] = [];
-    const recRow: number[] = [];
-    const remCapRow: number[] = [];
-    const marginImpactRow: string[] = [];
-
-    rates.forEach(r => {
-      const sPrice = Math.round(unitPrice * (1.0 - r));
-      const dMult = elasticityMap[r] || (1.0 + r * 1.5);
-      const eUnits = Math.min(stockQty, Math.round(dailyVel * dMult * durationDays * 100) / 100);
-      const eRev = Math.round(sPrice * eUnits);
-      const eRec = Math.min(eRev, capExp);
-      const eRem = Math.max(0, capExp - eRec);
-      const marginRate = (sPrice - unitCost) / sPrice;
-      const baseMarginRate = (unitPrice - unitCost) / unitPrice;
-      const impactPct = ((marginRate - baseMarginRate) * 100).toFixed(1);
-
-      expSalesRow.push(eUnits);
-      recRow.push(eRec);
-      remCapRow.push(eRem);
-      marginImpactRow.push(`${impactPct}%`);
-    });
-
-    this.sim002Result = {
-      sku: this.selectedDecision.sku,
-      duration_days: durationDays,
-      comparison_table: {
-        headers: ['10%', '15%', '20%'],
-        discount_rates: rates,
-        metrics: {
-          expected_sales: expSalesRow,
-          recovery: recRow,
-          remaining_capital: remCapRow,
-          margin_impact: marginImpactRow
-        }
-      }
-    };
   }
 
   updateSimDiscount(pct: number): void {
     this.simDiscountRate = pct;
-    if (this.selectedDecision) {
-      this.updateItemDiscount(this.selectedDecision, pct);
-    }
     this.runSimulation();
   }
 
@@ -804,12 +458,11 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
   acceptDecision(decision: DecisionItem): void {
     this.apiService.updateDecisionStatus(decision.decision_id, 'ACCEPTED', 'merchant', 'Merchant accepted recommendation.').subscribe({
       next: (updated: DecisionItem) => {
-        decision.decision.status = 'ACCEPTED';
+        decision.decision.status = updated.decision.status;
         this.calculateKpis();
       },
       error: (err: any) => {
-        decision.decision.status = 'ACCEPTED';
-        this.calculateKpis();
+        this.errorMessage = err?.error?.error || 'Không thể phê duyệt đề xuất. Vui lòng thử lại.';
       }
     });
   }
@@ -829,17 +482,13 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
     this.apiService.updateDecisionStatus(this.selectedDecision.decision_id, 'REJECTED', 'merchant', notes).subscribe({
       next: (updated: DecisionItem) => {
         if (this.selectedDecision) {
-          this.selectedDecision.decision.status = 'REJECTED';
+          this.selectedDecision.decision.status = updated.decision.status;
         }
         this.closeRejectModal();
         this.calculateKpis();
       },
       error: (err: any) => {
-        if (this.selectedDecision) {
-          this.selectedDecision.decision.status = 'REJECTED';
-        }
-        this.closeRejectModal();
-        this.calculateKpis();
+        this.errorMessage = err?.error?.error || 'Không thể từ chối đề xuất. Vui lòng thử lại.';
       }
     });
   }
@@ -847,12 +496,11 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
   markExecuted(decision: DecisionItem): void {
     this.apiService.updateDecisionStatus(decision.decision_id, 'EXECUTED', 'merchant', 'Merchant marked action as executed.').subscribe({
       next: (updated: DecisionItem) => {
-        decision.decision.status = 'EXECUTED';
+        decision.decision.status = updated.decision.status;
         this.calculateKpis();
       },
-      error: () => {
-        decision.decision.status = 'EXECUTED';
-        this.calculateKpis();
+      error: (err: any) => {
+        this.errorMessage = err?.error?.error || 'Không thể cập nhật trạng thái thực hiện. Vui lòng thử lại.';
       }
     });
   }
@@ -914,24 +562,24 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
         return 'Theo dõi';
       case 'DISCOUNT_CLEARANCE':
       case 'CLEARANCE':
-        return 'Xả kho gấp';
+        return 'Giảm tồn kho ưu tiên';
       case 'DISCOUNT':
-        return 'Giảm giá';
+        return 'Điều chỉnh giá';
       case 'BUNDLE_PROMOTION':
       case 'BUNDLE':
-        return 'Bán Combo';
+        return 'Bán theo gói';
       case 'FLASH_SALE':
       case 'PROMOTION':
-        return 'Chạy Ads';
+        return 'Tăng cường xúc tiến';
       case 'HOLD':
-        return 'Giữ giá';
+        return 'Duy trì giá';
       case 'REPOSITION':
         return 'Tái định vị';
       case 'STOP_REPLENISHMENT':
         return 'Ngừng nhập';
       case 'REVIEW':
       case 'NEEDS_REVIEW':
-        return 'Kiểm tra';
+        return 'Rà soát';
       case 'NO_ACTION':
       case 'NOT_APPLICABLE':
         return 'Chưa xử lý';
@@ -944,7 +592,7 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
     switch (status) {
       case 'RECOMMENDED': return 'Chờ duyệt';
       case 'REVIEWED': return 'Đã xem chi tiết';
-      case 'ACCEPTED': return 'Đã duyệt xả';
+      case 'ACCEPTED': return 'Đã phê duyệt';
       case 'REJECTED': return 'Đã từ chối';
       case 'EXECUTED': return 'Đã thực thi';
       default: return status;
@@ -960,52 +608,13 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
         } else if (Array.isArray(res)) {
           this.actionPlans = res;
         } else {
-          this.initDefaultSampleActionPlan();
+          this.actionPlans = [];
         }
       },
       error: () => {
-        this.initDefaultSampleActionPlan();
+        this.actionPlans = [];
       }
     });
-  }
-
-  initDefaultSampleActionPlan(): void {
-    if (this.actionPlans.length === 0) {
-      this.actionPlans = [
-        {
-          plan_id: 'KH-001',
-          campaign_name: 'Chiến dịch xả hàng CRIT-024',
-          sku: 'CRIT-024',
-          duration_days: 14,
-          strategy: 'Giảm giá 15%',
-          owner: 'Merchant',
-          start_date: '2026-09-28',
-          status: 'COMPLETED',
-          notes: 'Kế hoạch xả hàng đã hoàn tất',
-          expected_recovery_value: 12000000,
-          actual_recovery_value: 9500000,
-          expected_units_sold: 100,
-          actual_units_sold: 82,
-          recovery_accuracy_pct: 79.2,
-          units_accuracy_pct: 82.0
-        },
-        {
-          plan_id: 'KH-002',
-          campaign_name: 'Chiến dịch xả hàng CRIT-019',
-          sku: 'CRIT-019',
-          duration_days: 14,
-          strategy: 'Giảm giá 32%',
-          owner: 'Merchant',
-          start_date: '2026-09-28',
-          status: 'DRAFT',
-          notes: 'Đề xuất AI chờ chủ cửa hàng duyệt',
-          expected_recovery_value: 60316000,
-          actual_recovery_value: null,
-          expected_units_sold: 210,
-          actual_units_sold: null
-        }
-      ];
-    }
   }
 
   confirmMerchantPlan(plan: any): void {
@@ -1018,10 +627,10 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
 
   openOutcomeModal(plan: any): void {
     this.selectedPlanForOutcome = plan;
-    this.outcomeExpectedRecovery = plan.expected_recovery_value || 12000000;
-    this.outcomeActualRecovery = plan.actual_recovery_value !== null && plan.actual_recovery_value !== undefined ? plan.actual_recovery_value : 9500000;
-    this.outcomeExpectedUnits = plan.expected_units_sold || 100;
-    this.outcomeActualUnits = plan.actual_units_sold !== null && plan.actual_units_sold !== undefined ? plan.actual_units_sold : 82;
+    this.outcomeExpectedRecovery = plan.expected_recovery_value || 0;
+    this.outcomeActualRecovery = plan.actual_recovery_value ?? 0;
+    this.outcomeExpectedUnits = plan.expected_units_sold || 0;
+    this.outcomeActualUnits = plan.actual_units_sold ?? 0;
     this.calculateOutcomeMetrics();
     this.isOutcomeModalOpen = true;
   }
@@ -1078,17 +687,8 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
         this.closeOutcomeModal();
         this.loadActionPlans();
       },
-      error: () => {
-        if (this.selectedPlanForOutcome) {
-          this.selectedPlanForOutcome.actual_recovery_value = this.outcomeActualRecovery;
-          this.selectedPlanForOutcome.actual_units_sold = this.outcomeActualUnits;
-          this.selectedPlanForOutcome.expected_recovery_value = this.outcomeExpectedRecovery;
-          this.selectedPlanForOutcome.expected_units_sold = this.outcomeExpectedUnits;
-          this.selectedPlanForOutcome.recovery_accuracy_pct = this.outcomeAccuracyRecoveryPct;
-          this.selectedPlanForOutcome.units_accuracy_pct = this.outcomeAccuracyUnitsPct;
-          this.selectedPlanForOutcome.status = 'COMPLETED';
-        }
-        this.closeOutcomeModal();
+      error: (err: any) => {
+        this.errorMessage = err?.error?.error || 'Không thể lưu kết quả thực hiện. Vui lòng thử lại.';
       }
     });
   }
@@ -1096,13 +696,13 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
   openCreatePlanModal(decision?: DecisionItem): void {
     if (decision) {
       this.planSku = decision.sku;
-      this.planCampaign = `Chiến dịch xả hàng ${decision.sku}`;
+      this.planCampaign = `Kế hoạch xử lý tồn kho ${decision.sku}`;
       const discPct = Math.round((decision.decision.discount_rate || 0.15) * 100);
       this.planStrategy = `Giảm giá ${discPct}%`;
       this.planDuration = 14;
     } else {
-      this.planSku = 'CRIT-024';
-      this.planCampaign = 'Chiến dịch xả hàng CRIT-024';
+      this.planSku = '';
+      this.planCampaign = '';
       this.planStrategy = 'Giảm giá 15%';
       this.planDuration = 14;
     }
@@ -1138,20 +738,8 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
         this.closeCreatePlanModal();
         this.loadActionPlans();
       },
-      error: () => {
-        const newPlan = {
-          plan_id: `KH-${Math.floor(100 + Math.random() * 900)}`,
-          campaign_name: this.planCampaign,
-          sku: this.planSku,
-          duration_days: this.planDuration,
-          strategy: this.planStrategy,
-          owner: this.planOwner,
-          start_date: this.planStartDate,
-          status: this.planStatus,
-          notes: this.planNotes
-        };
-        this.actionPlans.unshift(newPlan);
-        this.closeCreatePlanModal();
+      error: (err: any) => {
+        this.errorMessage = err?.error?.error || 'Không thể tạo kế hoạch xử lý. Vui lòng thử lại.';
       }
     });
   }
@@ -1161,8 +749,8 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
       next: (res: any) => {
         plan.status = newStatus;
       },
-      error: () => {
-        plan.status = newStatus;
+      error: (err: any) => {
+        this.errorMessage = err?.error?.error || 'Không thể cập nhật trạng thái kế hoạch. Vui lòng thử lại.';
       }
     });
   }
@@ -1208,7 +796,7 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
     this.activeCopilotSku = sku;
     this.copilotMessages.push({
       sender: 'copilot',
-      text: `Đã cập nhật ngữ cảnh phân tích sang sản phẩm mã ${sku}. Bạn có thể đặt câu hỏi về rủi ro, lý do, vốn đọng, phương án xả hàng hoặc mô phỏng tài chính cho ${sku}.`
+      text: `Đã cập nhật ngữ cảnh phân tích sang sản phẩm mã ${sku}. Bạn có thể đặt câu hỏi về rủi ro, lý do, vốn đọng, phương án xử lý tồn kho hoặc mô phỏng tài chính cho ${sku}.`
     });
   }
 
@@ -1255,23 +843,32 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
 
   computeGroundedCopilotFallback(queryText: string, contextSku: string): void {
     const item = this.decisions.find(d => d.sku === contextSku) || this.decisions[0];
-    const cap = item ? item.financial_impact.capital_exposure : 93800000;
-    const rec = item ? item.financial_impact.expected_recovery_value : 56280000;
-    const discount = item ? Math.round((item.decision.discount_rate || 0.40) * 100) : 40;
-    const actionVi = item ? this.translateAction(item.decision.action) : 'Xả kho gấp';
+    if (!item) {
+      this.copilotMessages.push({
+        sender: 'copilot',
+        text: 'Chưa có dữ liệu quyết định cho SKU này, nên Trợ lý không thể đưa ra câu trả lời có căn cứ.'
+      });
+      return;
+    }
+
+    const cap = item.financial_impact.capital_exposure || 0;
+    const rec = item.financial_impact.expected_recovery_value || 0;
+    const discount = Math.round((item.decision.discount_rate || 0) * 100);
+    const actionVi = this.translateAction(item.decision.action);
+    const riskScore = item.risk.score || 0;
 
     let text = '';
     if (queryText.toLowerCase().includes('tại sao') || queryText.toLowerCase().includes('lý do') || queryText.toLowerCase().includes('giải thích')) {
       text = `Phân tích căn cứ 5 chỉ số chính cho sản phẩm ${contextSku}:\n\n` +
-        `1. Rủi ro (Risk): Mức Rủi ro cao (Score: ${item?.risk.score || 0.984}). Tốc độ bán hàng gần như bằng 0 trong 90 ngày qua.\n` +
-        `2. Giải thích (Explanation): Hàng bị ngâm trong kho trên 180 ngày (DSLS > 180d) gây đọng vốn nặng.\n` +
+        `1. Rủi ro (Risk): ${item.risk.class} (Score: ${riskScore}).\n` +
+        `2. Giải thích (Explanation): ${item.explanation?.reason_codes?.join(', ') || 'Chưa có mã lý do được cung cấp.'}\n` +
         `3. Vốn đọng (Capital): Đang gánh ${this.formatCurrency(cap)} tiền giá vốn.\n` +
         `4. Đề xuất (Decision): Khuyên áp dụng phương án '${actionVi}' giảm giá ${discount}% để thu hồi ngay ${this.formatCurrency(rec)}.\n` +
-        `5. Mô phỏng (Simulation): Dự kiến thu hồi tiền mặt về ví trong vòng 14 ngày.`;
+        `5. Mô phỏng: Các giá trị chỉ dựa trên dữ liệu quyết định hiện có.`;
     } else {
       text = `Thông tin phân tích thực tế 5 chỉ số cho mã ${contextSku}:\n\n` +
         `• Ngữ cảnh mã sản phẩm (Context): ${contextSku}\n` +
-        `• Mức Rủi ro (Risk): Rủi ro cao (${item?.risk.score || 0.984})\n` +
+        `• Mức Rủi ro (Risk): ${item.risk.class} (${riskScore})\n` +
         `• Vốn tồn đọng (Capital): ${this.formatCurrency(cap)}\n` +
         `• Đề xuất xử lý (Decision): ${actionVi} (-${discount}%)\n` +
         `• Vốn dự kiến thu hồi (Recovery): ${this.formatCurrency(rec)}`;

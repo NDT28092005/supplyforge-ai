@@ -187,9 +187,9 @@ export class CopilotWidgetComponent implements OnInit, OnChanges, AfterViewCheck
         '**Với hàng ế nặng (trên 120 ngày):**\nGiảm sâu 30–50% và đẩy qua Flash Sale hoặc combo bundle. Mục tiêu là thu hồi tiền mặt nhanh — dù lỗ một chút vẫn tốt hơn để hàng tiếp tục mất giá.\n\n' +
         '**Với hàng chậm (30–90 ngày):**\nGiảm nhẹ 10–20%, kết hợp chạy ads hoặc tặng voucher. Nhóm này vẫn có cơ hội bán được nếu có đủ lượt tiếp cận.\n\n' +
         '**Với hàng bình thường:**\nGiữ nguyên giá, tối ưu ảnh và mô tả sản phẩm.\n\n' +
-        'Mục **Khuyến nghị xả hàng** có đề xuất cụ thể cho từng mã hàng, bạn vào đó xem sẽ rõ hơn.';
+        'Mục **Đề xuất xử lý** có phương án cụ thể cho từng mã hàng; bạn có thể mở mục này để xem chi tiết.';
       actions = [
-        { label: 'Xem đề xuất cụ thể', query: 'Hướng dẫn tôi xem tab Khuyến nghị xả hàng' },
+        { label: 'Xem đề xuất cụ thể', query: 'Hướng dẫn tôi xem tab Đề xuất xử lý' },
         { label: 'Giảm bao nhiêu là hợp lý?', query: 'Giảm giá bao nhiêu phần trăm cho hàng tồn kho là hợp lý?' }
       ];
 
@@ -230,8 +230,8 @@ export class CopilotWidgetComponent implements OnInit, OnChanges, AfterViewCheck
 
     } else if (q.includes('hướng dẫn') && (q.includes('khuyến nghị') || q.includes('xả hàng') || q.includes('tab khuyến'))) {
       replyText =
-        'Tab **Khuyến nghị xả hàng** là nơi hệ thống đưa ra đề xuất cụ thể cho từng sản phẩm.\n\n' +
-        'Mỗi sản phẩm sẽ có: hành động gợi ý (giảm giá / xả kho / theo dõi), mức giảm phù hợp, và ước tính bạn sẽ thu về bao nhiêu tiền nếu áp dụng.\n\n' +
+        'Tab **Đề xuất xử lý** là nơi hệ thống đưa ra phương án cụ thể cho từng sản phẩm.\n\n' +
+        'Mỗi sản phẩm có: hành động gợi ý (giảm giá / xử lý tồn kho / theo dõi), mức giảm đề xuất và giá trị thu hồi dự kiến.\n\n' +
         'Bạn có thể duyệt từng đề xuất và chọn "Duyệt" hoặc "Bỏ qua" — hoàn toàn do bạn quyết định.';
 
     // --- Discount guidance ---
@@ -243,7 +243,7 @@ export class CopilotWidgetComponent implements OnInit, OnChanges, AfterViewCheck
         '**Trên 120 ngày:** Giảm 35–50% và xả dứt điểm. Giữ thêm chỉ tốn thêm tiền kho mà hàng ngày càng khó bán hơn.\n\n' +
         'Một sai lầm phổ biến là giảm quá ít (5–10%) cho hàng ế lâu — mức đó thường không đủ để khách hàng chú ý. Chấp nhận cắt lỗ sớm sẽ giúp bạn có tiền mặt nhập hàng mới bán chạy hơn.';
       actions = [
-        { label: 'Xem đề xuất cho từng sản phẩm', query: 'Hướng dẫn tôi xem tab Khuyến nghị xả hàng' }
+        { label: 'Xem đề xuất cho từng sản phẩm', query: 'Hướng dẫn tôi xem tab Đề xuất xử lý' }
       ];
 
     // --- Capital recovery ---
@@ -265,7 +265,7 @@ export class CopilotWidgetComponent implements OnInit, OnChanges, AfterViewCheck
         'Tôi có thể hỗ trợ bạn mấy việc chính:\n\n' +
         '• Tìm hiểu sản phẩm nào đang có rủi ro và vì sao\n' +
         '• Xem bao nhiêu vốn đang bị kẹt trong kho\n' +
-        '• Gợi ý cách xả hàng tồn hiệu quả\n' +
+        '• Gợi ý phương án xử lý hàng tồn\n' +
         '• Hướng dẫn sử dụng từng phần trong hệ thống\n\n' +
         'Bạn cứ hỏi cụ thể hoặc chọn một chủ đề bên dưới.';
       actions = [

@@ -38,13 +38,13 @@ export class InfoModalComponent {
         'Hàng tồn kho chết (Dead Stock) là một trong những lý do hàng đầu khiến các cửa hàng E-commerce bị cạn kiệt dòng tiền mặt dù doanh số vẫn có vẻ ổn định trên báo cáo.',
         'Dấu hiệu 1: Số ngày ngưng phát sinh đơn hàng kéo dài trên 45 ngày liên tục dù lượt xem sản phẩm vẫn có. Điều này cho thấy giá bán hoặc mức độ hấp dẫn của sản phẩm đã giảm.',
         'Dấu hiệu 2: Tỷ lệ không bán được (Zero-sales rate) vượt quá 75% số ngày trong kỳ quan sát 90 ngày.',
-        'Dấu hiệu 3: Chi phí gánh vốn (phí kho, chi phí chôn tiền) bắt đầu vượt quá biên lợi nhuận dự kiến ban đầu.',
-        'Lời khuyên: Chấp nhận giảm giá xả tồn từ 20–30% ở giai đoạn sớm sẽ thu hồi tiền mặt nhanh hơn rất nhiều so với việc chờ 6 tháng sau mới giảm 50%.'
+        'Dấu hiệu 3: Chi phí lưu kho và chi phí vốn bắt đầu vượt quá biên lợi nhuận kỳ vọng.',
+        'Khuyến nghị: Đánh giá phương án điều chỉnh giá hoặc phân phối theo gói từ sớm, dựa trên biên lợi nhuận và mục tiêu thu hồi vốn.'
       ],
       keyTakeaways: [
         'Đo lường số ngày ngưng phát sinh đơn hàng (DSLS) hàng tuần.',
-        'Xả tồn sớm từ ngày 45–60 giúp bảo toàn tối đa giá vốn.',
-        'Tiền mặt thu về từ xả hàng nên tái đầu tư ngay vào SKU bán chạy.'
+        'Đánh giá tồn kho từ ngày 45–60 giúp kiểm soát rủi ro mất giá.',
+        'Vốn thu hồi cần được phân bổ theo kế hoạch danh mục đã phê duyệt.'
       ]
     },
     {
@@ -57,7 +57,7 @@ export class InfoModalComponent {
       content: [
         'Chỉ số Vòng quay tồn kho (Inventory Turnover Rate - ITR) đo lường số lần kho hàng được bán hết và thay thế trong một khoảng thời gian (thường là 1 năm hoặc 1 quý).',
         'Công thức tính: ITR = Giá vốn hàng bán (COGS) / Giá trị tồn kho trung bình.',
-        'Một chỉ số ITR cao (từ 6 đến 12 lần/năm) chứng tỏ dòng tiền quay vòng rất nhanh, cửa hàng ít bị chôn vốn và khả năng thích ứng với thị trường cao.',
+        'Chỉ số ITR cao cho thấy tốc độ quay vòng vốn hiệu quả và mức vốn tồn đọng thấp hơn.',
         'Ngược lại, ITR dưới 3 lần/năm cảnh báo bạn đang nhập quá nhiều hàng bán chậm hoặc giữ tồn kho vượt nhu cầu thực tế.'
       ],
       keyTakeaways: [
@@ -98,7 +98,7 @@ export class InfoModalComponent {
         '1. Chi phí vốn (Capital Cost): Lãi suất vay hoặc lợi nhuận kỳ vọng từ số tiền chôn trong kho.',
         '2. Chi phí không gian kho (Storage Space Cost): Phí thuê kho, điện nước, quản lý.',
         '3. Chi phí rủi ro hàng hóa (Inventory Risk Cost): Hàng quá hạn, hư hỏng, lỗi thời mốt.',
-        '4. Chi phí cơ hội (Opportunity Cost): Tiền kẹt ở hàng ế không thể dùng để nhập mặt hàng đang bán chạy số 1.'
+        '4. Chi phí cơ hội (Opportunity Cost): Vốn tồn đọng không thể được phân bổ cho các nhu cầu có hiệu quả sử dụng cao hơn.'
       ],
       keyTakeaways: [
         'Chi phí gánh vốn ước tính khoảng 2% – 3% giá trị hàng tồn mỗi tháng.',

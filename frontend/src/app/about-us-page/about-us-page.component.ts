@@ -57,11 +57,11 @@ export class AboutUsPageComponent implements OnInit {
   private defaultData(): any {
     return {
       title: 'SupplyForge AI',
-      description: 'SupplyForge đặt dữ liệu bán hàng vào đúng mốc thời gian để merchant không phải dò từng file, quên lần nhập trước hoặc quyết định theo cảm giác.',
+      description: 'SupplyForge đặt dữ liệu bán hàng trong đúng bối cảnh thời gian để đội ngũ có thể đối chiếu các phiên nạp và đưa ra quyết định dựa trên bằng chứng vận hành.',
       core_values: [
-        { title: 'Minh bạch trước khi tự động hóa', desc: 'Luôn hiển thị nguồn dữ liệu, mốc thời gian và cửa sổ quan sát trước khi tạo tín hiệu.' },
-        { title: 'Ưu tiên theo vốn và sức bán', desc: 'Đặt SKU chậm cạnh giá trị tồn để đội ngũ biết việc nào đáng được xem trước.' },
-        { title: 'AI hỗ trợ, merchant quyết định', desc: 'Khuyến nghị giúp rút ngắn thời gian phân tích, nhưng quyền duyệt vẫn ở người vận hành.' }
+        { title: 'Minh bạch trước khi tự động hóa', desc: 'Hiển thị nguồn dữ liệu, mốc thời gian và cửa sổ quan sát trước khi tạo tín hiệu.' },
+        { title: 'Ưu tiên theo vốn và tốc độ bán', desc: 'Đặt SKU chậm luân chuyển cạnh giá trị tồn để xác định nội dung cần rà soát trước.' },
+        { title: 'Hệ thống hỗ trợ, đội ngũ phê duyệt', desc: 'Khuyến nghị rút ngắn thời gian phân tích, trong khi quyền phê duyệt thuộc về người vận hành.' }
       ],
       stats: []
     };

@@ -1,21 +1,20 @@
 <main sfPageMotion class="public-page blog-page">
-  <div *ngIf="loading" class="public-loading"><span></span>Đang mở góc kiến thức</div>
+  <div *ngIf="loading" class="public-loading"><span></span>Đang tải thư viện chuyên môn</div>
 
   <ng-container *ngIf="!loading && !selectedArticle">
     <section data-motion="header" class="blog-hero" aria-labelledby="blog-heading">
       <div>
-        <p class="eyebrow"><span class="eyebrow-dot"></span> Góc kiến thức SupplyForge</p>
-        <h1 id="blog-heading">Những điều cần biết trước khi ra quyết định về kho.</h1>
+        <p class="eyebrow"><span class="eyebrow-dot"></span> Thư viện chuyên môn</p>
+        <h1 id="blog-heading">Khung tham chiếu cho các quyết định về danh mục và tồn kho.</h1>
       </div>
-      <p>Giải thích ngắn gọn về hàng bán chậm, dữ liệu theo thời gian và cách biến một file CSV thành một cuộc trao đổi dễ hiểu trong đội ngũ.</p>
+      <p>Những nội dung nền tảng về hàng chậm luân chuyển, dữ liệu theo thời gian và cách tổ chức thảo luận dựa trên bằng chứng vận hành.</p>
     </section>
 
     <section data-motion="priority" class="article-grid" aria-label="Danh sách bài viết">
       <article *ngFor="let post of posts; let index = index" (click)="readArticle(post.slug)"
         [class.featured]="index === 0" class="article-card">
-        <img class="article-card__art" [src]="articleArt[index % articleArt.length]" alt="" aria-hidden="true" />
         <div class="article-card__top">
-          <span>{{ post.category || 'Inventory basics' }}</span>
+          <span>{{ post.category || 'Quản trị tồn kho' }}</span>
           <small>{{ post.read_time || '5 phút đọc' }}</small>
         </div>
         <div class="article-card__body">
@@ -28,11 +27,11 @@
     </section>
   </ng-container>
 
-  <article *ngIf="!loading && selectedArticle" data-motion="header" class="article-detail">
-    <button type="button" class="back-link" (click)="backToList()">← Quay lại góc kiến thức</button>
+  <article *ngIf="!loading && selectedArticle" sfPageMotion data-motion="header" class="article-detail">
+    <button type="button" class="back-link" (click)="backToList()">← Quay lại thư viện chuyên môn</button>
     <div class="article-detail__meta">
-      <span>{{ selectedArticle.category || 'Inventory basics' }}</span>
-      <small>{{ selectedArticle.date }} · {{ selectedArticle.read_time || '5 phút đọc' }}</small>
+      <span>{{ selectedArticle.category || 'Quản trị tồn kho' }}</span>
+      <small><ng-container *ngIf="selectedArticle.date">{{ selectedArticle.date }} · </ng-container>{{ selectedArticle.read_time || '5 phút đọc' }}</small>
     </div>
     <h1>{{ selectedArticle.title }}</h1>
     <div class="article-detail__layout">
@@ -48,7 +47,7 @@
   </article>
 
   <section *ngIf="!loading && !selectedArticle" class="blog-cta">
-    <div><p class="section-caption">Muốn nhìn dữ liệu của chính bạn?</p><h2>Đọc xong, thử với một file CSV thật.</h2></div>
-    <a routerLink="/auth" [queryParams]="{ mode: 'register' }">Tạo tài khoản <span aria-hidden="true">↗</span></a>
+    <div><p class="section-caption">Bắt đầu từ dữ liệu vận hành</p><h2>Đánh giá danh mục của bạn trên một tệp CSV thực tế.</h2></div>
+    <a routerLink="/auth" [queryParams]="{ mode: 'register' }">Tạo không gian làm việc <span aria-hidden="true">↗</span></a>
   </section>
 </main>

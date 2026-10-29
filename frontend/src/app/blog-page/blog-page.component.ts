@@ -2,21 +2,16 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { ApiService } from '../api.service';
+import { PageMotionDirective } from '../core/motion/page-motion.directive';
 
 @Component({
   selector: 'app-blog-page',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, PageMotionDirective],
   templateUrl: './blog-page.component.html',
   styleUrls: ['./blog-page.component.css']
 })
 export class BlogPageComponent implements OnInit {
-  readonly articleArt = [
-    'assets/public/import-windows.svg',
-    'assets/public/signal-shelf.svg',
-    'assets/public/action-board.svg'
-  ];
-
   posts: any[] = [];
   selectedArticle: any = null;
   loading = true;
@@ -68,9 +63,9 @@ export class BlogPageComponent implements OnInit {
         content: [
           'Khi nhìn vào hàng bán chậm, câu hỏi quan trọng không chỉ là “đã bán bao nhiêu?”. Cần biết con số đó được đo trong khoảng thời gian nào.',
           'Cửa sổ 7 ngày giúp nhận ra thay đổi mới, 30 ngày cho một bối cảnh cân bằng hơn và 90 ngày giúp tránh kết luận vội từ một tuần đặc biệt.',
-          'Vì vậy, một import mới không nên ghi đè lịch sử. Nó nên tạo ra một phiên bản dữ liệu mới, ghi rõ data-as-of và tính lại các cửa sổ để merchant so sánh.'
+          'Vì vậy, một phiên nạp mới không nên ghi đè lịch sử. Phiên này cần được lưu cùng mốc dữ liệu và các cửa sổ quan sát để đội ngũ có thể đối chiếu.'
         ],
-        key_takeaways: ['Luôn kiểm tra mốc dữ liệu cuối cùng.', 'Đừng dùng một cửa sổ duy nhất để quyết định xả hàng.', 'Giữ lịch sử phiên bản để hiểu xu hướng.']
+        key_takeaways: ['Luôn kiểm tra mốc dữ liệu cuối cùng.', 'Không dùng một cửa sổ duy nhất để đưa ra quyết định.', 'Lưu lịch sử phiên nạp để theo dõi xu hướng.']
       },
       {
         slug: 'hang-ban-cham-khong-dong-nghia-voi-hang-xau',
@@ -85,16 +80,16 @@ export class BlogPageComponent implements OnInit {
         key_takeaways: ['Tín hiệu cần bối cảnh.', 'AI nên giúp đặt câu hỏi đúng hơn là thay bạn kết luận.']
       },
       {
-        slug: 'import-csv-an-toan-cho-merchant',
-        category: 'Workflow',
+        slug: 'chuan-bi-tep-csv-cho-phan-tich',
+        category: 'Quy trình dữ liệu',
         read_time: '3 phút đọc',
-        title: 'Checklist 3 phút trước khi import file CSV',
-        summary: 'Tên cột, ngày bán, mã SKU và bản ghi trùng là bốn điểm nên nhìn qua trước khi chạy phân tích.',
+        title: 'Danh mục kiểm tra trước khi nạp tệp CSV',
+        summary: 'Tên cột, ngày bán, mã SKU và bản ghi trùng là bốn điểm cần được xác thực trước khi phân tích.',
         content: [
-          'Bạn không cần biến file bán hàng thành một dự án dữ liệu. Chỉ cần kiểm tra đầu vào đủ rõ để hệ thống biết mỗi dòng đang nói về điều gì.',
-          'SupplyForge xử lý phần kiểm tra cấu trúc trước, sau đó mới đưa bạn tới bước mapping và phân tích.'
+          'Tệp bán hàng cần có cấu trúc đủ rõ để mỗi bản ghi được nhận diện chính xác trong quá trình phân tích.',
+          'SupplyForge kiểm tra cấu trúc dữ liệu trước khi chuyển sang bước ánh xạ trường và đánh giá rủi ro.'
         ],
-        key_takeaways: ['Có header rõ ràng.', 'Có cột ngày bán và mã SKU.', 'Không import lại cùng một file nếu chưa cần.']
+        key_takeaways: ['Có tiêu đề cột rõ ràng.', 'Có trường ngày bán và mã SKU.', 'Tránh nạp lại cùng một tệp khi chưa cần thiết.']
       }
     ];
   }

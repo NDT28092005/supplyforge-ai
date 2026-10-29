@@ -410,15 +410,17 @@
           <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
           Dữ liệu hoàn toàn sẵn sàng cho phân tích kho
         </span>
-        <button (click)="onProceed()"
-          class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-7 py-3 rounded-xl transition-all active:scale-95 flex items-center gap-2 cursor-pointer shadow-xs">
-          <span>Chuyển sang trang Tổng quan kho hàng</span>
+        <button (click)="onProceed()" [disabled]="isProceeding"
+          class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-7 py-3 rounded-xl transition-all active:scale-95 flex items-center gap-2 cursor-pointer shadow-xs disabled:cursor-not-allowed disabled:opacity-60">
+          <span *ngIf="!isProceeding">Chuyển sang trang Tổng quan kho hàng</span>
+          <span *ngIf="isProceeding">Đang xây dựng đánh giá rủi ro...</span>
           <svg class="w-4 h-4 stroke-current" fill="none" viewBox="0 0 24 24">
             <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2"></line>
             <polyline points="12 5 19 12 12 19" stroke="currentColor" stroke-width="2"></polyline>
           </svg>
         </button>
       </footer>
+      <p *ngIf="analysisError" role="alert" class="mt-3 text-xs font-medium text-rose-700">{{ analysisError }}</p>
     </div>
   </section>
 </main>

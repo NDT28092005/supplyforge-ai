@@ -38,12 +38,14 @@ class DecisionPersistenceService:
     def persist_decision(
         recommendation: Dict[str, Any],
         explanation: Optional[Dict[str, Any]] = None,
-        dataset_version: str = "v1.0"
+        dataset_version: str = "v1.0",
+        workspace_id: Optional[int] = None,
     ) -> DecisionRecord:
         """
         Idempotently persists M6-08 recommendation and M6-09 explanation into Django ORM models.
         """
-        rec_id = recommendation.get("recommendation_id") or f"DEC-{recommendation['sku']}"
+        base_rec_id = recommendation.get("recommendation_id") or f"DEC-{recommendation['sku']}"
+        rec_id = f"WS{workspace_id}-{base_rec_id}" if workspace_id else base_rec_id
         sku = recommendation.get("sku", "UNKNOWN")
 
         # Check idempotency: If decision_id already exists, return existing record
@@ -58,6 +60,7 @@ class DecisionPersistenceService:
 
         decision = DecisionRecord.objects.create(
             decision_id=rec_id,
+            workspace_id=workspace_id or 1,
             sku=sku,
             dataset_version=dataset_version,
             risk_class=recommendation.get("risk_context", {}).get("risk_class") or "CRITICAL",
@@ -91,7 +94,8 @@ class DecisionPersistenceService:
 
         # 2. Persist Explanation if provided
         if explanation:
-            exp_id = explanation.get("explanation_id") or f"EXP-{sku}"
+            base_exp_id = explanation.get("explanation_id") or f"EXP-{sku}"
+            exp_id = f"WS{workspace_id}-{base_exp_id}" if workspace_id else base_exp_id
             decision.explanation_id = exp_id
             decision.save(update_fields=['explanation_id'])
 
@@ -141,7 +145,8 @@ class DecisionPersistenceService:
         action_type: Optional[str] = None,
         status: Optional[str] = None,
         sku: Optional[str] = None,
-        dataset_version: Optional[str] = None
+        dataset_version: Optional[str] = None,
+        workspace_id: Optional[int] = None,
     ) -> Any:
         """Queries DecisionRecords with optional filtering criteria."""
         queryset = DecisionRecord.objects.all()
@@ -158,6 +163,8 @@ class DecisionPersistenceService:
             queryset = queryset.filter(sku=sku)
         if dataset_version:
             queryset = queryset.filter(dataset_version=dataset_version)
+        if workspace_id is not None:
+            queryset = queryset.filter(workspace_id=workspace_id)
 
         return queryset
 

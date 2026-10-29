@@ -18,18 +18,34 @@ class AutoDecisionGeneratorService:
     """Service to automatically construct and persist M6 Decision Recommendations."""
 
     @staticmethod
-    def generate_decisions_from_assessments(user_id: str = "user_default_001") -> List[Any]:
+    def generate_decisions_from_assessments(
+        user_id: str = "user_default_001",
+        workspace_id: int | None = None,
+    ) -> List[Any]:
         """
         Iterates over all SlowMovingRiskAssessment records and creates corresponding
         DecisionRecords in M6 DB table if not already existing.
         """
         assessments = SlowMovingRiskAssessment.objects.all()
+        if workspace_id is not None:
+            assessments = assessments.filter(session__workspace_id=workspace_id)
         if not assessments.exists():
-            DecisionRecord.objects.all().delete()
+            cleanup = DecisionRecord.objects.all()
+            if workspace_id is not None:
+                cleanup = cleanup.filter(workspace_id=workspace_id)
+            cleanup.delete()
             return []
 
-        DecisionRecord.objects.all().delete()
-        products = {p.item_sku or p.third_party_id or f"SKU_{p.id}": p for p in Product.objects.all()}
+        cleanup = DecisionRecord.objects.all()
+        if workspace_id is not None:
+            cleanup = cleanup.filter(workspace_id=workspace_id)
+        cleanup.delete()
+
+        products_qs = Product.objects.all()
+        if workspace_id is not None:
+            workspace_owner_id = assessments.select_related('session__workspace').first().session.workspace.owner_id
+            products_qs = products_qs.filter(user_id=str(workspace_owner_id or workspace_id))
+        products = {p.item_sku or p.third_party_id or f"SKU_{p.id}": p for p in products_qs}
 
         created_decisions = []
         action_map = {
@@ -41,9 +57,10 @@ class AutoDecisionGeneratorService:
 
         for idx, r in enumerate(assessments):
             p = products.get(r.sku)
-            cost = float(p.cost or p.price or 50000) if p else 50000.0
-            stock = int(p.stock or 100) if p else 100
-            total_val = cost * stock
+            evidence = r.evidence if isinstance(r.evidence, dict) else {}
+            cost = float((p.cost if p and p.cost is not None else evidence.get('unit_cost')) or 0)
+            stock = int((p.stock if p and p.stock is not None else evidence.get('stock_quantity')) or 0)
+            total_val = float(evidence.get('capital_exposure_vnd') or (cost * stock))
 
             act_type, discount, tier, urgency, confidence = action_map.get(
                 r.risk_class, ('DISCOUNT_CLEARANCE', 0.25, 'P2', 'HIGH', 'MEDIUM')
@@ -110,7 +127,8 @@ class AutoDecisionGeneratorService:
                 dec = DecisionPersistenceService.persist_decision(
                     recommendation=recommendation_payload,
                     explanation=explanation_payload,
-                    dataset_version="v1.3"
+                    dataset_version=r.dataset_version or "v1.0",
+                    workspace_id=workspace_id,
                 )
                 created_decisions.append(dec)
             except Exception as e:

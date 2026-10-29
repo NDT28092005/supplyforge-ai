@@ -18,12 +18,20 @@
       <!-- Ingestion Pipeline Stepper Bar (Active during Data Ingestion & Profiling) -->
       <div *ngIf="isImportRoute" class="max-w-4xl mx-auto px-4 pt-6 pb-2 animate-fade-in">
         <div class="bg-white border border-slate-200/90 rounded-2xl shadow-xs p-3.5 sm:p-4">
-          <div class="flex items-center justify-between font-sans text-xs">
+          <div class="mb-3 flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <p class="text-xs font-semibold text-slate-600">Quy trình nạp và đánh giá dữ liệu</p>
+            <button *ngIf="canReturnToDashboard" type="button" (click)="returnToDashboard()"
+              class="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50">
+              Quay lại bảng điều hành
+            </button>
+          </div>
+          <div class="import-stepper flex items-center justify-between font-sans text-xs">
             <!-- Step 1: Upload -->
-            <div class="flex items-center gap-2" [ngClass]="getStepClass('csv-upload')">
+            <div class="import-step flex items-center gap-2" [ngClass]="getStepClass('csv-upload')"
+              aria-label="Bước 1: Tải tệp dữ liệu">
               <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] transition-all"
                 [ngClass]="getStepNumClass('csv-upload')">1</span>
-              <span class="font-bold tracking-tight">Tải dữ liệu lên</span>
+              <span class="step-label font-bold tracking-tight">Tải tệp dữ liệu</span>
             </div>
 
             <div class="h-0.5 flex-1 mx-2 sm:mx-4 rounded-full transition-all"
@@ -31,10 +39,11 @@
             </div>
 
             <!-- Step 2: Processing -->
-            <div class="flex items-center gap-2" [ngClass]="getStepClass('processing')">
+            <div class="import-step flex items-center gap-2" [ngClass]="getStepClass('processing')"
+              aria-label="Bước 2: Kiểm tra chất lượng">
               <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] transition-all"
                 [ngClass]="getStepNumClass('processing')">2</span>
-              <span class="font-bold tracking-tight">Kiểm tra dữ liệu</span>
+              <span class="step-label font-bold tracking-tight">Kiểm tra chất lượng</span>
             </div>
 
             <div class="h-0.5 flex-1 mx-2 sm:mx-4 rounded-full transition-all"
@@ -42,10 +51,11 @@
             </div>
 
             <!-- Step 3: Mapping -->
-            <div class="flex items-center gap-2" [ngClass]="getStepClass('mapping')">
+            <div class="import-step flex items-center gap-2" [ngClass]="getStepClass('mapping')"
+              aria-label="Bước 3: Ánh xạ trường dữ liệu">
               <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] transition-all"
                 [ngClass]="getStepNumClass('mapping')">3</span>
-              <span class="font-bold tracking-tight">Xác nhận cột</span>
+              <span class="step-label font-bold tracking-tight">Ánh xạ trường dữ liệu</span>
             </div>
 
             <div class="h-0.5 flex-1 mx-2 sm:mx-4 rounded-full transition-all"
@@ -53,10 +63,11 @@
             </div>
 
             <!-- Step 4: Dataset Profile -->
-            <div class="flex items-center gap-2" [ngClass]="getStepClass('dataset-profile')">
+            <div class="import-step flex items-center gap-2" [ngClass]="getStepClass('dataset-profile')"
+              aria-label="Bước 4: Đánh giá mức sẵn sàng">
               <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] transition-all"
                 [ngClass]="getStepNumClass('dataset-profile')">4</span>
-              <span class="font-bold tracking-tight">Tổng quan file nạp</span>
+              <span class="step-label font-bold tracking-tight">Đánh giá mức sẵn sàng</span>
             </div>
           </div>
         </div>
@@ -176,6 +187,13 @@
           </p>
         </div>
       </div>
+
+      <p *ngIf="isClearingData" class="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-800">
+        Đang xóa dữ liệu và làm mới các báo cáo. Vui lòng không đóng cửa sổ này.
+      </p>
+      <p *ngIf="clearDataError" role="alert" class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800">
+        {{ clearDataError }}
+      </p>
 
       <!-- Actions -->
       <div class="flex items-center justify-end gap-3 pt-2">

@@ -1,60 +1,69 @@
 <main sfPageMotion class="public-page public-home" #pageRoot>
   <section data-motion="header" class="home-hero" aria-labelledby="main-heading">
     <div class="hero-copy">
-      <p class="eyebrow"><span class="eyebrow-dot"></span> Inventory intelligence cho merchant</p>
-      <span class="hero-overline">Từ file bán hàng đến quyết định có căn cứ</span>
-      <h1 id="main-heading">Nhập file hôm nay. Tuần sau nhập tiếp. Vẫn biết hàng nào đang mắc vốn.</h1>
+      <p class="eyebrow"><span class="eyebrow-dot"></span> Nền tảng quyết định tồn kho</p>
+      <span class="hero-overline">Từ dữ liệu bán hàng đến danh sách việc cần làm</span>
+      <h1 id="main-heading">Biến dữ liệu bán hàng thành quyết định tồn kho rõ ràng.</h1>
       <p class="hero-summary">
-        Mỗi lần nhập là một mốc dữ liệu. SupplyForge đọc lại sức bán và tồn theo cửa sổ 7, 30, 90 ngày để bạn phân
-        biệt biến động ngắn hạn với vấn đề cần xử lý.
+        Nạp dữ liệu bán hàng, kiểm tra chất lượng và đánh giá các SKU cần ưu tiên trong cùng một không gian làm việc.
+        Mọi khuyến nghị đều đi cùng mốc dữ liệu, cửa sổ quan sát và lý do có thể kiểm tra.
       </p>
 
       <div class="hero-actions">
         <button type="button" class="button button-primary" (click)="scrollToJourney()">
-          Xem cách hoạt động
-          <span aria-hidden="true">↘</span>
+          Xem quy trình
+          <span aria-hidden="true">↓</span>
         </button>
         <button type="button" class="button button-quiet" (click)="onContactSupport()">Khám phá tính năng</button>
       </div>
 
       <div class="hero-reassurance" aria-label="Cam kết của hệ thống">
-        <span><i class="reassurance-mark">✓</i> Không cần kết nối API ngay</span>
-        <span><i class="reassurance-mark">✓</i> Bắt đầu bằng CSV quen thuộc</span>
+        <span><i class="reassurance-mark">✓</i> Không cần thay đổi hệ thống hiện có</span>
+        <span><i class="reassurance-mark">✓</i> Bắt đầu từ tệp CSV hiện có</span>
       </div>
     </div>
 
     <div class="hero-visual" aria-label="Mô phỏng hành trình dữ liệu tồn kho">
-      <div class="visual-noise visual-noise--one"></div>
-      <div class="visual-noise visual-noise--two"></div>
-      <img data-hero-illustration class="hero-illustration" src="assets/public/import-windows.svg"
-        alt="Minh họa dữ liệu bán hàng được đặt vào các cửa sổ thời gian" />
       <div class="visual-header">
         <div>
-          <span class="visual-label">WORKSPACE / INVENTORY HISTORY</span>
-          <strong>Đừng mất bối cảnh chỉ vì có file mới.</strong>
+          <span class="visual-label">KHÔNG GIAN LÀM VIỆC / DỮ LIỆU VẬN HÀNH</span>
+          <strong>Bối cảnh dữ liệu được duy trì xuyên suốt các phiên nạp.</strong>
         </div>
-        <span class="live-chip"><i></i> DATA AS OF: HÔM NAY</span>
+        <span class="live-chip"><i></i> TRẠNG THÁI: SẴN SÀNG</span>
+      </div>
+
+      <div class="workspace-summary" aria-label="Tóm tắt trạng thái dữ liệu">
+        <div>
+          <span>TRẠNG THÁI</span>
+          <strong>Sẵn sàng đánh giá</strong>
+          <small>Xác thực cấu trúc trước khi phân tích.</small>
+        </div>
+        <div>
+          <span>CỬA SỔ QUAN SÁT</span>
+          <strong>7 / 30 / 90 ngày</strong>
+          <small>Phân biệt biến động và xu hướng.</small>
+        </div>
       </div>
 
       <div data-import-window class="import-window" aria-label="Mốc dữ liệu và cửa sổ phân tích">
         <div class="window-event">
-          <span class="window-event__index">LẦN NẠP 01</span>
-          <strong>Hôm nay</strong>
-          <small>Tạo đường cơ sở</small>
+          <span class="window-event__index">PHIÊN NẠP 01</span>
+          <strong>Dữ liệu cơ sở</strong>
+          <small>Thiết lập phạm vi đánh giá</small>
         </div>
         <span class="window-connector" aria-hidden="true"></span>
         <div class="window-event is-current">
-          <span class="window-event__index">LẦN NẠP 02</span>
-          <strong>Một tuần sau</strong>
-          <small>Tính lại 7 / 30 / 90 ngày</small>
+          <span class="window-event__index">PHIÊN CẬP NHẬT</span>
+          <strong>Dữ liệu bổ sung</strong>
+          <small>Cập nhật phân tích theo dữ liệu mới</small>
         </div>
       </div>
 
       <div class="intake-card">
         <div class="intake-card__head">
           <div>
-            <span class="visual-label">BƯỚC ĐẦU TIÊN</span>
-            <h2>Đưa file bán hàng vào đây</h2>
+            <span class="visual-label">NẠP DỮ LIỆU</span>
+            <h2>Nạp tệp dữ liệu bán hàng</h2>
           </div>
           <span class="file-type">.CSV</span>
         </div>
@@ -64,8 +73,8 @@
           <input type="file" accept=".csv" (change)="fileSelected($event)" />
           <span class="file-gate__icon" aria-hidden="true">↑</span>
           <span>
-            <strong>Chọn file CSV</strong>
-            <small>Kéo thả hoặc chọn từ máy</small>
+            <strong>Chọn tệp CSV</strong>
+            <small>Kéo thả hoặc chọn từ thiết bị</small>
           </span>
           <span class="file-gate__arrow" aria-hidden="true">↗</span>
         </label>
@@ -79,15 +88,15 @@
             </div>
           </div>
           <div class="file-actions">
-            <button type="button" class="text-button" (click)="removeFile()">Đổi file</button>
+            <button type="button" class="text-button" (click)="removeFile()">Thay tệp</button>
             <button type="button" class="button button-primary button-small" [disabled]="isUploading" (click)="onUpload()">
-              {{ isUploading ? 'Đang kiểm tra...' : 'Bắt đầu đọc file' }}
+              {{ isUploading ? 'Đang kiểm tra...' : 'Bắt đầu kiểm tra' }}
             </button>
           </div>
         </div>
 
         <div class="supported-sources">
-          <span>Phù hợp với file từ</span>
+          <span>Tương thích với dữ liệu từ</span>
           <b>Shopee</b><b>Lazada</b><b>TikTok Shop</b><b>Haravan</b>
         </div>
       </div>
@@ -95,36 +104,34 @@
   </section>
 
   <section class="signal-strip" aria-label="Giá trị chính">
-    <div><span class="signal-index">01</span><strong>Thấy đúng việc cần làm</strong><small>Không cần lục từng dòng SKU.</small></div>
-    <div><span class="signal-index">02</span><strong>Biết vốn đang ở đâu</strong><small>Nối tốc độ bán với giá trị tồn.</small></div>
-    <div><span class="signal-index">03</span><strong>Giải thích được quyết định</strong><small>AI hỗ trợ, merchant luôn là người duyệt.</small></div>
+    <div><span class="signal-index">01</span><strong>Xác định ưu tiên cần xử lý</strong><small>Rà soát danh mục theo mức độ rủi ro.</small></div>
+    <div><span class="signal-index">02</span><strong>Đánh giá mức độ sử dụng vốn</strong><small>Liên kết tốc độ bán với giá trị tồn kho.</small></div>
+    <div><span class="signal-index">03</span><strong>Giải trình được khuyến nghị</strong><small>Đội ngũ vận hành là bên phê duyệt cuối cùng.</small></div>
   </section>
 
   <section id="world-journey" #journeyRoot class="world-journey" aria-labelledby="journey-heading">
     <div class="journey-intro">
-      <p class="eyebrow"><span class="eyebrow-dot"></span> Một hành trình dữ liệu</p>
-      <h2 id="journey-heading">Lần nạp sau không nên bắt đội ngũ bắt đầu lại từ đầu.</h2>
-      <p>Cuộn để xem một file đi từ kiểm tra đầu vào, qua bối cảnh thời gian, đến danh sách việc cần xem trước. Mỗi chặng trả lời đúng một câu hỏi vận hành.</p>
+      <p class="eyebrow"><span class="eyebrow-dot"></span> Quy trình phân tích</p>
+      <h2 id="journey-heading">Một quy trình thống nhất từ dữ liệu đầu vào đến quyết định vận hành.</h2>
+      <p>Mỗi tệp bán hàng được xác thực, phân tích theo các cửa sổ thời gian và chuyển thành danh sách ưu tiên có thể rà soát. Mọi đề xuất đều đi kèm dữ liệu nguồn và cơ sở đánh giá trước khi triển khai.</p>
     </div>
 
     <div class="journey-grid">
       <div class="journey-sticky">
         <div class="scene-frame">
           <div class="scene-topline">
-            <span>SUPPLYFORGE / FLOW</span>
-            <span>0{{ activeWorldScene + 1 }} / 03</span>
+            <span>SUPPLYFORGE / QUY TRÌNH</span>
+            <span data-journey-stage>01 / 03</span>
           </div>
           <div class="scene-viewport">
-            <img class="scene-illustration" src="assets/public/action-board.svg" alt="" aria-hidden="true" />
-            <div class="scene-glow"></div>
             <svg class="scene-route" viewBox="0 0 560 420" fill="none" role="img"
               aria-label="Đường đi từ dữ liệu đến hành động">
               <path class="route-base" d="M82 300 C170 214 184 125 280 156 S386 284 478 109"></path>
-              <path #routeProgress class="route-progress" data-world-progress d="M82 300 C170 214 184 125 280 156 S386 284 478 109"></path>
+              <path data-journey-route class="route-progress" d="M82 300 C170 214 184 125 280 156 S386 284 478 109"></path>
               <path class="route-dash" d="M82 300 C170 214 184 125 280 156 S386 284 478 109"></path>
-              <circle class="world-node world-node--one" data-world-node cx="82" cy="300" r="17"></circle>
-              <circle class="world-node world-node--two" data-world-node cx="280" cy="156" r="17"></circle>
-              <circle class="world-node world-node--three" data-world-node cx="478" cy="109" r="17"></circle>
+              <circle data-journey-node class="world-node world-node--one" cx="82" cy="300" r="17"></circle>
+              <circle data-journey-node class="world-node world-node--two" cx="280" cy="156" r="17"></circle>
+              <circle data-journey-node class="world-node world-node--three" cx="478" cy="109" r="17"></circle>
               <circle class="node-core" cx="82" cy="300" r="4"></circle>
               <circle class="node-core" cx="280" cy="156" r="4"></circle>
               <circle class="node-core" cx="478" cy="109" r="4"></circle>
@@ -132,19 +139,16 @@
               <g class="route-label route-label--two"><rect x="221" y="102" width="118" height="31" rx="15.5"></rect><text x="280" y="122">TÍN HIỆU</text></g>
               <g class="route-label route-label--three"><rect x="422" y="55" width="112" height="31" rx="15.5"></rect><text x="478" y="75">HÀNH ĐỘNG</text></g>
             </svg>
-            <div class="scene-pulse scene-pulse--one"></div>
-            <div class="scene-pulse scene-pulse--two"></div>
           </div>
           <div class="scene-footer">
-            <span class="scene-status"><i></i> Mốc dữ liệu là một phần của kết luận</span>
+            <span class="scene-status"><i></i> Mốc dữ liệu được lưu cùng từng kết luận</span>
             <span class="scene-date">WINDOW: 7 / 30 / 90 NGÀY</span>
           </div>
         </div>
       </div>
 
       <div class="journey-copy">
-        <article *ngFor="let scene of journeyScenes; let index = index" data-world-step class="journey-step"
-          [class.is-active]="activeWorldScene === index">
+        <article *ngFor="let scene of journeyScenes; let index = index" data-journey-step class="journey-step">
           <div class="journey-step__index">0{{ index + 1 }}</div>
           <div>
             <p class="step-eyebrow">{{ scene.eyebrow }}</p>
@@ -160,38 +164,38 @@
   <section class="trust-band" aria-labelledby="trust-heading">
     <div class="trust-copy">
       <p class="eyebrow"><span class="eyebrow-dot"></span> Được thiết kế cho quyết định thật</p>
-      <h2 id="trust-heading">Không còn một con số rủi ro mà không biết nó đến từ đâu.</h2>
-      <p>Mỗi ưu tiên cần đi cùng dữ liệu nguồn, thời điểm dữ liệu và khoảng thời gian đã được nhìn. Người quản lý vẫn là người quyết định.</p>
+      <h2 id="trust-heading">Mọi tín hiệu rủi ro đều có thể truy vết về dữ liệu nguồn.</h2>
+      <p>Mỗi ưu tiên được trình bày cùng mốc dữ liệu, cửa sổ quan sát và các tín hiệu liên quan. Quyết định luôn thuộc về đội ngũ quản lý.</p>
     </div>
     <div class="trust-list">
       <div><span>01</span><strong>Hiển thị thời điểm dữ liệu</strong><small>Biết phân tích đang đọc đến ngày nào.</small></div>
       <div><span>02</span><strong>Nhìn theo nhiều cửa sổ</strong><small>7, 30 và 90 ngày để tránh kết luận vội.</small></div>
-      <div><span>03</span><strong>Giữ lịch sử file</strong><small>Đợt nạp sau bổ sung ngữ cảnh thay vì xóa dấu vết.</small></div>
+      <div><span>03</span><strong>Lưu lịch sử phiên nạp</strong><small>Dữ liệu bổ sung bối cảnh thay vì thay thế dấu vết.</small></div>
     </div>
   </section>
 
   <section class="closing-cta" aria-labelledby="closing-heading">
     <div>
-      <span class="closing-kicker">Bạn đã có file bán hàng?</span>
-      <h2 id="closing-heading">Bắt đầu bằng dữ liệu bạn đang có.</h2>
+      <span class="closing-kicker">Bạn đã có dữ liệu bán hàng?</span>
+      <h2 id="closing-heading">Bắt đầu từ dữ liệu vận hành hiện có.</h2>
     </div>
-    <button type="button" class="button button-light" (click)="scrollToTopAndUpload()">Nạp file CSV <span aria-hidden="true">↗</span></button>
+    <button type="button" class="button button-light" (click)="scrollToTopAndUpload()">Nạp tệp CSV <span aria-hidden="true">↗</span></button>
   </section>
 
   <footer class="public-footer">
     <span>SupplyForge AI</span>
-    <span>Inventory intelligence cho merchant Việt Nam</span>
-    <button type="button" (click)="onContactSupport()">Tìm hiểu thêm về hệ thống <span aria-hidden="true">↗</span></button>
+    <span>Phân tích tồn kho cho doanh nghiệp thương mại Việt Nam</span>
+    <button type="button" (click)="onContactSupport()">Tìm hiểu về nền tảng <span aria-hidden="true">↗</span></button>
   </footer>
 
   <div *ngIf="showDuplicateFileModal" class="duplicate-backdrop" role="dialog" aria-modal="true" aria-labelledby="duplicate-file-title">
     <section class="duplicate-dialog">
-      <span class="dialog-label">File đã tồn tại</span>
-      <h2 id="duplicate-file-title">File này đã được nạp trong workspace.</h2>
-      <p>SupplyForge không chạy lại để tránh tạo dữ liệu trùng. Bạn có thể quay lại dashboard hoặc chọn file khác.</p>
+      <span class="dialog-label">Tệp đã tồn tại</span>
+      <h2 id="duplicate-file-title">Tệp này đã được nạp trong không gian làm việc.</h2>
+      <p>Để tránh tạo dữ liệu trùng, hệ thống không thực hiện lại phiên nạp. Bạn có thể quay lại bảng điều hành hoặc chọn một tệp khác.</p>
       <div class="dialog-actions">
-        <button type="button" class="button button-primary" (click)="returnToDashboardFromDuplicate()">Quay lại dashboard</button>
-        <button type="button" class="button button-quiet" (click)="chooseAnotherFile()">Chọn file khác</button>
+        <button type="button" class="button button-primary" (click)="returnToDashboardFromDuplicate()">Quay lại bảng điều hành</button>
+        <button type="button" class="button button-quiet" (click)="chooseAnotherFile()">Chọn tệp khác</button>
       </div>
     </section>
   </div>

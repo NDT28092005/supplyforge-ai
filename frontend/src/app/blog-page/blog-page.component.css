@@ -160,34 +160,14 @@
   padding: 1.65rem;
 }
 
-.article-card > :not(.article-card__art) {
+.article-card > * {
   position: relative;
   z-index: 1;
-}
-
-.article-card__art {
-  bottom: -17%;
-  filter: saturate(.78);
-  height: auto;
-  opacity: .18;
-  pointer-events: none;
-  position: absolute;
-  right: -25%;
-  width: 82%;
-  z-index: 0;
 }
 
 .article-card.featured {
   background: #123b45;
   min-height: 25rem;
-}
-
-.article-card.featured .article-card__art {
-  bottom: -34%;
-  filter: none;
-  opacity: .64;
-  right: -7%;
-  width: min(56%, 39rem);
 }
 
 .article-card h2 {
@@ -245,12 +225,69 @@
 @media (max-width: 720px) {
   .article-card { min-height: 20rem; }
   .article-card.featured { min-height: 22rem; }
-  .article-card.featured .article-card__art { opacity: .27; right: -25%; width: 88%; }
 }
 
 @media (max-width: 560px) {
   .blog-hero h1 { font-size: clamp(2.55rem, 11vw, 3.35rem); }
   .blog-hero > p { font-size: .9rem; }
   .article-card { padding: 1.35rem; }
-  .article-card__art { opacity: .13; width: 100%; }
+}
+
+/* Corporate field-guide layout: content, not stock illustrations, carries the hierarchy. */
+.blog-page {
+  max-width: var(--workspace-max);
+}
+
+.blog-page .blog-hero {
+  gap: clamp(1.5rem, 5vw, 3.5rem);
+  grid-template-columns: minmax(0, 1.15fr) minmax(16rem, .85fr);
+  min-height: 0;
+  padding: clamp(1.75rem, 4vw, 3.75rem);
+}
+
+.blog-page .blog-hero h1 {
+  font-size: clamp(2.35rem, 4vw, 4.1rem);
+  max-width: 14ch;
+}
+
+.blog-page .article-grid {
+  gap: .85rem;
+  margin-top: clamp(2.5rem, 7vw, 4.5rem);
+}
+
+.blog-page .article-card {
+  box-shadow: none;
+  min-height: 18rem;
+}
+
+.blog-page .article-card.featured {
+  min-height: 21rem;
+}
+
+.blog-page .article-card__body {
+  max-width: 34rem;
+}
+
+.blog-page .article-card h2 {
+  font-size: clamp(1.45rem, 2.4vw, 2.45rem);
+  max-width: 17ch;
+}
+
+.blog-page .article-card:not(.featured) h2 {
+  font-size: 1.3rem;
+}
+
+.blog-page .article-card__body > p:last-child {
+  font-size: .78rem;
+  line-height: 1.65;
+}
+
+.blog-page .article-detail {
+  max-width: var(--workspace-max);
+}
+
+@media (max-width: 720px) {
+  .blog-page .blog-hero {
+    grid-template-columns: 1fr;
+  }
 }

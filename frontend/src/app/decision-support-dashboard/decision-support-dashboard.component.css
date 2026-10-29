@@ -341,10 +341,7 @@
 /* Drawer & Overlay */
 .drawer-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
+  inset: 0;
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
   z-index: 1000;
@@ -353,7 +350,7 @@
 }
 
 .drawer-content {
-  width: 680px;
+  width: min(42.5rem, 100%);
   height: 100vh;
   margin: 0;
   border-radius: 0;
@@ -474,10 +471,7 @@
 /* Modal */
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
+  inset: 0;
   background: rgba(0, 0, 0, 0.65);
   display: flex;
   justify-content: center;
@@ -486,8 +480,8 @@
 }
 
 .modal-content {
-  width: 480px;
-  max-width: 90%;
+  width: min(30rem, calc(100% - 2rem));
+  max-width: none;
 }
 
 .form-group {

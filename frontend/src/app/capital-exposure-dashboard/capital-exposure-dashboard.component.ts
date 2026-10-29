@@ -9,13 +9,14 @@ export interface CapitalSkuItem {
   sku: string;
   name: string;
   category?: string;
-  riskClass: 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK';
+  riskClass: 'CRITICAL' | 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK';
   probabilityPct: string;
   dslsDays: number;
   capitalExposureVal?: number;
   capitalExposure: string;
   capitalPriority: string;
-  opportunityCostVal?: number;
+  capitalPriorityVal?: number;
+  opportunityCostVal: number | null;
   opportunityCost: string;
   agingBucket: string;
   sales30d: number;
@@ -53,8 +54,6 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
   agingFilter: string = '';
   sortField: string = 'capitalExposureVal';
   sortDirection: 'desc' | 'asc' = 'desc';
-  selectedPeriod: string = '30 ngày qua';
-
   drawerOpen: boolean = false;
   selectedSkuItem: CapitalSkuItem | null = null;
   showShapCalcModal: boolean = false;
@@ -69,13 +68,15 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
   riskDistribution: any[] = [];
   agingDistribution: any[] = [];
   skuItems: CapitalSkuItem[] = [];
+  dataState: 'loading' | 'ready' | 'empty' | 'error' = 'loading';
+  loadError = '';
 
   constructor(
     private apiService: ApiService,
     private router: Router
   ) {}
 
-  formatCurrencyShort(val: number): string {
+  formatCurrencyShort(val: number | null | undefined): string {
     if (!val || val === 0) return '0';
     if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
     if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
@@ -88,6 +89,9 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
   }
 
   loadRealCapitalExposureData(): void {
+    this.dataState = 'loading';
+    this.loadError = '';
+    this.skuItems = [];
     this.apiService.createCapitalExposureAnalysis({
       merchant_id: this.merchantId,
       dataset_version: this.datasetVersion
@@ -95,36 +99,35 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
       next: (res: any) => {
         if (res && res.analysis_id) {
           const aid = res.analysis_id;
-          this.apiService.listCapitalExposureItems(aid, { limit: 500 }).subscribe({
+          this.apiService.getAllCapitalExposureItems(aid).subscribe({
             next: (itemsRes: any) => {
               const realItems = itemsRes.items || [];
               if (realItems.length > 0) {
                 this.processRealData(res, realItems);
-              } else if (res.top_financial_skus && res.top_financial_skus.length > 0) {
-                this.processRealData(res, res.top_financial_skus);
               } else {
                 this.setEmptyDataState();
               }
             },
-            error: () => {
-              if (res.top_financial_skus && res.top_financial_skus.length > 0) {
-                this.processRealData(res, res.top_financial_skus);
-              } else {
-                this.setEmptyDataState();
-              }
+            error: (err: any) => {
+              this.setErrorDataState(err?.error?.detail || 'Không thể tải toàn bộ danh mục đánh giá vốn. Vui lòng thử lại.');
             }
           });
         } else {
           this.setEmptyDataState();
         }
       },
-      error: () => {
-        this.setEmptyDataState();
+      error: (err: any) => {
+        this.setErrorDataState(err?.error?.detail || err?.error?.error || 'Không thể tải dữ liệu đánh giá vốn đọng. Vui lòng thử lại.');
       }
     });
   }
 
+  goToImport(): void {
+    this.router.navigate(['/app/import']);
+  }
+
   setEmptyDataState(): void {
+    this.dataState = 'empty';
     this.skuItems = [];
     this.summaryGrid = {
       totalExposure: '0',
@@ -136,26 +139,35 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
     this.agingDistribution = [];
   }
 
+  private setErrorDataState(message: string): void {
+    this.dataState = 'error';
+    this.loadError = message;
+    this.skuItems = [];
+    this.summaryGrid = { totalExposure: '0', highRiskExposure: '0', opportunityCost: '0', affectedSkus: '0 SKU' };
+    this.riskDistribution = [];
+    this.agingDistribution = [];
+  }
+
   processRealData(analysisRes: any, itemsList: any[]): void {
     this.skuItems = itemsList.map((i: any) => {
-      const rawClass = i.slow_moving_risk_class || i.risk_class || 'LOW_RISK';
-      const riskClass: 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK' = (rawClass === 'CRITICAL' || rawClass === 'HIGH_RISK') ? 'HIGH_RISK' : (rawClass === 'MEDIUM_RISK' ? 'MEDIUM_RISK' : 'LOW_RISK');
-      const dsls = i.aging_days !== undefined ? i.aging_days : (i.dsls || 0);
+      const rawClass = String(i.slow_moving_risk_class || i.risk_class || 'LOW_RISK').toUpperCase();
+      const riskClass: CapitalSkuItem['riskClass'] = rawClass === 'CRITICAL'
+        ? 'CRITICAL'
+        : (rawClass === 'HIGH_RISK' ? 'HIGH_RISK' : (rawClass === 'MEDIUM_RISK' ? 'MEDIUM_RISK' : 'LOW_RISK'));
+      const dsls = Number(i.aging_days ?? i.dsls ?? 0);
       const rawProb = i.risk_probability ?? (i.risk_score ? (i.risk_score > 1 ? i.risk_score / 100 : i.risk_score) : undefined);
       const probVal = rawProb !== undefined && rawProb !== null
         ? Number(rawProb)
-        : (riskClass === 'HIGH_RISK' ? 0.92 : (riskClass === 'MEDIUM_RISK' ? 0.55 : 0.08));
-      const invVal = i.inventory_value || i.capital_exposure || i.capital_locked || 0;
-      const oppCostVal = i.estimated_opportunity_cost || (invVal * 0.12 / 365 * Math.max(1, dsls));
+        : 0;
+      const invVal = Number(i.inventory_value ?? i.capital_exposure ?? i.capital_locked ?? 0);
+      const riskWeightedVal = Number(i.risk_weighted_exposure ?? i.probability_adjusted_exposure ?? 0);
+      const oppCostRaw = i.estimated_opportunity_cost;
+      const oppCostVal = oppCostRaw === null || oppCostRaw === undefined ? null : Number(oppCostRaw);
 
       let agingBucketStr = 'Dưới 30 ngày';
       if (dsls > 90) agingBucketStr = 'Trên 90 ngày';
       else if (dsls > 60) agingBucketStr = '61–90 ngày';
       else if (dsls > 30) agingBucketStr = '31–60 ngày';
-
-      const prioMultiplier = riskClass === 'HIGH_RISK' ? 0.9 : (riskClass === 'MEDIUM_RISK' ? 0.5 : 0.0);
-
-      const rawZeroRate = i.zero_rate_90d ?? i.zero_sales_rate ?? (dsls > 90 ? 0.92 : (dsls > 30 ? 0.55 : 0.12));
 
       return {
         sku: i.sku || i.canonical_sku_id || 'SKU_UNKNOWN',
@@ -165,25 +177,26 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
         dslsDays: dsls,
         capitalExposureVal: invVal,
         capitalExposure: this.formatCurrencyShort(invVal),
-        capitalPriority: this.formatCurrencyShort(invVal * prioMultiplier),
+        capitalPriorityVal: riskWeightedVal,
+        capitalPriority: this.formatCurrencyShort(riskWeightedVal),
         opportunityCostVal: oppCostVal,
-        opportunityCost: this.formatCurrencyShort(oppCostVal),
+        opportunityCost: oppCostVal === null ? 'Chưa có dữ liệu' : this.formatCurrencyShort(oppCostVal),
         agingBucket: agingBucketStr,
-        sales30d: i.sold_30d || 0,
-        sales90d: i.sold_90d || 0,
-        zeroRatePct: `${(rawZeroRate * 100).toFixed(1)}%`,
-        demandProb: 0.1,
-        demandPattern: dsls > 90 ? 'Bán lắt nhắt' : 'Bán không đều',
+        sales30d: Number(i.sold_30d || 0),
+        sales90d: Number(i.sold_90d || 0),
+        zeroRatePct: 'Chưa có dữ liệu',
+        demandProb: probVal,
+        demandPattern: 'Chưa có dữ liệu',
         shapFactors: [
-          { label: 'Số ngày chưa có đơn hàng mới', subDesc: `Đã ${dsls} ngày đọng vốn trong kho`, impactText: dsls > 60 ? 'Tác động mạnh' : 'Mức vừa', score: dsls > 60 ? 4 : 2, pct: Math.min(100, Math.round(dsls / 2)), severity: (dsls > 90 ? 'red' : (dsls > 30 ? 'amber' : 'emerald')) as 'red' | 'amber' | 'emerald' }
+          { label: 'Thời gian lưu kho', subDesc: `Ghi nhận ${dsls} ngày tồn kho theo bản phân tích vốn.`, impactText: 'Dữ liệu đầu vào', score: 0, pct: 0, severity: (dsls > 90 ? 'red' : (dsls > 30 ? 'amber' : 'emerald')) as 'red' | 'amber' | 'emerald' }
         ],
-        conclusion: `SKU đang đọng vốn ${this.formatCurrencyShort(invVal)} trong kho, thời gian lưu kho ${dsls} ngày.`
+        conclusion: `Bản ghi có giá trị vốn tồn kho ${this.formatCurrencyShort(invVal)} và thời gian lưu kho ${dsls} ngày. Cần đối chiếu chính sách hàng hóa trước khi triển khai phương án xử lý.`
       };
     });
 
     const totalVal = this.skuItems.reduce((acc, i) => acc + (i as any).capitalExposureVal, 0);
-    const totalOppCost = this.skuItems.reduce((acc, i) => acc + (i as any).opportunityCostVal, 0);
-    const highRiskItems = this.skuItems.filter(i => i.riskClass === 'HIGH_RISK');
+    const totalOppCost = this.skuItems.reduce((acc, i) => acc + (i.opportunityCostVal || 0), 0);
+    const highRiskItems = this.skuItems.filter(i => i.riskClass === 'CRITICAL' || i.riskClass === 'HIGH_RISK');
     const highRiskVal = highRiskItems.reduce((acc, i) => acc + (i as any).capitalExposureVal, 0);
 
     this.summaryGrid = {
@@ -193,10 +206,12 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
       affectedSkus: `${highRiskItems.length} SKU`
     };
 
+    const criticalItems = this.skuItems.filter(i => i.riskClass === 'CRITICAL');
     const highItems = this.skuItems.filter(i => i.riskClass === 'HIGH_RISK');
     const medItems = this.skuItems.filter(i => i.riskClass === 'MEDIUM_RISK');
     const lowItems = this.skuItems.filter(i => i.riskClass === 'LOW_RISK');
 
+    const criticalExp = criticalItems.reduce((acc, i) => acc + (i as any).capitalExposureVal, 0);
     const highExp = highItems.reduce((acc, i) => acc + (i as any).capitalExposureVal, 0);
     const medExp = medItems.reduce((acc, i) => acc + (i as any).capitalExposureVal, 0);
     const lowExp = lowItems.reduce((acc, i) => acc + (i as any).capitalExposureVal, 0);
@@ -204,6 +219,7 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
     const calcSharePct = (val: number) => totalVal > 0 ? Math.round((val / totalVal) * 100) : 0;
 
     this.riskDistribution = [
+      { label: 'Rủi ro rất cao', exposure: this.formatCurrencyShort(criticalExp), sharePct: calcSharePct(criticalExp), count: criticalItems.length, color: 'bg-rose-700', badgeClass: 'bg-rose-50 text-rose-800 border-rose-200' },
       { label: 'Rủi ro cao', exposure: this.formatCurrencyShort(highExp), sharePct: calcSharePct(highExp), count: highItems.length, color: 'bg-rose-500', badgeClass: 'bg-rose-50 text-rose-700 border-rose-200' },
       { label: 'Cần theo dõi', exposure: this.formatCurrencyShort(medExp), sharePct: calcSharePct(medExp), count: medItems.length, color: 'bg-amber-500', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' },
       { label: 'An toàn', exposure: this.formatCurrencyShort(lowExp), sharePct: calcSharePct(lowExp), count: lowItems.length, color: 'bg-emerald-500', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
@@ -222,9 +238,10 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
     this.agingDistribution = [
       { label: 'Dưới 30 ngày (Lưu thông đều)', exposure: this.formatCurrencyShort(freshExp), sharePct: calcSharePct(freshExp), count: freshItems.length, color: 'bg-emerald-500', desc: 'Hàng mới lưu thông tốt' },
       { label: '31–60 ngày (Theo dõi)', exposure: this.formatCurrencyShort(agingExp), sharePct: calcSharePct(agingExp), count: agingItems.length, color: 'bg-amber-500', desc: 'Có dấu hiệu bán chậm' },
-      { label: '61–90 ngày (Tồn đọng nhẹ)', exposure: this.formatCurrencyShort(atRiskExp), sharePct: calcSharePct(atRiskExp), count: atRiskItems.length, color: 'bg-amber-600', desc: 'Cần khuyến mãi đẩy đơn' },
-      { label: 'Trên 90 ngày (Chôn vốn lâu)', exposure: this.formatCurrencyShort(critAgingExp), sharePct: calcSharePct(critAgingExp), count: critAgingItems.length, color: 'bg-rose-500', desc: 'Ưu tiên giải phóng vốn gấp' }
+      { label: '61–90 ngày (Tồn đọng nhẹ)', exposure: this.formatCurrencyShort(atRiskExp), sharePct: calcSharePct(atRiskExp), count: atRiskItems.length, color: 'bg-amber-600', desc: 'Cần đánh giá phương án xúc tiến phù hợp' },
+      { label: 'Trên 90 ngày (Lưu kho kéo dài)', exposure: this.formatCurrencyShort(critAgingExp), sharePct: calcSharePct(critAgingExp), count: critAgingItems.length, color: 'bg-rose-500', desc: 'Ưu tiên đánh giá phương án thu hồi vốn' }
     ];
+    this.dataState = 'ready';
   }
 
   get totalCount(): number {
@@ -232,7 +249,11 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
   }
 
   get highRiskCount(): number {
-    return this.skuItems.filter(i => i.riskClass === 'HIGH_RISK').length;
+    return this.skuItems.filter(i => i.riskClass === 'CRITICAL' || i.riskClass === 'HIGH_RISK').length;
+  }
+
+  get criticalCount(): number {
+    return this.skuItems.filter(i => i.riskClass === 'CRITICAL').length;
   }
 
   get watchCount(): number {
@@ -245,7 +266,10 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
 
   get filteredSkuItems(): CapitalSkuItem[] {
     let result = this.skuItems.filter(i => {
-      const matchRisk = !this.selectedRiskFilter || i.riskClass === this.selectedRiskFilter;
+      const matchRisk = !this.selectedRiskFilter
+        || (this.selectedRiskFilter === 'AT_RISK'
+          ? i.riskClass === 'CRITICAL' || i.riskClass === 'HIGH_RISK'
+          : i.riskClass === this.selectedRiskFilter);
       const term = this.searchTerm.toLowerCase().trim();
       const matchSearch = !term ||
         i.sku.toLowerCase().includes(term) ||
@@ -297,10 +321,10 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
       item.sku,
       `"${item.name.replace(/"/g, '""')}"`,
       `"${(item.category || 'Thiết bị & Phụ kiện').replace(/"/g, '""')}"`,
-      item.riskClass === 'HIGH_RISK' ? 'Rủi ro cao' : (item.riskClass === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'An toàn'),
+      item.riskClass === 'CRITICAL' ? 'Rủi ro rất cao' : (item.riskClass === 'HIGH_RISK' ? 'Rủi ro cao' : (item.riskClass === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'Rủi ro thấp')),
       item.dslsDays,
       item.capitalExposureVal || 0,
-      item.opportunityCostVal || 0,
+      item.opportunityCostVal ?? '',
       `"${item.agingBucket}"`
     ]);
 
@@ -351,25 +375,10 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
   }
 
   navigateToDecisions(): void {
+    const sku = this.selectedSkuItem?.sku;
     this.closeSkuDetail();
-    this.navigateTo.emit('decision-support');
-    this.router.navigate(['/app/decisions']);
+    this.navigateTo.emit(sku ? `decision-support?sku=${sku}` : 'decision-support');
+    this.router.navigate(['/app/decisions'], { queryParams: sku ? { sku } : {} });
   }
 
-  getMonthlyHoldingCost(exposureStr: string): string {
-    if (!exposureStr) return '0.5M';
-    const val = parseFloat(exposureStr.replace('M', '').replace('B', '000'));
-    if (isNaN(val)) return '0.5M';
-    const monthly = (val * 0.012).toFixed(1);
-    return `${monthly}M / tháng`;
-  }
-
-  getQuickRecoveryAmount(exposureStr: string): string {
-    if (!exposureStr) return '50.0M';
-    const val = parseFloat(exposureStr.replace('M', '').replace('B', '000'));
-    if (isNaN(val)) return '50.0M';
-    const min = (val * 0.5).toFixed(1);
-    const max = (val * 0.75).toFixed(1);
-    return `${min}M – ${max}M`;
-  }
 }

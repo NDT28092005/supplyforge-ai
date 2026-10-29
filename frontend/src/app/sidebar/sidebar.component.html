@@ -1,7 +1,7 @@
 <aside
   class="operations-sidebar w-64 bg-surface border-r border-border-base fixed inset-y-0 left-0 z-30 flex flex-col justify-between p-6 pt-24 transition-all">
   <div>
-    <!-- Navigation Links — 4 Tabs: "Tổng quan", "Rủi ro", "Đánh giá vốn", "Khuyến nghị xả hàng" -->
+    <!-- Navigation links: tổng quan, rủi ro, đánh giá vốn, và đề xuất xử lý. -->
     <p class="sidebar-kicker">Không gian vận hành</p>
     <nav class="sidebar-nav space-y-1.5">
       <!-- Tab 1: Tổng quan -->
@@ -14,7 +14,7 @@
           <rect x="14" y="14" width="7" height="7" rx="1"></rect>
           <rect x="3" y="14" width="7" height="7" rx="1"></rect>
         </svg>
-        <span>Tổng quan</span>
+        <span>Bảng điều hành</span>
       </a>
 
       <!-- Tab 2: Rủi ro -->
@@ -27,7 +27,7 @@
           <line x1="12" y1="9" x2="12" y2="13"></line>
           <line x1="12" y1="17" x2="12.01" y2="17"></line>
         </svg>
-        <span>Rủi ro</span>
+        <span>Rủi ro danh mục</span>
       </a>
 
       <!-- Tab 3: Đánh giá vốn -->
@@ -38,10 +38,10 @@
           <line x1="12" y1="1" x2="12" y2="23"></line>
           <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
         </svg>
-        <span>Đánh giá vốn</span>
+        <span>Tác động vốn</span>
       </a>
 
-      <!-- Tab 4: Khuyến nghị xả hàng -->
+      <!-- Tab 4: Đề xuất xử lý tồn kho -->
       <a routerLink="/app/decisions" routerLinkActive="bg-indigo-50 text-indigo-700 border-indigo-200 font-bold active-link"
         class="sidebar-link w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
         <svg class="w-4 h-4 transition-transform group-hover:scale-105 text-slate-500" viewBox="0 0 24 24"
@@ -49,23 +49,9 @@
           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
           <polyline points="22 4 12 14.01 9 11.01"></polyline>
         </svg>
-        <span>Khuyến nghị xả hàng</span>
+        <span>Phương án xử lý</span>
       </a>
 
-      <!-- Tab 5: Hàng chờ xử lý -->
-      <a routerLink="/app/queue" routerLinkActive="bg-indigo-50 text-indigo-700 border-indigo-200 font-bold active-link"
-        class="sidebar-link w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-xs font-semibold transition-all text-left relative group overflow-hidden cursor-pointer text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent">
-        <svg class="w-4 h-4 transition-transform group-hover:scale-105 text-slate-500" viewBox="0 0 24 24"
-          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="8" y1="6" x2="21" y2="6"></line>
-          <line x1="8" y1="12" x2="21" y2="12"></line>
-          <line x1="8" y1="18" x2="21" y2="18"></line>
-          <line x1="3" y1="6" x2="3.01" y2="6"></line>
-          <line x1="3" y1="12" x2="3.01" y2="12"></line>
-          <line x1="3" y1="18" x2="3.01" y2="18"></line>
-        </svg>
-        <span>Hàng chờ xử lý</span>
-      </a>
     </nav>
   </div>
 
@@ -79,7 +65,7 @@
         <line x1="12" y1="5" x2="12" y2="19"></line>
         <line x1="5" y1="12" x2="19" y2="12"></line>
       </svg>
-      <span>Nhập Thêm Dữ Liệu</span>
+      <span>Bổ sung dữ liệu</span>
     </button>
 
     <!-- Clear All Data & Import New Button -->
@@ -91,7 +77,7 @@
         <line x1="10" y1="11" x2="10" y2="17"></line>
         <line x1="14" y1="11" x2="14" y2="17"></line>
       </svg>
-      <span>Xóa Toàn Bộ & Nhập Mới</span>
+      <span>Thay thế bộ dữ liệu</span>
     </button>
   </div>
 </aside>

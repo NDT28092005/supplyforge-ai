@@ -1,0 +1,20 @@
+<main sfPageMotion class="not-found-page">
+  <section data-motion="header" class="not-found-card" aria-labelledby="not-found-heading">
+    <div class="not-found-copy">
+      <p class="not-found-code">LỖI 404</p>
+      <h1 id="not-found-heading">Không tìm thấy trang bạn đang tìm kiếm</h1>
+      <p>Đường dẫn có thể đã thay đổi hoặc không còn khả dụng. Bạn có thể quay về trang chủ để tiếp tục truy cập nền tảng.</p>
+      <a routerLink="/" class="not-found-action">Về trang chủ <span aria-hidden="true">→</span></a>
+    </div>
+
+    <svg class="not-found-mark" viewBox="0 0 260 200" role="img" aria-label="Biểu tượng đường dẫn không khả dụng">
+      <path d="M30 151H100L132 105H228" class="not-found-mark__route"></path>
+      <path d="M36 51H101L131 95H220" class="not-found-mark__route not-found-mark__route--muted"></path>
+      <circle cx="30" cy="151" r="10" class="not-found-mark__node"></circle>
+      <circle cx="132" cy="105" r="14" class="not-found-mark__node not-found-mark__node--focus"></circle>
+      <circle cx="228" cy="105" r="10" class="not-found-mark__node not-found-mark__node--muted"></circle>
+      <path d="M132 82V105" class="not-found-mark__signal"></path>
+      <path d="M122 92L132 82L142 92" class="not-found-mark__signal"></path>
+    </svg>
+  </section>
+</main>

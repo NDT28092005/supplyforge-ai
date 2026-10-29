@@ -14,6 +14,7 @@ export interface UserProfile {
 })
 export class AuthService {
   private tokenKey = 'sf_auth_token';
+  private refreshTokenKey = 'sf_refresh_token';
   private currentUserSubject = new BehaviorSubject<UserProfile | null>(null);
   public currentUser$ = this.currentUserSubject.asObservable();
 
@@ -59,10 +60,24 @@ export class AuthService {
     this.loadUserFromToken();
   }
 
+  getRefreshToken(): string | null {
+    return localStorage.getItem(this.refreshTokenKey) || sessionStorage.getItem(this.refreshTokenKey);
+  }
+
+  setSession(accessToken: string, refreshToken?: string): void {
+    this.setToken(accessToken);
+    if (!refreshToken) return;
+
+    localStorage.setItem(this.refreshTokenKey, refreshToken);
+    sessionStorage.setItem(this.refreshTokenKey, refreshToken);
+  }
+
   clearToken(): void {
     this.eraseCookie(this.tokenKey);
     sessionStorage.removeItem(this.tokenKey);
     localStorage.removeItem(this.tokenKey);
+    sessionStorage.removeItem(this.refreshTokenKey);
+    localStorage.removeItem(this.refreshTokenKey);
     sessionStorage.removeItem('sf_user_profile');
     localStorage.removeItem('sf_user_profile');
     this.currentUserSubject.next(null);
@@ -79,6 +94,12 @@ export class AuthService {
   getUserRole(): string {
     const user = this.getCurrentUser();
     return user?.role || 'OWNER';
+  }
+
+  getWorkspaceId(): number {
+    const payload = this.parseJwt(this.getToken() || '');
+    const workspaceId = Number(payload?.workspace_id ?? payload?.workspaceId);
+    return Number.isInteger(workspaceId) && workspaceId > 0 ? workspaceId : 1;
   }
 
   hasPermission(permission: string): boolean {

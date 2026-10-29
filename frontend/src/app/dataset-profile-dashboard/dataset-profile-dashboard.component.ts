@@ -39,6 +39,9 @@ export class DatasetProfileDashboardComponent implements OnInit, OnChanges {
   totalSkus: number = 0;
   totalPages: number = 1;
   loadingSkus: boolean = false;
+  isProceeding = false;
+  analysisError = '';
+  private sessionUnavailable = false;
 
   constructor(
     private apiService: ApiService,
@@ -106,7 +109,7 @@ export class DatasetProfileDashboardComponent implements OnInit, OnChanges {
   }
 
   loadProfile(): void {
-    if (this.sessionId) {
+    if (this.sessionId && !this.sessionUnavailable) {
       this.apiService.getDatasetProfile(this.sessionId).subscribe({
         next: (res) => {
           if (res) {
@@ -121,13 +124,19 @@ export class DatasetProfileDashboardComponent implements OnInit, OnChanges {
             };
           }
         },
-        error: (err) => console.error('Failed to load dataset profile:', err)
+        error: (err: any) => {
+          if (this.isSessionMissingError(err)) {
+            this.resetMissingSession();
+            return;
+          }
+          console.error('Failed to load dataset profile:', err);
+        }
       });
     }
   }
 
   loadSkuProfiles(): void {
-    if (!this.sessionId) return;
+    if (!this.sessionId || this.sessionUnavailable) return;
     this.loadingSkus = true;
     this.apiService.getSkuProfiles(this.sessionId, this.currentPage, this.searchQuery).subscribe({
       next: (res) => {
@@ -136,8 +145,12 @@ export class DatasetProfileDashboardComponent implements OnInit, OnChanges {
         this.totalSkus = res.total || 0;
         this.totalPages = res.totalPages || 1;
       },
-      error: (err) => {
+      error: (err: any) => {
         this.loadingSkus = false;
+        if (this.isSessionMissingError(err)) {
+          this.resetMissingSession();
+          return;
+        }
         console.error('Failed to load SKU profiles:', err);
       }
     });
@@ -171,19 +184,63 @@ export class DatasetProfileDashboardComponent implements OnInit, OnChanges {
   }
 
   onProceed(): void {
+    if (this.isProceeding) return;
     this.proceedToAnalysis.emit();
+    this.isProceeding = true;
+    this.analysisError = '';
+    this.ingestionState.setDatasetStatus('processing', 'Đang xây dựng đánh giá rủi ro từ bộ dữ liệu vừa nhập.');
     if (this.sessionId) {
       this.apiService.runM3RiskAssessmentAssembly(this.sessionId).subscribe({
         next: () => {
-          this.apiService.runM3RiskMonitoring(this.sessionId).subscribe();
-          this.router.navigate(['/app/dashboard']);
+          this.apiService.runM3RiskMonitoring(this.sessionId).subscribe({
+            next: () => {
+              this.isProceeding = false;
+              this.ingestionState.setDatasetStatus('ready', 'Bộ dữ liệu và các đánh giá rủi ro đã sẵn sàng.');
+              this.router.navigate(['/app/dashboard']);
+            },
+            error: (err: any) => {
+              if (this.isSessionMissingError(err)) {
+                this.resetMissingSession();
+                return;
+              }
+              this.handleAnalysisError(err?.error?.error || 'Không thể hoàn tất đánh giá rủi ro.');
+            }
+          });
         },
-        error: () => {
-          this.router.navigate(['/app/dashboard']);
+        error: (err: any) => {
+          if (this.isSessionMissingError(err)) {
+            this.resetMissingSession();
+            return;
+          }
+          this.handleAnalysisError(err?.error?.error || 'Không thể tạo đánh giá rủi ro.');
         }
       });
     } else {
+      this.isProceeding = false;
+      this.ingestionState.setDatasetStatus('ready', 'Bộ dữ liệu đã sẵn sàng.');
       this.router.navigate(['/app/dashboard']);
     }
+  }
+
+  private handleAnalysisError(message: string): void {
+    this.isProceeding = false;
+    this.analysisError = message;
+    this.ingestionState.setErrorMessage(message);
+  }
+
+  private isSessionMissingError(err: any): boolean {
+    const code = err?.error?.code;
+    const message = String(err?.error?.error || err?.message || '').toLowerCase();
+    return err?.status === 404 || code === 'SESSION_NOT_FOUND' || message.includes('ingestionsession');
+  }
+
+  private resetMissingSession(): void {
+    if (this.sessionUnavailable) return;
+    this.sessionUnavailable = true;
+    this.isProceeding = false;
+    this.loadingSkus = false;
+    const message = 'Phiên nạp dữ liệu không còn tồn tại. Vui lòng tải lại tệp CSV để tạo phiên mới.';
+    this.ingestionState.invalidateSession(message);
+    this.router.navigate(['/app/import']);
   }
 }

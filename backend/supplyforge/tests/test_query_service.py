@@ -82,6 +82,17 @@ class QueryServiceTestCase(TestCase):
         expected_total = sum(100000.0 * i for i in range(1, 11))
         self.assertEqual(summary['totalCapitalExposureVnd'], expected_total)
         self.assertEqual(len(summary['topRiskSkus']), 5)
+        self.assertEqual(summary['agedSkuCount'], 5)
+        self.assertEqual(summary['riskCapitalByClassVnd'], {
+            'CRITICAL': 600000.0,
+            'HIGH_RISK': 1500000.0,
+            'MEDIUM_RISK': 0.0,
+            'LOW_RISK': 3400000.0,
+        })
+        self.assertTrue(all(
+            sku['riskClass'] in {'CRITICAL', 'HIGH_RISK'}
+            for sku in summary['topRiskSkus']
+        ))
 
     def test_workspace_cache_versioning_and_invalidation(self):
         """Verify bumping workspace cache version invalidates existing cache."""
@@ -138,6 +149,8 @@ class QueryServiceTestCase(TestCase):
         self.assertEqual(summary['totalSkus'], 10)
         self.assertEqual(summary['datasetVersion'], 'v1.0')
         self.assertFalse(summary['isStale'])
+        self.assertEqual(summary['agedSkuCount'], 5)
+        self.assertEqual(summary['riskCapitalByClassVnd']['CRITICAL'], 600000.0)
 
     def test_failopen_on_redis_error(self):
         """Verify failopen behavior direct to MySQL when cache.get raises Exception."""

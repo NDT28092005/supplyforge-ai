@@ -28,6 +28,7 @@ class DecisionRecord(models.Model):
 
 
     decision_id = models.CharField(max_length=128, unique=True, db_index=True)
+    workspace_id = models.IntegerField(default=1, db_index=True)
     sku = models.CharField(max_length=128, db_index=True)
     dataset_version = models.CharField(max_length=64, default='v1.0')
 

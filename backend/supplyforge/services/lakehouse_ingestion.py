@@ -380,6 +380,13 @@ class LakehouseIngestionService:
         total_capital = 0.0
         at_risk_capital = 0.0
         aged_capital = 0.0
+        aged_sku_count = 0
+        risk_capital_by_class = {
+            'CRITICAL': 0.0,
+            'HIGH_RISK': 0.0,
+            'MEDIUM_RISK': 0.0,
+            'LOW_RISK': 0.0,
+        }
         has_observed_inventory = False
         top_candidates = []
 
@@ -397,11 +404,17 @@ class LakehouseIngestionService:
             evidence = assessment.evidence if isinstance(assessment.evidence, dict) else {}
             capital, is_observed = capital_exposure(evidence)
             total_capital += capital
+            if assessment.risk_class in risk_capital_by_class:
+                risk_capital_by_class[assessment.risk_class] += capital
             has_observed_inventory = has_observed_inventory or is_observed
             if assessment.risk_class in {'CRITICAL', 'HIGH_RISK'}:
                 at_risk_capital += capital
             if as_positive_float(evidence.get('dsls')) > 90:
                 aged_capital += capital
+                aged_sku_count += 1
+
+            if assessment.risk_class not in {'CRITICAL', 'HIGH_RISK'}:
+                continue
 
             priority = risk_priority.get(assessment.risk_class, 0.0)
             candidate = (
@@ -433,6 +446,8 @@ class LakehouseIngestionService:
             'totalCapitalExposureVnd': total_capital,
             'atRiskCapitalVnd': at_risk_capital,
             'agedCapitalVnd': aged_capital,
+            'agedSkuCount': aged_sku_count,
+            'riskCapitalByClassVnd': risk_capital_by_class,
             'capitalStatus': 'OBSERVED' if has_observed_inventory else (
                 'ESTIMATED' if total_skus else 'NO_DATA'
             ),

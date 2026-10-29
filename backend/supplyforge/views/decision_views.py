@@ -15,6 +15,7 @@ from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from supplyforge.models import Product
 from supplyforge.models.decision import DecisionRecord, DecisionExplanationRecord
 from supplyforge.serializers.decision_serializer import (
     DecisionSerializer, DecisionExplanationSerializer,
@@ -24,6 +25,19 @@ from supplyforge.services.decision_service import (
     DecisionPersistenceService, DecisionStatusService, DecisionHistoryService,
     InvalidStatusTransitionError, DecisionNotFoundError,
 )
+
+
+def _decision_is_visible_to_request(request, decision):
+    """Check the persisted workspace scope of a decision record."""
+    if not getattr(request, "tenant_context_validated", False):
+        return True
+    return decision.workspace_id == request.workspace_id
+
+
+def _decision_queryset_for_request(request, queryset):
+    if not getattr(request, "tenant_context_validated", False):
+        return queryset
+    return queryset.filter(workspace_id=request.workspace_id)
 
 
 class DecisionListCreateView(APIView):
@@ -48,7 +62,8 @@ class DecisionListCreateView(APIView):
             decision = DecisionPersistenceService.persist_decision(
                 recommendation=recommendation,
                 explanation=explanation,
-                dataset_version=dataset_version
+                dataset_version=dataset_version,
+                workspace_id=request.workspace_id if getattr(request, "tenant_context_validated", False) else None,
             )
             serializer = DecisionSerializer(decision)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -72,8 +87,10 @@ class DecisionListCreateView(APIView):
             action_type=action_type,
             status=status_param,
             sku=sku,
-            dataset_version=dataset_version
+            dataset_version=dataset_version,
+            workspace_id=request.workspace_id if getattr(request, "tenant_context_validated", False) else None,
         )
+        queryset = _decision_queryset_for_request(request, queryset)
 
         serializer = DecisionSerializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -85,6 +102,8 @@ class DecisionDetailView(APIView):
     def get(self, request, decision_id, *args, **kwargs):
         try:
             decision = DecisionPersistenceService.get_decision(decision_id)
+            if not _decision_is_visible_to_request(request, decision):
+                raise DecisionNotFoundError(f"Decision {decision_id} not found.")
             serializer = DecisionSerializer(decision)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except DecisionNotFoundError as e:
@@ -110,6 +129,9 @@ class DecisionStatusUpdateView(APIView):
         notes = serializer.validated_data.get("notes", "")
 
         try:
+            decision = DecisionPersistenceService.get_decision(decision_id)
+            if not _decision_is_visible_to_request(request, decision):
+                raise DecisionNotFoundError(f"Decision {decision_id} not found.")
             decision = DecisionStatusService.update_status(
                 decision_id=decision_id,
                 new_status=new_status,
@@ -135,6 +157,9 @@ class DecisionHistoryView(APIView):
 
     def get(self, request, decision_id, *args, **kwargs):
         try:
+            decision = DecisionPersistenceService.get_decision(decision_id)
+            if not _decision_is_visible_to_request(request, decision):
+                raise DecisionNotFoundError(f"Decision {decision_id} not found.")
             history_data = DecisionHistoryService.get_history(decision_id)
             return Response(history_data, status=status.HTTP_200_OK)
         except DecisionNotFoundError as e:
@@ -150,6 +175,8 @@ class DecisionExplanationView(APIView):
     def get(self, request, decision_id, *args, **kwargs):
         try:
             decision = DecisionPersistenceService.get_decision(decision_id)
+            if not _decision_is_visible_to_request(request, decision):
+                raise DecisionNotFoundError(f"Decision {decision_id} not found.")
             exp = decision.explanations.first()
             if not exp:
                 return Response(
@@ -190,30 +217,40 @@ class DecisionSimulationView(APIView):
         if not decision_ctx and decision_id:
             try:
                 decision_rec = DecisionPersistenceService.get_decision(decision_id)
+                if not _decision_is_visible_to_request(request, decision_rec):
+                    raise DecisionNotFoundError(f"Decision {decision_id} not found.")
+                product_query = Product.objects.filter(item_sku=decision_rec.sku)
+                if getattr(request, "tenant_context_validated", False):
+                    product_query = product_query.filter(user_id=str(request.user_id))
+                product = product_query.first()
+                if not product or product.price is None or product.cost is None or product.stock is None:
+                    return Response({
+                        "success": False,
+                        "code": "SIMULATION_INPUT_UNAVAILABLE",
+                        "detail": "SKU chưa có đủ giá bán, giá vốn và tồn kho để mô phỏng.",
+                    }, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
                 decision_ctx = {
                     "sku": decision_rec.sku,
-                    "unit_price": float(decision_rec.financial_impact.get("unit_price", 100000.0)),
-                    "unit_cost": float(decision_rec.financial_impact.get("unit_cost", 70000.0)),
-                    "stock_on_hand": float(decision_rec.financial_impact.get("stock_on_hand", 100)),
+                    "unit_price": float(product.price),
+                    "unit_cost": float(product.cost),
+                    "stock_on_hand": float(product.stock),
                     "capital_context": {
-                        "capital_exposure": float(decision_rec.financial_impact.get("capital_exposure", 7000000.0))
+                        "capital_exposure": float(decision_rec.capital_exposure)
                     }
                 }
-            except Exception:
-                pass
+            except DecisionNotFoundError:
+                return Response({
+                    "success": False,
+                    "code": "DECISION_NOT_FOUND",
+                    "detail": "Không tìm thấy đề xuất thuộc bộ dữ liệu hiện tại.",
+                }, status=status.HTTP_404_NOT_FOUND)
 
         if not decision_ctx:
-            sku = payload.get("sku", "DEFAULT_SKU")
-            cap_exp = float(payload.get("capital_exposure", 50000000.0))
-            decision_ctx = {
-                "sku": sku,
-                "unit_price": float(payload.get("unit_price", 100000.0)),
-                "unit_cost": float(payload.get("unit_cost", 70000.0)),
-                "stock_on_hand": float(payload.get("stock_on_hand", cap_exp / 70000.0)),
-                "capital_context": {
-                    "capital_exposure": cap_exp
-                }
-            }
+            return Response({
+                "success": False,
+                "code": "SIMULATION_INPUT_REQUIRED",
+                "detail": "Cần chọn một đề xuất có dữ liệu SKU để chạy mô phỏng.",
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         sim_engine = DiscountSimulationEngine()
         sim_001 = sim_engine.simulate_single_scenario(
@@ -233,4 +270,3 @@ class DecisionSimulationView(APIView):
             "sim_001": sim_001,
             "sim_002": sim_002
         }, status=status.HTTP_200_OK)
-

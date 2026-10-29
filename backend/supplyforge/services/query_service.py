@@ -177,6 +177,13 @@ class DashboardQueryService:
                 'totalCapitalExposureVnd': 0.0,
                 'atRiskCapitalVnd': 0.0,
                 'agedCapitalVnd': 0.0,
+                'agedSkuCount': 0,
+                'riskCapitalByClassVnd': {
+                    'CRITICAL': 0.0,
+                    'HIGH_RISK': 0.0,
+                    'MEDIUM_RISK': 0.0,
+                    'LOW_RISK': 0.0,
+                },
                 'capitalStatus': 'NO_DATA',
                 'topRiskSkus': [],
                 'cacheVersion': str(CachePolicy.get_workspace_version(workspace_id)),
@@ -193,6 +200,13 @@ class DashboardQueryService:
         total_capital = 0.0
         at_risk_capital = 0.0
         aged_capital = 0.0
+        aged_sku_count = 0
+        risk_capital_by_class = {
+            'CRITICAL': 0.0,
+            'HIGH_RISK': 0.0,
+            'MEDIUM_RISK': 0.0,
+            'LOW_RISK': 0.0,
+        }
         has_observed_inventory = False
 
         for a in all_assessments:
@@ -213,22 +227,30 @@ class DashboardQueryService:
                 cap_val = 0.0
 
             total_capital += cap_val
+            if a.risk_class in risk_capital_by_class:
+                risk_capital_by_class[a.risk_class] += cap_val
             if a.risk_class in ['CRITICAL', 'HIGH_RISK']:
                 at_risk_capital += cap_val
             if (ev.get('dsls') or 0) > 90:
                 aged_capital += cap_val
+                aged_sku_count += 1
 
         # 2. Extract Top 5 priority SKUs separately (highest capital exposure among CRITICAL/HIGH risk SKUs)
         assessments_list = list(all_assessments)
         assessments_list.sort(
             key=lambda item: (
-                1 if item.risk_class == 'CRITICAL' else (0.5 if item.risk_class == 'HIGH_RISK' else 0),
-                float(item.evidence.get('capital_exposure_vnd', 0) if isinstance(item.evidence, dict) else 0)
+                float(item.evidence.get('capital_exposure_vnd', 0) if isinstance(item.evidence, dict) else 0),
+                1 if item.risk_class == 'CRITICAL' else (0.5 if item.risk_class == 'HIGH_RISK' else 0)
             ),
             reverse=True
         )
         top_risk_skus = []
-        for a in assessments_list[:5]:
+        for a in (
+            item for item in assessments_list
+            if item.risk_class in {'CRITICAL', 'HIGH_RISK'}
+        ):
+            if len(top_risk_skus) == 5:
+                break
             ev = a.evidence if isinstance(a.evidence, dict) else {}
             cap_val = float(ev.get('capital_exposure_vnd') or 0.0)
             top_risk_skus.append({
@@ -253,6 +275,8 @@ class DashboardQueryService:
             'totalCapitalExposureVnd': total_capital,
             'atRiskCapitalVnd': at_risk_capital,
             'agedCapitalVnd': aged_capital,
+            'agedSkuCount': aged_sku_count,
+            'riskCapitalByClassVnd': risk_capital_by_class,
             'capitalStatus': capital_status,
             'topRiskSkus': top_risk_skus,
             'cacheVersion': str(CachePolicy.get_workspace_version(workspace_id)),

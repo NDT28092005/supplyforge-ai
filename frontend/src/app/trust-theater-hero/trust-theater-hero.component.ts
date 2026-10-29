@@ -1,7 +1,6 @@
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import {
   AfterViewInit,
-  ChangeDetectorRef,
   Component,
   ElementRef,
   EventEmitter,
@@ -15,9 +14,11 @@ import {
 import { Router } from '@angular/router';
 import { gsap } from 'gsap';
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
 import { ApiService } from '../api.service';
 import { IngestionStateService } from '../core/state/ingestion-state.service';
+import { DashboardStateService } from '../core/state/dashboard-state.service';
 import { PageMotionDirective } from '../core/motion/page-motion.directive';
 
 interface JourneyScene {
@@ -46,52 +47,46 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
 
   readonly journeyScenes: JourneyScene[] = [
     {
-      eyebrow: 'Chặng 01 / Dữ liệu',
-      title: 'Nạp một file, không thêm một dự án IT.',
-      body: 'Bắt đầu bằng CSV từ sàn hoặc phần mềm bạn đang dùng. Hệ thống kiểm tra cấu trúc, ngày bán và bản ghi trùng trước khi phân tích.',
-      metricLabel: 'Đầu vào',
-      metric: 'File CSV quen thuộc'
+      eyebrow: 'Giai đoạn 01 / Dữ liệu đầu vào',
+      title: 'Chuẩn hóa dữ liệu bán hàng từ nguồn hiện có.',
+      body: 'Bắt đầu từ tệp CSV của sàn bán hàng hoặc hệ thống đang sử dụng. Hệ thống kiểm tra cấu trúc, thời điểm bán và bản ghi trùng trước khi phân tích.',
+      metricLabel: 'Nguồn dữ liệu',
+      metric: 'Tệp CSV vận hành'
     },
     {
-      eyebrow: 'Chặng 02 / Tín hiệu',
-      title: 'Đặt hàng chậm vào đúng bối cảnh.',
-      body: 'SupplyForge đọc sức bán, tồn và giá trị vốn theo nhiều cửa sổ thời gian để phân biệt một tuần chậm với một xu hướng thật.',
-      metricLabel: 'Góc nhìn',
+      eyebrow: 'Giai đoạn 02 / Phân tích thời gian',
+      title: 'Đánh giá tín hiệu bán hàng trong đúng bối cảnh.',
+      body: 'SupplyForge phân tích tốc độ bán, giá trị vốn và mức độ gián đoạn theo nhiều cửa sổ thời gian để phân biệt biến động ngắn hạn với xu hướng cần theo dõi.',
+      metricLabel: 'Cửa sổ quan sát',
       metric: '7 / 30 / 90 ngày'
     },
     {
-      eyebrow: 'Chặng 03 / Hành động',
-      title: 'Biết việc nào nên làm trước.',
-      body: 'Thay vì một điểm rủi ro khó hiểu, bạn nhận được danh sách ưu tiên, lý do phía sau và hướng xử lý để đội ngũ cùng duyệt.',
-      metricLabel: 'Đầu ra',
-      metric: 'SKU → vốn → bước tiếp theo'
+      eyebrow: 'Giai đoạn 03 / Hỗ trợ quyết định',
+      title: 'Ưu tiên danh mục cần được xem xét.',
+      body: 'Thay vì một điểm rủi ro đơn lẻ, đội ngũ nhận được danh sách ưu tiên, các tín hiệu liên quan và phương án để xem xét, phê duyệt và triển khai.',
+      metricLabel: 'Đầu ra phân tích',
+      metric: 'SKU → vốn → phương án'
     }
   ];
 
   localFile: File | null = null;
   showDuplicateFileModal = false;
   isUploading = false;
-  activeWorldScene = 0;
-
   private disposeMotion?: () => void;
-  private scrollListener?: () => void;
-  private resizeListener?: () => void;
-  private scrollFrame = 0;
 
   constructor(
     private apiService: ApiService,
     private ingestionState: IngestionStateService,
+    private dashboardState: DashboardStateService,
     private router: Router,
-    private changeDetector: ChangeDetectorRef,
     @Inject(PLATFORM_ID) private platformId: object
   ) {}
 
   ngAfterViewInit(): void {
     if (!isPlatformBrowser(this.platformId) || !this.pageRoot || !this.journeyRoot) return;
 
-    gsap.registerPlugin(ScrollToPlugin);
+    gsap.registerPlugin(ScrollToPlugin, ScrollTrigger);
     const root = this.pageRoot.nativeElement;
-    const journey = this.journeyRoot.nativeElement;
     let media: gsap.MatchMedia | undefined;
 
     const context = gsap.context(() => {
@@ -112,9 +107,10 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
             .fromTo('[data-motion="header"] .hero-summary', { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.42 }, '-=0.24')
             .fromTo('[data-motion="header"] .hero-actions', { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.35 }, '-=0.18')
             .fromTo('[data-motion="header"] .hero-visual', { autoAlpha: 0, x: desktop ? 24 : 0 }, { autoAlpha: 1, x: 0, duration: 0.65 }, '-=0.5')
-            .fromTo('[data-hero-illustration]', { autoAlpha: 0, y: 22, scale: 1.03 }, { autoAlpha: 0.76, y: 0, scale: 1, duration: 0.7 }, '-=0.52')
             .fromTo('[data-import-window]', { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.42 }, '-=0.34')
             .fromTo('.signal-strip', { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.35 }, '-=0.25');
+
+          if (desktop) this.setupJourneyScroll(root);
 
           return () => timeline.kill();
         },
@@ -127,16 +123,55 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
       context.revert();
     };
 
-    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      this.setupWorldScroll(journey);
-    }
   }
 
   ngOnDestroy(): void {
     this.disposeMotion?.();
-    if (this.scrollListener) window.removeEventListener('scroll', this.scrollListener);
-    if (this.resizeListener) window.removeEventListener('resize', this.resizeListener);
-    if (this.scrollFrame) cancelAnimationFrame(this.scrollFrame);
+  }
+
+  private setupJourneyScroll(root: HTMLElement): void {
+    const journey = this.journeyRoot?.nativeElement;
+    const route = root.querySelector<SVGPathElement>('[data-journey-route]');
+    const steps = Array.from(root.querySelectorAll<HTMLElement>('[data-journey-step]'));
+    const nodes = Array.from(root.querySelectorAll<SVGCircleElement>('[data-journey-node]'));
+    const stageLabel = root.querySelector<HTMLElement>('[data-journey-stage]');
+
+    if (!journey || !route || steps.length === 0 || nodes.length === 0) return;
+
+    const routeLength = route.getTotalLength();
+    gsap.set(route, { strokeDasharray: routeLength, strokeDashoffset: routeLength });
+    gsap.set(nodes, { autoAlpha: 0.48, scale: 0.72, transformOrigin: '50% 50%' });
+
+    const setStage = (stageIndex: number): void => {
+      const completeRatio = (stageIndex + 1) / steps.length;
+
+      gsap.to(route, {
+        strokeDashoffset: routeLength * (1 - completeRatio),
+        duration: 0.32,
+        ease: 'power2.out',
+        overwrite: 'auto'
+      });
+      gsap.to(nodes, {
+        autoAlpha: (index: number) => index <= stageIndex ? 1 : 0.48,
+        scale: (index: number) => index <= stageIndex ? 1 : 0.72,
+        duration: 0.28,
+        ease: 'power2.out',
+        overwrite: 'auto'
+      });
+
+      steps.forEach((step, index) => step.classList.toggle('is-current', index === stageIndex));
+      if (stageLabel) stageLabel.textContent = `0${stageIndex + 1} / 0${steps.length}`;
+    };
+
+    steps.forEach((step, index) => {
+      ScrollTrigger.create({
+        trigger: step,
+        start: 'top 62%',
+        end: 'bottom 38%',
+        onEnter: () => setStage(index),
+        onEnterBack: () => setStage(index),
+      });
+    });
   }
 
   scrollToJourney(): void {
@@ -146,7 +181,7 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
       target.scrollIntoView();
       return;
     }
-    gsap.registerPlugin(ScrollToPlugin);
+    gsap.registerPlugin(ScrollToPlugin, ScrollTrigger);
     gsap.to(window, { duration: 0.75, scrollTo: { y: target, offsetY: 76 }, ease: 'power3.inOut' });
   }
 
@@ -156,7 +191,7 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
       window.scrollTo({ top: 0 });
       return;
     }
-    gsap.registerPlugin(ScrollToPlugin);
+    gsap.registerPlugin(ScrollToPlugin, ScrollTrigger);
     gsap.to(window, { duration: 0.75, scrollTo: { y: 0 }, ease: 'power3.inOut' });
   }
 
@@ -192,11 +227,10 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
 
     this.upload.emit({ file: this.localFile });
     this.isUploading = true;
-    this.ingestionState.setSessionType('INITIAL');
-    this.ingestionState.setFile(this.localFile);
-    this.ingestionState.setErrorMessage('');
+    this.dashboardState.reset();
+    this.ingestionState.beginImport(this.localFile, 'INITIAL');
 
-    this.apiService.uploadCsvV2(this.localFile, 1, 'INITIAL').subscribe({
+    this.apiService.uploadCsvV2(this.localFile, this.apiService.getCurrentWorkspaceId(), 'INITIAL').subscribe({
       next: (res: any) => {
         this.isUploading = false;
 
@@ -216,6 +250,7 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
 
         const profile = res?.profile;
         if (profile) {
+          this.ingestionState.setDatasetStatus('profiling', 'Tệp đã được kiểm tra. Cần xác nhận ánh xạ cột trước khi nhập dữ liệu.');
           const mappingData = {
             headers: profile.headers,
             sampleData: profile.previewRows ? profile.previewRows[0] : null,
@@ -246,61 +281,4 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
     return (file.size / 1024).toFixed(1);
   }
 
-  private setupWorldScroll(journey: HTMLElement): void {
-    const progress = journey.querySelector<SVGPathElement>('[data-world-progress]');
-    const nodes = Array.from(journey.querySelectorAll<SVGCircleElement>('[data-world-node]'));
-    const steps = Array.from(journey.querySelectorAll<HTMLElement>('[data-world-step]'));
-    if (!progress || !nodes.length || !steps.length) return;
-
-    const progressTo = gsap.quickTo(progress, 'strokeDashoffset', { duration: 0.28, ease: 'power2.out' });
-    const nodeScaleTo = nodes.map((node) => gsap.quickTo(node, 'scale', { duration: 0.25, ease: 'power2.out' }));
-    const stepOpacityTo = steps.map((step) => gsap.quickTo(step, 'autoAlpha', { duration: 0.24, ease: 'power2.out' }));
-    const stepYTo = steps.map((step) => gsap.quickTo(step, 'y', { duration: 0.24, ease: 'power2.out' }));
-    const sceneIllustration = journey.querySelector<HTMLElement>('.scene-illustration');
-    const sceneIllustrationYTo = sceneIllustration
-      ? gsap.quickTo(sceneIllustration, 'yPercent', { duration: 0.35, ease: 'power2.out' })
-      : undefined;
-    const normalizeProgress = gsap.utils.clamp(0, 1);
-    const mapScene = gsap.utils.mapRange(0, 1, 0, steps.length - 1);
-    const routeLength = progress.getTotalLength();
-
-    progress.style.strokeDasharray = `${routeLength}`;
-    progress.style.strokeDashoffset = `${routeLength}`;
-    gsap.set(steps, { autoAlpha: 0.4, y: 10 });
-    gsap.set(nodes, { transformOrigin: 'center center', scale: 0.76 });
-
-    const update = () => {
-      const scrollableDistance = Math.max(1, journey.offsetHeight - window.innerHeight);
-      const rawProgress = -journey.getBoundingClientRect().top / scrollableDistance;
-      const progressValue = normalizeProgress(rawProgress);
-      const sceneValue = mapScene(progressValue);
-      const activeScene = Math.min(steps.length - 1, Math.floor(sceneValue + 0.45));
-
-      progressTo(routeLength * (1 - progressValue));
-      sceneIllustrationYTo?.(gsap.utils.mapRange(0, 1, 2, -8, progressValue));
-      nodes.forEach((_, index) => nodeScaleTo[index](index === activeScene ? 1.12 : 0.76));
-      steps.forEach((_, index) => {
-        const distance = Math.abs(index - sceneValue);
-        stepOpacityTo[index](distance < 0.8 ? 1 : 0.36);
-        stepYTo[index](distance < 0.8 ? 0 : 10);
-      });
-
-      if (activeScene !== this.activeWorldScene) {
-        this.activeWorldScene = activeScene;
-        this.changeDetector.markForCheck();
-      }
-    };
-
-    this.scrollListener = () => {
-      if (this.scrollFrame) return;
-      this.scrollFrame = requestAnimationFrame(() => {
-        this.scrollFrame = 0;
-        update();
-      });
-    };
-    this.resizeListener = this.scrollListener;
-    window.addEventListener('scroll', this.scrollListener, { passive: true });
-    window.addEventListener('resize', this.resizeListener, { passive: true });
-    update();
-  }
 }

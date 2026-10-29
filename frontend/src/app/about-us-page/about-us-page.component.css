@@ -201,16 +201,6 @@
   padding: 1.2rem;
 }
 
-.about-signal-image {
-  border: 1px solid rgba(206, 234, 221, .2);
-  border-radius: .72rem;
-  display: block;
-  margin: -.1rem 0 1.15rem;
-  max-height: 168px;
-  object-fit: cover;
-  width: 100%;
-}
-
 .about-signal-card strong {
   font-size: 1.22rem;
   line-height: 1.35;
@@ -296,4 +286,63 @@
   .internal-hero__copy > p:not(.eyebrow) { font-size: .9rem; }
   .about-section { padding: 4.8rem 0; }
   .section-heading h2 { font-size: 2.3rem; }
+}
+
+/* Corporate content frame: every claim sits in a readable, bounded measure. */
+.about-page {
+  max-width: var(--workspace-max);
+}
+
+.about-page .internal-hero {
+  grid-template-columns: minmax(0, 1.18fr) minmax(18rem, .82fr);
+  min-height: 0;
+  padding: clamp(1.75rem, 4vw, 3.75rem);
+}
+
+.about-page .internal-hero h1 {
+  font-size: clamp(2.35rem, 4vw, 4.1rem);
+  max-width: 13ch;
+}
+
+.about-page .internal-hero__copy > p:not(.eyebrow) {
+  font-size: .94rem;
+  max-width: 37rem;
+}
+
+.about-page .about-signal-card {
+  align-self: stretch;
+  border-radius: .9rem;
+  display: grid;
+  gap: 1rem;
+  justify-content: stretch;
+  padding: clamp(1.35rem, 3vw, 2rem);
+}
+
+.about-page .about-signal-card strong {
+  font-size: clamp(1.2rem, 2.2vw, 1.65rem);
+  line-height: 1.2;
+}
+
+.about-page .about-signal-card p {
+  font-size: .8rem;
+  line-height: 1.65;
+}
+
+.about-page .about-section {
+  padding-block: clamp(3.75rem, 8vw, 6rem);
+}
+
+.about-page .context-grid {
+  gap: .85rem;
+}
+
+.about-page .context-grid article,
+.about-page .principle-rail article {
+  min-width: 0;
+}
+
+@media (max-width: 820px) {
+  .about-page .internal-hero {
+    grid-template-columns: 1fr;
+  }
 }

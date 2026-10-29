@@ -56,6 +56,15 @@ export class HeaderComponent implements OnInit {
     return this.router.url.startsWith('/app');
   }
 
+  get canOpenWorkspace(): boolean {
+    return !!this.user && !this.isAppRoute;
+  }
+
+  openWorkspace(): void {
+    this.closeMobileMenu();
+    this.router.navigate(['/app/dashboard']);
+  }
+
   loadNotifications(): void {
     this.isLoadingNoti = true;
     this.apiService.getNotifications(1).subscribe({

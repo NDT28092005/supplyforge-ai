@@ -50,23 +50,23 @@ export class ServicesPageComponent implements OnInit {
   private defaultServices(): any[] {
     return [
       {
-        title: 'Kiểm tra và chuẩn hóa file',
-        desc: 'Đối chiếu cột, ngày bán và bản ghi trùng trước khi dữ liệu được dùng để phân tích.',
-        result: 'Đầu vào rõ ràng hơn'
+        title: 'Xác thực và chuẩn hóa dữ liệu',
+        desc: 'Đối chiếu trường dữ liệu, ngày bán và bản ghi trùng trước khi dữ liệu được sử dụng để phân tích.',
+        result: 'Dữ liệu đầu vào đáng tin cậy'
       },
       {
-        title: 'Nhận diện hàng bán chậm có giải thích',
-        desc: 'Đọc sức bán theo nhiều cửa sổ thời gian và đặt cạnh tồn kho, giá trị vốn liên quan.',
-        result: 'Biết SKU cần xem trước'
+        title: 'Nhận diện rủi ro chậm luân chuyển',
+        desc: 'Đánh giá tốc độ bán theo nhiều cửa sổ thời gian cùng tồn kho và giá trị vốn liên quan.',
+        result: 'Xác định SKU cần ưu tiên'
       },
       {
-        title: 'Ước tính tác động lên dòng vốn',
-        desc: 'Nhìn phần vốn đang bị giữ trong hàng chậm để đội ngũ cân nhắc hành động phù hợp.',
-        result: 'Biết tiền đang ở đâu'
+        title: 'Đánh giá mức độ sử dụng vốn',
+        desc: 'Định lượng giá trị vốn liên quan đến danh mục có tín hiệu chậm luân chuyển.',
+        result: 'Nhận diện vùng vốn cần rà soát'
       },
       {
-        title: 'Đề xuất hướng xử lý để duyệt',
-        desc: 'Chuyển tín hiệu thành phương án như theo dõi, bán kèm hoặc xả hàng, luôn kèm dữ liệu nguồn.',
+        title: 'Hỗ trợ phương án xử lý',
+        desc: 'Chuyển tín hiệu thành phương án theo dõi, kết hợp bán hàng hoặc điều chỉnh giá, luôn kèm dữ liệu nguồn.',
         result: 'Quyết định có căn cứ'
       }
     ];

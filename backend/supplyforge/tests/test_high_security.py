@@ -302,3 +302,9 @@ class ReadReplicaRouterTests(SimpleTestCase):
         self.assertIsNone(router.db_for_read(User, instance=User()))
         self.assertEqual(router.db_for_write(User), 'default')
         self.assertFalse(router.allow_migrate('replica', 'supplyforge'))
+
+    @override_settings(DATABASES={'default': {}, 'replica': {}})
+    def test_ingestion_workflow_reads_stay_on_primary(self):
+        """A newly uploaded session must be readable by the next request."""
+        router = ReadReplicaRouter()
+        self.assertEqual(router.db_for_read(IngestionSession), 'default')

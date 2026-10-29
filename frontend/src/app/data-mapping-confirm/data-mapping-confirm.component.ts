@@ -45,6 +45,7 @@ export class DataMappingConfirmComponent implements OnInit, OnDestroy, OnChanges
 
   userOverriddenKeys: Set<string> = new Set();
   isProcessing = false;
+  processingError = '';
   private stateSub?: Subscription;
 
   constructor(
@@ -97,7 +98,13 @@ export class DataMappingConfirmComponent implements OnInit, OnDestroy, OnChanges
           this.detectMapping();
         }
       },
-      error: (err) => console.warn('[DataMappingConfirm] Could not recover session:', err)
+      error: (err: any) => {
+        if (this.isSessionMissingError(err)) {
+          this.resetMissingSession();
+          return;
+        }
+        this.processingError = err?.error?.error || 'Không thể khôi phục phiên nạp dữ liệu. Vui lòng thử lại.';
+      }
     });
   }
 
@@ -194,7 +201,7 @@ export class DataMappingConfirmComponent implements OnInit, OnDestroy, OnChanges
   }
 
   confirm(): void {
-    if (this.isBlocked()) return;
+    if (this.isBlocked() || this.isProcessing) return;
     this.confirmMapping.emit({ finalMapping: this.finalMapping });
 
     const state = this.ingestionState.state;
@@ -203,9 +210,15 @@ export class DataMappingConfirmComponent implements OnInit, OnDestroy, OnChanges
 
     if (this.router.url === '/app/import/mapping') {
       this.isProcessing = true;
+      this.processingError = '';
       this.ingestionState.setProcessingBatch(true);
+      this.ingestionState.setDatasetStatus('processing', 'Đang chuẩn hóa dữ liệu, kiểm tra trùng lặp và cập nhật báo cáo.');
 
       const onComplete = (profileRes: any, processRes?: any) => {
+        if (!processRes || processRes.status === 'REJECT') {
+          this.handleProcessingError(processRes?.error || 'Hệ thống không thể hoàn tất việc nhập dữ liệu.');
+          return;
+        }
         this.isProcessing = false;
         this.ingestionState.setProcessingBatch(false);
         const baseProfile = profileRes?.profile || profileRes || {};
@@ -224,10 +237,13 @@ export class DataMappingConfirmComponent implements OnInit, OnDestroy, OnChanges
           temporal_range: proc.temporal_range ?? baseProfile.temporal_range ?? null
         };
         this.ingestionState.setProfileData(profileData);
+        this.ingestionState.setDatasetStatus('ready', 'Bộ dữ liệu đã sẵn sàng để phân tích.');
         this.router.navigate(['/app/import/profile', activeSessionId || 'default']);
       };
 
       if (activeSessionId) {
+        // Profiling enriches the report; importing the operational dataset is
+        // the transaction that determines whether this flow is successful.
         const profile$ = this.apiService.triggerDatasetProfiling(activeSessionId, this.finalMapping).pipe(
           catchError(err => {
             console.warn('Dataset profiling error:', err);
@@ -235,28 +251,25 @@ export class DataMappingConfirmComponent implements OnInit, OnDestroy, OnChanges
           })
         );
 
-        const process$ = targetFile
-          ? this.apiService.processFile(
-              targetFile,
-              this.finalMapping,
-              'user_default_001',
-              state.sessionType,
-              state.sessionType === 'INITIAL',
-              activeSessionId,
-            ).pipe(
-              catchError(err => {
-                console.warn('Process file error:', err);
-                return of(null);
-              })
-            )
-          : of(null);
+        // When a page is refreshed, File is intentionally unavailable in
+        // sessionStorage. The backend safely reopens the uploaded session file.
+        const process$ = this.apiService.processFile(
+          targetFile,
+          this.finalMapping,
+          'user_default_001',
+          state.sessionType,
+          state.sessionType === 'INITIAL',
+          activeSessionId,
+        );
 
         forkJoin([profile$, process$]).subscribe({
           next: ([profileRes, processRes]) => onComplete(profileRes, processRes),
-          error: () => {
-            this.isProcessing = false;
-            this.ingestionState.setProcessingBatch(false);
-            this.router.navigate(['/app/dashboard']);
+          error: (err: any) => {
+            if (this.isSessionMissingError(err)) {
+              this.resetMissingSession();
+              return;
+            }
+            this.handleProcessingError(err?.error?.error || 'Không thể nhập dữ liệu. Dữ liệu hiện tại chưa bị thay thế.');
           }
         });
       } else if (targetFile) {
@@ -269,17 +282,39 @@ export class DataMappingConfirmComponent implements OnInit, OnDestroy, OnChanges
           activeSessionId,
         ).subscribe({
           next: (processRes) => onComplete(null, processRes),
-          error: () => {
-            this.isProcessing = false;
-            this.ingestionState.setProcessingBatch(false);
-            this.router.navigate(['/app/dashboard']);
+          error: (err: any) => {
+            if (this.isSessionMissingError(err)) {
+              this.resetMissingSession();
+              return;
+            }
+            this.handleProcessingError(err?.error?.error || 'Không thể nhập dữ liệu. Dữ liệu hiện tại chưa bị thay thế.');
           }
         });
       } else {
-        this.isProcessing = false;
-        this.ingestionState.setProcessingBatch(false);
-        this.router.navigate(['/app/dashboard']);
+        this.handleProcessingError('Không tìm thấy tệp nguồn của phiên nhập dữ liệu. Vui lòng tải lại tệp.');
       }
     }
+  }
+
+  private handleProcessingError(message: string): void {
+    this.isProcessing = false;
+    this.processingError = message;
+    this.ingestionState.setProcessingBatch(false);
+    this.ingestionState.setErrorMessage(message);
+  }
+
+  private isSessionMissingError(err: any): boolean {
+    const code = err?.error?.code;
+    const message = String(err?.error?.error || err?.message || '').toLowerCase();
+    return err?.status === 404 || code === 'SESSION_NOT_FOUND' || message.includes('ingestionsession');
+  }
+
+  private resetMissingSession(): void {
+    const message = 'Phiên nạp dữ liệu không còn tồn tại hoặc không thuộc workspace hiện tại. Vui lòng tải lại tệp CSV.';
+    this.isProcessing = false;
+    this.processingError = message;
+    this.ingestionState.setProcessingBatch(false);
+    this.ingestionState.invalidateSession(message);
+    this.router.navigate(['/app/import']);
   }
 }

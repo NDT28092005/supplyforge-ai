@@ -3,42 +3,56 @@
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 1. TIÊU ĐỀ TRANG                                                   -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div data-motion="header" class="operations-hero"
-    class="bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  <div data-motion="header"
+    class="operations-hero bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div class="space-y-1">
       <h1 class="font-bold text-2xl sm:text-3xl text-slate-900 tracking-tight">
-        Khuyến Nghị Chiết Khấu & Giải Phóng Vốn Tồn
+        Khuyến nghị xử lý hàng tồn và thu hồi vốn
       </h1>
       <p class="text-slate-500 text-sm font-normal">
-        Hệ thống phân tích rủi ro bán chậm và đề xuất mức giảm giá tối ưu để thu hồi tiền mặt về tài khoản.
+        Phân tích rủi ro bán chậm và xây dựng phương án xử lý tồn kho để hỗ trợ thu hồi dòng tiền.
       </p>
     </div>
 
-    <div class="flex items-center gap-3 shrink-0">
-      <button (click)="openCreatePlanModal()"
-        class="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl transition-all cursor-pointer active:scale-95">
-        + Tạo Kế Hoạch Xả Hàng
+    <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 shrink-0 w-full sm:w-auto">
+      <button (click)="openCreatePlanModal()" [disabled]="dataState !== 'ready'"
+        class="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl transition-all cursor-pointer active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+        Tạo kế hoạch xử lý
       </button>
       <button (click)="loadDecisions()" [disabled]="isLoading"
-        class="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl transition-all cursor-pointer active:scale-95 disabled:opacity-50">
+        class="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl transition-all cursor-pointer active:scale-95 disabled:opacity-50">
         <span *ngIf="!isLoading">Cập nhật dữ liệu</span>
         <span *ngIf="isLoading">Đang tải...</span>
       </button>
     </div>
   </div>
 
+  <div *ngIf="dataState === 'loading'" role="status" class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
+    <span class="mx-auto block h-7 w-7 rounded-full border-2 border-indigo-200 border-t-indigo-600 animate-spin"></span>
+    <h3 class="text-base font-bold text-slate-900">Đang tải khuyến nghị xử lý</h3>
+    <p class="text-xs sm:text-sm text-slate-500">Đang kiểm tra các phương án được tạo từ bộ dữ liệu hiện tại.</p>
+  </div>
+
+  <div *ngIf="dataState === 'error'" role="alert" class="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-3">
+    <h3 class="text-base font-bold text-rose-900">Chưa thể tải khuyến nghị xử lý</h3>
+    <p class="text-xs sm:text-sm text-rose-700">{{ errorMessage }}</p>
+    <button (click)="loadDecisions()" class="px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-semibold text-xs transition-all cursor-pointer">Thử tải lại</button>
+  </div>
+
   <!-- Thông báo khi chưa có dữ liệu -->
-  <div *ngIf="decisions.length === 0 && !isLoading"
+  <div *ngIf="dataState === 'empty'"
     class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
     <h3 class="text-base font-bold text-slate-900">Chưa có đề xuất giải phóng hàng tồn</h3>
     <p class="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
       Vui lòng nạp tệp CSV lịch sử đơn hàng mới để hệ thống đo lường và đưa ra các phương án thu hồi vốn.
     </p>
-    <button (click)="navigateTo.emit('csv-upload')"
+    <button (click)="goToImport()"
       class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition-all cursor-pointer inline-block">
-      Tải tệp CSV mới ngay
+      Nạp tệp CSV
     </button>
   </div>
+
+  <ng-container *ngIf="dataState === 'ready'">
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 2. TỔNG QUAN CHỈ SỐ VỐN & THU HỒI (KPI METRICS)                    -->
@@ -51,7 +65,7 @@
       <div class="text-2xl sm:text-3xl font-bold text-slate-900 font-mono">
         {{ totalAtRiskSkus }} <span class="text-xs font-sans font-normal text-slate-500">mã</span>
       </div>
-      <p class="text-xs text-slate-500">Có nguy cơ bán chậm & gánh vốn kéo dài</p>
+      <p class="text-xs text-slate-500">Có tín hiệu tiêu thụ chậm cần được đánh giá</p>
     </div>
 
     <!-- Card 2: Vốn đang đọng -->
@@ -60,7 +74,7 @@
       <div class="text-2xl sm:text-3xl font-bold text-slate-900 font-mono">
         {{ formatCurrency(totalCapitalExposure) }}
       </div>
-      <p class="text-xs text-slate-500">Tổng tiền giá vốn bị chôn ở hàng bán chậm</p>
+      <p class="text-xs text-slate-500">Giá vốn của các mã hàng có dấu hiệu bán chậm</p>
     </div>
 
     <!-- Card 3: Vốn dự kiến thu hồi -->
@@ -69,16 +83,16 @@
       <div class="text-2xl sm:text-3xl font-bold text-emerald-700 font-mono">
         {{ formatCurrency(totalExpectedRecovery) }}
       </div>
-      <p class="text-xs text-slate-500">Số tiền mặt thực tế thu về ví sau khi áp dụng giảm giá</p>
+      <p class="text-xs text-slate-500">Giá trị dự kiến thu hồi sau khi áp dụng phương án xử lý</p>
     </div>
 
     <!-- Card 4: Mức ưu tiên cao -->
     <div class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2">
-      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Cần xử lý gấp</span>
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Ưu tiên cao</span>
       <div class="text-2xl sm:text-3xl font-bold text-amber-700 font-mono">
         {{ highPriorityCount }} <span class="text-xs font-sans font-normal text-slate-500">mã</span>
       </div>
-      <p class="text-xs text-slate-500">Khuyên nên thực thi ngay trong tuần này</p>
+      <p class="text-xs text-slate-500">Các mã cần được ưu tiên xem xét trong kỳ vận hành hiện tại</p>
     </div>
 
   </div>
@@ -90,7 +104,7 @@
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
       <div>
         <h3 class="font-bold text-base text-slate-900">Tiến trình thu hồi tiền mặt từ kho</h3>
-        <p class="text-xs text-slate-500">Tỷ lệ vốn dự kiến giải phóng và lượng tiền mặt thực thu về ví cửa hàng</p>
+        <p class="text-xs text-slate-500">Tỷ lệ vốn dự kiến giải phóng so với tổng giá vốn đang chịu rủi ro</p>
       </div>
       <span class="text-xs font-mono font-bold text-slate-700 bg-slate-100 px-3 py-1 rounded-lg">
         Thu hồi: {{ formatPercent(totalExpectedRecovery / totalCapitalExposure) }} giá vốn
@@ -107,7 +121,7 @@
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs">
       <div class="p-3 rounded-xl border border-slate-200 flex justify-between items-center bg-slate-50/50">
-        <span class="text-slate-600 font-semibold">Tiền mặt về ví cửa hàng</span>
+        <span class="text-slate-600 font-semibold">Giá trị dự kiến thu hồi</span>
         <span class="font-mono font-bold text-slate-900 text-sm">{{ formatCurrency(totalExpectedRecovery) }}</span>
       </div>
       <div class="p-3 rounded-xl border border-slate-200 flex justify-between items-center bg-slate-50/50">
@@ -126,16 +140,16 @@
     <!-- Bộ lọc & Công cụ tìm kiếm nâng cao (SEARCH-001, FILTER-001, SORT-001, EXPORT-001) -->
     <div class="space-y-4 border-b border-slate-100 pb-4">
       <!-- Hàng 1: Nút Xuất báo cáo -->
-      <div class="flex items-center justify-between gap-3">
-        <h3 class="font-bold text-base text-slate-900">Danh sách Đề xuất & Phương án Xả hàng</h3>
-        <div class="flex items-center gap-2 shrink-0">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <h3 class="font-bold text-base text-slate-900">Đề xuất xử lý tồn kho</h3>
+        <div class="flex flex-wrap items-center gap-2 shrink-0">
           <button (click)="exportDecisionReport('csv')"
             class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
-            <span>Xuất file CSV</span>
+            <span>Xuất CSV</span>
           </button>
           <button (click)="exportDecisionReport('excel')"
             class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
-            <span>Xuất file Excel</span>
+            <span>Xuất Excel</span>
           </button>
         </div>
       </div>
@@ -166,7 +180,7 @@
           <select [(ngModel)]="selectedPriority" (change)="onFilterChange()"
             class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400 cursor-pointer">
             <option value="ALL">Ưu tiên: Tất cả</option>
-            <option value="P1">P1 - Ưu tiên cực cao</option>
+            <option value="P1">P1 - Ưu tiên khẩn cấp</option>
             <option value="P2">P2 - Ưu tiên cao</option>
             <option value="P3">P3 - Ưu tiên trung bình</option>
             <option value="P4">P4 - Ưu tiên thấp</option>
@@ -178,7 +192,7 @@
           <select [(ngModel)]="selectedActionType" (change)="onFilterChange()"
             class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400 cursor-pointer">
             <option value="ALL">Phương án: Tất cả</option>
-            <option value="CLEARANCE">Xả kho gấp</option>
+            <option value="CLEARANCE">Giảm tồn kho ưu tiên</option>
             <option value="DISCOUNT">Chiết khấu giá</option>
             <option value="BUNDLE">Bán kèm combo</option>
             <option value="PROMOTION">Khuyến mãi đẩy đơn</option>
@@ -190,8 +204,8 @@
         <div>
           <select [(ngModel)]="selectedSortField" (change)="onFilterChange()"
             class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400 cursor-pointer">
-            <option value="priority">Sắp xếp: Mức ưu tiên (Rank)</option>
-            <option value="capital">Sắp xếp: Vốn đọng (VND)</option>
+            <option value="priority">Sắp xếp: Mức ưu tiên</option>
+            <option value="capital">Sắp xếp: Vốn tồn đọng (VND)</option>
             <option value="recovery">Sắp xếp: Thu hồi dự kiến</option>
             <option value="risk">Sắp xếp: Xác suất rủi ro</option>
           </select>
@@ -222,12 +236,13 @@
 
             <td class="py-3.5 px-4 text-center whitespace-nowrap">
               <span class="inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold border" [ngClass]="{
-                  'bg-red-50 text-red-700 border-red-200': item.risk.class === 'HIGH_RISK' || item.risk.class === 'CRITICAL',
+                  'bg-rose-100 text-rose-900 border-rose-300': item.risk.class === 'CRITICAL',
+                  'bg-red-50 text-red-700 border-red-200': item.risk.class === 'HIGH_RISK',
                   'bg-amber-50 text-amber-700 border-amber-200': item.risk.class === 'MEDIUM_RISK',
                   'bg-emerald-50 text-emerald-700 border-emerald-200': item.risk.class === 'LOW_RISK'
                 }">
-                {{ item.risk.class === 'HIGH_RISK' || item.risk.class === 'CRITICAL' ? 'Rủi ro cao' : (item.risk.class
-                === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'An toàn') }}
+                {{ item.risk.class === 'CRITICAL' ? 'Rủi ro rất cao' : (item.risk.class === 'HIGH_RISK' ? 'Rủi ro cao' : (item.risk.class
+                === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'Rủi ro thấp')) }}
               </span>
             </td>
 
@@ -278,24 +293,24 @@
     <!-- Header section -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
       <div>
-        <h3 class="font-bold text-base text-slate-900">Danh Sách Kế Hoạch Xả Hàng & Theo Dõi Hiệu Quả</h3>
+        <h3 class="font-bold text-base text-slate-900">Kế hoạch xử lý tồn kho và theo dõi hiệu quả</h3>
         <p class="text-xs text-slate-500">
-          Mọi đề xuất từ AI bắt buộc phải được Chủ cửa hàng xem xét và xác nhận trước khi thực thi. Ghi nhận kết quả
-          thực tế để đánh giá độ chính xác của AI.
+          Đề xuất cần được người phụ trách xem xét và phê duyệt trước khi triển khai. Kết quả thực tế được lưu lại để
+          đối chiếu với dự báo.
         </p>
       </div>
-      <div class="flex items-center gap-2 shrink-0">
+      <div class="flex flex-wrap items-center gap-2 shrink-0">
         <button (click)="exportActionPlanReport('csv')"
           class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold rounded-xl transition-all cursor-pointer">
-          Xuất file CSV
+          Xuất CSV
         </button>
         <button (click)="exportActionPlanReport('excel')"
           class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl transition-all cursor-pointer">
-          Xuất file Excel
+          Xuất Excel
         </button>
         <button (click)="openCreatePlanModal()"
           class="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-3.5 py-2 rounded-xl transition-all cursor-pointer shrink-0">
-          + Tạo kế hoạch xả hàng
+          Tạo kế hoạch xử lý
         </button>
       </div>
     </div>
@@ -307,19 +322,19 @@
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
         <div class="p-2.5 rounded-lg border bg-white border-slate-200 text-slate-800 font-medium">
           <span class="block text-[10px] text-slate-400 uppercase font-mono">Bước 1</span>
-          1. AI Đề Xuất (Bản Nháp)
+          AI đề xuất bản nháp
         </div>
         <div class="p-2.5 rounded-lg border bg-white border-slate-200 text-slate-800 font-medium">
           <span class="block text-[10px] text-slate-400 uppercase font-mono">Bước 2</span>
-          2. Chủ Cửa Hàng Duyệt
+          Người phụ trách phê duyệt
         </div>
         <div class="p-2.5 rounded-lg border bg-white border-slate-200 text-slate-800 font-medium">
           <span class="block text-[10px] text-slate-400 uppercase font-mono">Bước 3</span>
-          3. Bắt Đầu Thực Thi
+          Triển khai phương án
         </div>
         <div class="p-2.5 rounded-lg border bg-white border-slate-200 text-slate-800 font-medium">
           <span class="block text-[10px] text-slate-400 uppercase font-mono">Bước 4</span>
-          4. Đo Lường Kết Quả Thực Tế
+          Ghi nhận kết quả thực tế
         </div>
       </div>
     </div>
@@ -329,14 +344,14 @@
       <table class="w-full text-left text-xs border-collapse">
         <thead>
           <tr class="bg-slate-50 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200">
-            <th class="py-3.5 px-4 whitespace-nowrap">Mã Kế Hoạch</th>
-            <th class="py-3.5 px-4 whitespace-nowrap">Tên Chiến Dịch</th>
-            <th class="py-3.5 px-4 whitespace-nowrap">Mã SP</th>
-            <th class="py-3.5 px-4 whitespace-nowrap">Chiến Lược</th>
-            <th class="py-3.5 px-4 text-right whitespace-nowrap">Thu Hồi Vốn (Dự Kiến ➔ Thực Tế)</th>
-            <th class="py-3.5 px-4 text-center whitespace-nowrap">Sản Lượng (Dự Kiến ➔ Thực Tế)</th>
-            <th class="py-3.5 px-4 text-center whitespace-nowrap">Trạng Thái</th>
-            <th class="py-3.5 px-4 text-right whitespace-nowrap">Thao Tác Duyệt & Đánh Giá</th>
+            <th class="py-3.5 px-4 whitespace-nowrap">Mã kế hoạch</th>
+            <th class="py-3.5 px-4 whitespace-nowrap">Tên chiến dịch</th>
+            <th class="py-3.5 px-4 whitespace-nowrap">Mã sản phẩm</th>
+            <th class="py-3.5 px-4 whitespace-nowrap">Phương án</th>
+            <th class="py-3.5 px-4 text-right whitespace-nowrap">Thu hồi vốn dự kiến / thực tế</th>
+            <th class="py-3.5 px-4 text-center whitespace-nowrap">Sản lượng dự kiến / thực tế</th>
+            <th class="py-3.5 px-4 text-center whitespace-nowrap">Trạng thái</th>
+            <th class="py-3.5 px-4 text-right whitespace-nowrap">Phê duyệt và đánh giá</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 bg-white">
@@ -417,26 +432,26 @@
               <!-- Nút xác nhận duyệt (DRAFT -> CONFIRMED) -->
               <button *ngIf="plan.status === 'DRAFT'" (click)="confirmMerchantPlan(plan)"
                 class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-700 hover:bg-blue-800 text-white transition-all cursor-pointer">
-                ✓ Duyệt kế hoạch
+                Phê duyệt kế hoạch
               </button>
 
               <!-- Nút bắt đầu thực thi (CONFIRMED -> IN_PROGRESS) -->
               <button *ngIf="plan.status === 'CONFIRMED'" (click)="startExecutingPlan(plan)"
                 class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-700 hover:bg-amber-800 text-white transition-all cursor-pointer">
-                ▶ Thực thi
+                Bắt đầu triển khai
               </button>
 
               <!-- Nút ghi nhận kết quả thực tế (ACT-004) -->
               <button *ngIf="['IN_PROGRESS', 'COMPLETED', 'CONFIRMED'].includes(plan.status)"
                 (click)="openOutcomeModal(plan)"
                 class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer">
-                📊 Ghi nhận kết quả
+                Ghi nhận kết quả
               </button>
             </td>
 
           </tr>
           <tr *ngIf="actionPlans.length === 0">
-            <td colspan="8" class="py-6 text-center text-slate-500">Chưa có kế hoạch xả hàng nào được tạo.</td>
+            <td colspan="8" class="py-6 text-center text-slate-500">Chưa có kế hoạch xử lý tồn kho nào được tạo.</td>
           </tr>
         </tbody>
       </table>
@@ -501,7 +516,7 @@
 
             <div class="bg-white p-3 rounded-xl border border-slate-200 space-y-1.5">
               <div class="flex justify-between font-semibold text-slate-700">
-                <span>Thời gian xả kho</span>
+                <span>Thời gian triển khai</span>
                 <span class="font-mono font-bold text-slate-900">{{ simDurationDays }} ngày</span>
               </div>
               <div class="flex items-center gap-2">
@@ -519,38 +534,45 @@
             </div>
           </div>
 
-          <!-- Kết quả mô phỏng (5 chỉ số cơ bản) -->
-          <div class="space-y-1.5">
+          <p *ngIf="isSimulating" class="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-800">
+            Đang tính toán kịch bản từ dữ liệu của SKU.
+          </p>
+          <p *ngIf="!isSimulating && simulationError" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+            {{ simulationError }}
+          </p>
+
+          <!-- Kết quả mô phỏng chỉ hiển thị khi dịch vụ trả về dữ liệu. -->
+          <div *ngIf="sim001Result" class="space-y-1.5">
             <span class="font-semibold text-slate-600 block">Kết quả tính toán dự kiến:</span>
             <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
               <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
                 <span class="text-[10px] text-slate-500 font-medium block">Sản lượng bán</span>
-                <span class="font-mono font-bold text-slate-900 text-sm block">{{ sim001Result?.expected_units_sold || 0
+                <span class="font-mono font-bold text-slate-900 text-sm block">{{ sim001Result?.expected_units_sold
                   }} SP</span>
               </div>
 
               <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
                 <span class="text-[10px] text-slate-500 font-medium block">Doanh thu</span>
                 <span class="font-mono font-bold text-slate-900 text-sm block">{{
-                  formatCurrency(sim001Result?.expected_revenue || 0) }}</span>
+                  formatCurrency(sim001Result?.expected_revenue) }}</span>
               </div>
 
               <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
                 <span class="text-[10px] text-slate-500 font-medium block">Vốn thu hồi</span>
                 <span class="font-mono font-bold text-emerald-700 text-sm block">{{
-                  formatCurrency(sim001Result?.estimated_recovery || 0) }}</span>
+                  formatCurrency(sim001Result?.estimated_recovery) }}</span>
               </div>
 
               <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
                 <span class="text-[10px] text-slate-500 font-medium block">Chi phí giảm giá</span>
                 <span class="font-mono font-bold text-slate-900 text-sm block">{{
-                  formatCurrency(sim001Result?.discount_cost || 0) }}</span>
+                  formatCurrency(sim001Result?.discount_cost) }}</span>
               </div>
 
               <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
                 <span class="text-[10px] text-slate-500 font-medium block">Vốn còn đọng</span>
                 <span class="font-mono font-bold text-slate-900 text-sm block">{{
-                  formatCurrency(sim001Result?.remaining_exposure || 0) }}</span>
+                  formatCurrency(sim001Result?.remaining_exposure) }}</span>
               </div>
             </div>
           </div>
@@ -559,7 +581,7 @@
         <!-- ═══════════════════════════════════════════════════════════════════ -->
         <!-- SO SÁNH CÁC MỨC GIẢM GIÁ (SIM-002)                                  -->
         <!-- ═══════════════════════════════════════════════════════════════════ -->
-        <div class="p-5 rounded-xl border border-slate-200 bg-white space-y-3">
+        <div *ngIf="sim002Result" class="p-5 rounded-xl border border-slate-200 bg-white space-y-3">
           <div class="flex items-center justify-between border-b border-slate-100 pb-2">
             <h4 class="font-bold text-sm text-slate-900">So sánh các kịch bản giảm giá</h4>
             <span class="text-slate-500">So sánh trong {{ simDurationDays }} ngày</span>
@@ -616,10 +638,10 @@
       </div>
 
       <!-- Modal Footer -->
-      <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-2 shrink-0">
+      <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-end gap-2 shrink-0">
         <button (click)="openCreatePlanModal(selectedDecision)"
           class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer">
-          + Tạo Kế Hoạch Xả Hàng
+          Tạo kế hoạch xử lý
         </button>
         <button *ngIf="['RECOMMENDED', 'REVIEWED'].includes(selectedDecision.decision.status)"
           (click)="acceptDecision(selectedDecision)"
@@ -679,32 +701,33 @@
     </div>
   </div>
 
-  <!-- Modal Tạo Kế Hoạch Xả Hàng -->
+  <!-- Modal tạo kế hoạch xử lý tồn kho -->
   <div *ngIf="isCreatePlanModalOpen" (click)="closeCreatePlanModal()"
     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
     <div (click)="$event.stopPropagation()"
       class="bg-white rounded-2xl border border-slate-200 p-6 max-w-md w-full space-y-4 shadow-xl">
-      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-        <h3 class="font-bold text-base text-slate-900">Tạo Kế Hoạch Xả Hàng</h3>
-        <button (click)="closeCreatePlanModal()" class="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+      <div class="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <h3 class="font-bold text-base text-slate-900">Tạo kế hoạch xử lý tồn kho</h3>
+        <button (click)="closeCreatePlanModal()"
+          class="text-xs text-slate-500 hover:text-slate-900 font-semibold shrink-0" aria-label="Đóng biểu mẫu">Đóng</button>
       </div>
 
       <div class="space-y-3 text-xs">
         <div class="space-y-1">
-          <label class="font-semibold text-slate-700">Tên Chiến Dịch:</label>
-          <input type="text" [(ngModel)]="planCampaign" placeholder="Ví dụ: Chiến dịch xả hàng CRIT-024"
+          <label class="font-semibold text-slate-700">Tên chiến dịch:</label>
+          <input type="text" [(ngModel)]="planCampaign" placeholder="Ví dụ: Xử lý tồn kho CRIT-024"
             class="w-full bg-white border border-slate-200 text-slate-900 font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div class="space-y-1">
-            <label class="font-semibold text-slate-700">Mã Sản Phẩm:</label>
+            <label class="font-semibold text-slate-700">Mã sản phẩm:</label>
             <input type="text" [(ngModel)]="planSku" placeholder="Ví dụ: CRIT-024"
               class="w-full bg-white border border-slate-200 text-slate-900 font-mono font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
           </div>
 
           <div class="space-y-1">
-            <label class="font-semibold text-slate-700">Thời Gian Thực Hiện:</label>
+            <label class="font-semibold text-slate-700">Thời gian thực hiện:</label>
             <div class="flex items-center gap-1">
               <input type="number" min="1" max="180" [(ngModel)]="planDuration"
                 class="w-full bg-white border border-slate-200 text-slate-900 font-mono font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
@@ -714,27 +737,27 @@
         </div>
 
         <div class="space-y-1">
-          <label class="font-semibold text-slate-700">Chiến Lược Chiết Khấu:</label>
+          <label class="font-semibold text-slate-700">Phương án chiết khấu:</label>
           <input type="text" [(ngModel)]="planStrategy" placeholder="Ví dụ: Giảm giá 15%"
             class="w-full bg-white border border-slate-200 text-slate-900 font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div class="space-y-1">
-            <label class="font-semibold text-slate-700">Người Phụ Trách:</label>
+            <label class="font-semibold text-slate-700">Người phụ trách:</label>
             <input type="text" [(ngModel)]="planOwner" placeholder="Merchant"
               class="w-full bg-white border border-slate-200 text-slate-900 font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
           </div>
 
           <div class="space-y-1">
-            <label class="font-semibold text-slate-700">Ngày Bắt Đầu:</label>
+            <label class="font-semibold text-slate-700">Ngày bắt đầu:</label>
             <input type="date" [(ngModel)]="planStartDate"
               class="w-full bg-white border border-slate-200 text-slate-900 font-mono font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
           </div>
         </div>
 
         <div class="space-y-1">
-          <label class="font-semibold text-slate-700">Trạng Thái Ban Đầu:</label>
+          <label class="font-semibold text-slate-700">Trạng thái ban đầu:</label>
           <select [(ngModel)]="planStatus"
             class="w-full bg-white border border-slate-200 text-slate-900 font-medium rounded-xl p-2.5 outline-none focus:border-slate-400">
             <option value="DRAFT">Bản nháp</option>
@@ -746,20 +769,20 @@
         </div>
 
         <div class="space-y-1">
-          <label class="font-semibold text-slate-700">Ghi Chú:</label>
+          <label class="font-semibold text-slate-700">Ghi chú:</label>
           <textarea [(ngModel)]="planNotes" placeholder="Nhập ghi chú..."
             class="w-full bg-white border border-slate-200 text-slate-900 font-medium rounded-xl p-2.5 outline-none min-h-[60px] focus:border-slate-400"></textarea>
         </div>
       </div>
 
-      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+      <div class="flex flex-wrap justify-end gap-2 pt-2 border-t border-slate-100">
         <button (click)="submitCreateActionPlan()"
           class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer">
-          Tạo Kế Hoạch
+          Tạo kế hoạch
         </button>
         <button (click)="closeCreatePlanModal()"
           class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer">
-          Hủy Bỏ
+          Hủy bỏ
         </button>
       </div>
     </div>
@@ -771,27 +794,28 @@
     <div (click)="$event.stopPropagation()"
       class="bg-white rounded-2xl border border-slate-200 p-6 max-w-lg w-full space-y-4 shadow-xl">
 
-      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div class="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
         <div>
-          <h3 class="font-bold text-base text-slate-900">Ghi Nhận Kết Quả Thực Tế Chiến Dịch</h3>
+          <h3 class="font-bold text-base text-slate-900">Ghi nhận kết quả thực tế</h3>
           <p class="text-xs text-slate-500">Mã kế hoạch: {{ selectedPlanForOutcome?.plan_id }} | Sản phẩm: {{
             selectedPlanForOutcome?.sku }}</p>
         </div>
-        <button (click)="closeOutcomeModal()" class="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+        <button (click)="closeOutcomeModal()"
+          class="text-xs text-slate-500 hover:text-slate-900 font-semibold shrink-0" aria-label="Đóng biểu mẫu">Đóng</button>
       </div>
 
       <div class="space-y-4 text-xs">
         <!-- Nhập Thu Hồi Vốn -->
         <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
-          <span class="font-bold text-slate-900 block">1. Tiền Vốn Thu Hồi (VND)</span>
-          <div class="grid grid-cols-2 gap-3 items-center">
+          <span class="font-bold text-slate-900 block">1. Giá trị thu hồi (VND)</span>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
             <div>
               <span class="text-[11px] text-slate-500 font-medium block">Dự kiến thu hồi:</span>
               <span class="font-mono font-bold text-slate-900 text-sm">{{ formatCurrency(outcomeExpectedRecovery)
                 }}</span>
             </div>
             <div>
-              <label class="text-[11px] font-semibold text-slate-700 block">Thực tế thu về ví:</label>
+              <label class="text-[11px] font-semibold text-slate-700 block">Giá trị thực tế:</label>
               <input type="number" [(ngModel)]="outcomeActualRecovery" (ngModelChange)="calculateOutcomeMetrics()"
                 class="w-full bg-white border border-slate-300 text-slate-900 font-mono font-bold rounded-lg p-2 outline-none focus:border-slate-500" />
             </div>
@@ -800,8 +824,8 @@
 
         <!-- Nhập Sản Lượng Bán -->
         <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
-          <span class="font-bold text-slate-900 block">2. Sản Lượng Bán Ra (Sản phẩm)</span>
-          <div class="grid grid-cols-2 gap-3 items-center">
+          <span class="font-bold text-slate-900 block">2. Sản lượng bán (sản phẩm)</span>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
             <div>
               <span class="text-[11px] text-slate-500 font-medium block">Sản lượng dự kiến:</span>
               <span class="font-mono font-bold text-slate-900 text-sm">{{ outcomeExpectedUnits }} SP</span>
@@ -816,12 +840,12 @@
 
         <!-- Thẻ Đánh Giá Mức Độ Hiệu Quả Của Đề Xuất AI (Decision Usefulness Card) -->
         <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 space-y-2">
-          <div class="flex items-center justify-between">
-            <span class="font-bold text-slate-900">Đánh Giá Độ Hiệu Quả Đề Xuất (Decision Usefulness)</span>
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span class="font-bold text-slate-900">Đánh giá hiệu quả phương án</span>
             <span class="px-2.5 py-0.5 rounded text-[11px] font-bold bg-emerald-700 text-white">Độ chính xác cao</span>
           </div>
 
-          <div class="grid grid-cols-2 gap-2 font-mono text-xs pt-1">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-xs pt-1">
             <div class="p-2 bg-white rounded-lg border border-emerald-100">
               <span class="text-[10px] text-slate-500 block font-sans">Tỷ lệ thu hồi vốn đạt:</span>
               <span class="font-bold text-emerald-800 text-sm">{{ outcomeAccuracyRecoveryPct }}%</span>
@@ -838,7 +862,7 @@
         </div>
       </div>
 
-      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+      <div class="flex flex-wrap justify-end gap-2 pt-2 border-t border-slate-100">
         <button (click)="submitOutcomeTracking()"
           class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer">
           Lưu kết quả & Hoàn tất chiến dịch
@@ -860,7 +884,7 @@
         <div class="p-5 border-b border-slate-100 bg-slate-900 text-white flex items-center justify-between shrink-0">
           <div class="space-y-1">
             <div class="flex items-center gap-2">
-              <h3 class="font-bold text-base tracking-tight">Trợ Lý AI Phân Tích</h3>
+              <h3 class="font-bold text-base tracking-tight">Trợ lý phân tích</h3>
             </div>
             <!-- COP-001 Context Awareness Badge -->
             <div class="flex items-center gap-2 text-xs text-slate-300">
@@ -872,7 +896,7 @@
           </div>
 
           <button (click)="toggleCopilot()"
-            class="text-slate-400 hover:text-white font-bold p-1 text-xl cursor-pointer">✕</button>
+            class="text-slate-300 hover:text-white text-xs font-semibold p-2 cursor-pointer" aria-label="Đóng trợ lý">Đóng</button>
         </div>
 
         <!-- COP-002 Grounded Notice -->
@@ -898,7 +922,7 @@
                 class="flex flex-wrap gap-1.5 pt-2 border-t border-slate-100">
                 <span *ngFor="let pillar of msg.pillars"
                   class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
-                  ✓ {{ pillar }}
+                  {{ pillar }}
                 </span>
               </div>
             </div>
@@ -918,9 +942,9 @@
             activeCopilotSku }}:</span>
           <div class="flex flex-wrap gap-2">
             <button
-              (click)="sendQuickCopilotQuestion('Tại sao AI khuyến nghị phương án xả kho cho mã ' + activeCopilotSku + '?')"
+              (click)="sendQuickCopilotQuestion('Tại sao AI khuyến nghị phương án xử lý tồn kho cho mã ' + activeCopilotSku + '?')"
               class="px-3 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 transition-all cursor-pointer">
-              Tại sao AI khuyến nghị xả kho cho {{ activeCopilotSku }}?
+              Vì sao mã {{ activeCopilotSku }} cần được ưu tiên xử lý?
             </button>
             <button
               (click)="sendQuickCopilotQuestion('Số vốn đọng & số tiền thu hồi dự kiến của ' + activeCopilotSku + ' là bao nhiêu?')"
@@ -948,3 +972,5 @@
     </div>
 
   </div>
+  </ng-container>
+</div>

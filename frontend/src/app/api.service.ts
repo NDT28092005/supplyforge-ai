@@ -1,7 +1,9 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { EMPTY, Observable } from 'rxjs';
+import { expand, map, reduce } from 'rxjs/operators';
 import { environment } from '../environments/environment';
+import { AuthService } from './auth.service';
 
 @Injectable({
   providedIn: 'root'
@@ -11,7 +13,14 @@ export class ApiService {
     || environment.apiUrl
     || 'https://supplyforge-ai-backend.onrender.com';
 
-  constructor(private http: HttpClient) {}
+  constructor(
+    private http: HttpClient,
+    private authService: AuthService
+  ) {}
+
+  getCurrentWorkspaceId(): number {
+    return this.authService.getWorkspaceId();
+  }
 
   setApiUrl(url: string): void {
     if (url) {
@@ -69,7 +78,7 @@ export class ApiService {
   }
 
   // ── Module 01 Data Ingestion ─────────────────────────────────────
-  uploadCsvV2(file: File, workspaceId: number = 1, sessionType: string = 'INITIAL'): Observable<any> {
+  uploadCsvV2(file: File, workspaceId: number = this.getCurrentWorkspaceId(), sessionType: string = 'INITIAL'): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('workspaceId', workspaceId.toString());
@@ -115,9 +124,11 @@ export class ApiService {
     return this.http.get(`${this.apiUrl}/api/v1/ingestion/sessions/${sessionId}/sku-profiles`, { params });
   }
 
-  processFile(file: File, mappingRule: any, userId = 'user_default_001', sessionType = 'INITIAL', forceReset = false, sessionId = ''): Observable<any> {
+  processFile(file: File | null, mappingRule: any, userId = 'user_default_001', sessionType = 'INITIAL', forceReset = false, sessionId = ''): Observable<any> {
     const formData = new FormData();
-    formData.append('file', file);
+    if (file) {
+      formData.append('file', file);
+    }
     formData.append('mappingRule', JSON.stringify(mappingRule));
     formData.append('userId', userId);
     formData.append('sessionType', sessionType);
@@ -138,7 +149,7 @@ export class ApiService {
     return this.http.post(`${this.apiUrl}/api/v1/workspaces/${workspaceId}/dead-stock/refresh?userId=${userId}`, {});
   }
 
-  getDashboard(workspaceId: number, userId = 'user_default_001'): Observable<any> {
+  getDashboard(workspaceId: number = this.getCurrentWorkspaceId(), userId = 'user_default_001'): Observable<any> {
     return this.http.get(`${this.apiUrl}/api/v1/workspaces/${workspaceId}/dead-stock?userId=${userId}`);
   }
 
@@ -215,8 +226,12 @@ export class ApiService {
     return this.http.get(`${this.apiUrl}/api/v2/jobs/?workspaceId=${workspaceId}`);
   }
 
-  getExecutiveDashboardSummaryCached(workspaceId: number = 1): Observable<any> {
+  getExecutiveDashboardSummaryCached(workspaceId: number = this.getCurrentWorkspaceId()): Observable<any> {
     return this.http.get(`${this.apiUrl}/api/v2/query/dashboard-summary?workspaceId=${workspaceId}`);
+  }
+
+  refreshExecutiveDashboardCache(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v2/query/cache-refresh`, {});
   }
 
   completeGooglePhone(tempUserId: string, phone: string, picture = ''): Observable<any> {
@@ -560,6 +575,32 @@ export class ApiService {
     return this.http.get(`${this.apiUrl}/api/v1/risk/assessments/list`, { params });
   }
 
+  /**
+   * Retrieves every persisted assessment. The risk API is deliberately
+   * paginated, so dashboards must not mistake its first page for a complete
+   * portfolio when a merchant has more than 500 SKUs.
+   */
+  getAllM3RiskAssessments(params: any = {}, pageSize = 500): Observable<any> {
+    const baseParams = { ...params, limit: pageSize, offset: 0 };
+    return this.getM3RiskAssessments(baseParams).pipe(
+      expand((response: any) => {
+        const page = Array.isArray(response?.assessments) ? response.assessments : [];
+        const nextOffset = Number(response?.offset || 0) + page.length;
+        const total = Number(response?.total_count || 0);
+        return page.length > 0 && nextOffset < total
+          ? this.getM3RiskAssessments({ ...params, limit: pageSize, offset: nextOffset })
+          : EMPTY;
+      }),
+      reduce((all: any[], response: any) => all.concat(response?.assessments || []), []),
+      map((assessments: any[]) => ({
+        total_count: assessments.length,
+        limit: pageSize,
+        offset: 0,
+        assessments
+      }))
+    );
+  }
+
   getM3RiskAssessmentDetail(id: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/api/v1/risk/assessments/${id}`);
   }
@@ -628,6 +669,33 @@ export class ApiService {
     return this.http.get(`${this.apiUrl}/api/capital-exposure/analyses/${analysisId}/items`, { params });
   }
 
+  /** Loads all pages of a capital analysis before calculating client KPIs. */
+  getAllCapitalExposureItems(analysisId: string, params: any = {}, pageSize = 500): Observable<any> {
+    const baseParams = { ...params, limit: pageSize, page: 1 };
+    return this.listCapitalExposureItems(analysisId, baseParams).pipe(
+      expand((response: any) => response?.pagination?.has_next
+        ? this.listCapitalExposureItems(analysisId, {
+          ...params,
+          limit: pageSize,
+          page: Number(response.pagination.current_page || 1) + 1
+        })
+        : EMPTY),
+      reduce((all: any[], response: any) => all.concat(response?.items || []), []),
+      map((items: any[]) => ({
+        analysis_id: analysisId,
+        pagination: {
+          total_items: items.length,
+          total_pages: Math.ceil(items.length / pageSize),
+          current_page: 1,
+          limit: pageSize,
+          has_next: false,
+          has_previous: false
+        },
+        items
+      }))
+    );
+  }
+
   getCapitalExposureSkuDetail(analysisId: string, skuId: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/api/capital-exposure/analyses/${analysisId}/items/${skuId}`);
   }
@@ -694,4 +762,3 @@ export class ApiService {
     return this.http.patch(`${this.apiUrl}/api/v1/action-plans/${planId}/outcome/`, outcome);
   }
 }
-

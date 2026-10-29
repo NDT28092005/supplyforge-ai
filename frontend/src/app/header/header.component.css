@@ -48,8 +48,7 @@
   display: inline-flex;
   height: 2.55rem;
   justify-content: center;
-  overflow: hidden;
-  padding: .2rem;
+  padding: .48rem;
   transition: transform 180ms ease, box-shadow 180ms ease;
   width: 2.55rem;
 }
@@ -59,10 +58,31 @@
   transform: rotate(-5deg) scale(1.04);
 }
 
-.sf-brand__mark img {
+.sf-brand__glyph {
+  display: grid;
+  gap: .16rem;
+  grid-template-columns: repeat(2, 1fr);
   height: 100%;
-  object-fit: contain;
+  transform: rotate(45deg);
   width: 100%;
+}
+
+.sf-brand__glyph i {
+  background: #146b65;
+  border-radius: .12rem;
+  display: block;
+}
+
+.sf-brand__glyph i:nth-child(2) {
+  background: #5db8aa;
+}
+
+.sf-brand__glyph i:nth-child(3) {
+  background: #b9dfd6;
+}
+
+.sf-brand__glyph i:nth-child(4) {
+  background: #123b45;
 }
 
 .sf-brand__copy {
@@ -157,6 +177,24 @@
 .login-button:hover {
   background: #1d5267;
   transform: translateY(-1px);
+}
+
+.workspace-button {
+  background: #eaf6f4;
+  border: 1px solid #c7e7e1;
+  border-radius: .62rem;
+  color: #146b65;
+  cursor: pointer;
+  font: inherit;
+  font-size: .66rem;
+  font-weight: 800;
+  padding: .68rem .8rem;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.workspace-button:hover {
+  background: #dff1ed;
+  border-color: #9bcfc5;
 }
 
 .icon-button {

@@ -1,6 +1,15 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 
+export type DatasetLifecycleStatus =
+  | 'idle'
+  | 'clearing'
+  | 'uploading'
+  | 'profiling'
+  | 'processing'
+  | 'ready'
+  | 'error';
+
 export interface IngestionState {
   uploadFile: File | null;
   activeSessionId: string;
@@ -9,6 +18,8 @@ export interface IngestionState {
   uploadErrorMessage: string;
   isProcessingBatch: boolean;
   sessionType: 'INITIAL' | 'INCREMENTAL';
+  datasetStatus: DatasetLifecycleStatus;
+  datasetStatusMessage: string;
 }
 
 const initialState: IngestionState = {
@@ -18,22 +29,34 @@ const initialState: IngestionState = {
   datasetProfileData: null,
   uploadErrorMessage: '',
   isProcessingBatch: false,
-  sessionType: 'INITIAL'
+  sessionType: 'INITIAL',
+  datasetStatus: 'idle',
+  datasetStatusMessage: ''
 };
 
-const STORAGE_KEY = 'supplyforge_ingestion_state';
+// Version the browser cache whenever an ingestion state format or lifecycle
+// fix makes an older persisted session unsafe to resume.
+const STORAGE_KEY = 'supplyforge_ingestion_state_v2';
 
 function getPersistedState(): IngestionState {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      const savedStatus = parsed.datasetStatus as DatasetLifecycleStatus | undefined;
+      // A browser refresh cannot resume an in-flight request safely. Keep the
+      // persisted session for recovery, but never present old data as current.
+      const interrupted = ['clearing', 'uploading', 'profiling', 'processing'].includes(savedStatus || 'idle');
       return {
         ...initialState,
         activeSessionId: parsed.activeSessionId || '',
         mappingData: parsed.mappingData || null,
         datasetProfileData: parsed.datasetProfileData || null,
         sessionType: parsed.sessionType === 'INCREMENTAL' ? 'INCREMENTAL' : 'INITIAL',
+        datasetStatus: interrupted ? 'error' : (savedStatus || 'idle'),
+        datasetStatusMessage: interrupted
+          ? 'Phiên nạp dữ liệu đã bị gián đoạn. Vui lòng kiểm tra lại tệp và thực hiện lại thao tác.'
+          : (parsed.datasetStatusMessage || ''),
       };
     }
   } catch (e) {
@@ -62,7 +85,9 @@ export class IngestionStateService {
         activeSessionId: newState.activeSessionId,
         mappingData: newState.mappingData,
         datasetProfileData: newState.datasetProfileData,
-        sessionType: newState.sessionType
+        sessionType: newState.sessionType,
+        datasetStatus: newState.datasetStatus,
+        datasetStatusMessage: newState.datasetStatusMessage
       }));
     } catch (e) {}
     this.state$.next(newState);
@@ -85,7 +110,12 @@ export class IngestionStateService {
   }
 
   setErrorMessage(msg: string) {
-    this.persist({ ...this.state, uploadErrorMessage: msg });
+    this.persist({
+      ...this.state,
+      uploadErrorMessage: msg,
+      datasetStatus: msg ? 'error' : this.state.datasetStatus,
+      datasetStatusMessage: msg || this.state.datasetStatusMessage
+    });
   }
 
   setProcessingBatch(isProcessing: boolean) {
@@ -94,6 +124,38 @@ export class IngestionStateService {
 
   setSessionType(sessionType: 'INITIAL' | 'INCREMENTAL') {
     this.persist({ ...this.state, sessionType });
+  }
+
+  beginImport(file: File, sessionType: 'INITIAL' | 'INCREMENTAL') {
+    this.persist({
+      ...initialState,
+      uploadFile: file,
+      sessionType,
+      datasetStatus: 'uploading',
+      datasetStatusMessage: 'Đang tải tệp lên và kiểm tra cấu trúc dữ liệu.'
+    });
+  }
+
+  setDatasetStatus(status: DatasetLifecycleStatus, message = '') {
+    this.persist({
+      ...this.state,
+      datasetStatus: status,
+      datasetStatusMessage: message,
+      uploadErrorMessage: status === 'error' ? (message || this.state.uploadErrorMessage) : ''
+    });
+  }
+
+  get isDatasetTransitionActive(): boolean {
+    return ['clearing', 'uploading', 'profiling', 'processing'].includes(this.state.datasetStatus);
+  }
+
+  invalidateSession(message: string) {
+    this.persist({
+      ...initialState,
+      datasetStatus: 'error',
+      datasetStatusMessage: message,
+      uploadErrorMessage: message
+    });
   }
 
   reset() {

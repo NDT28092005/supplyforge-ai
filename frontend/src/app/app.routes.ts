@@ -13,6 +13,7 @@ import { SlowMovingRiskDashboardComponent } from './slow-moving-risk-dashboard/s
 import { CapitalExposureDashboardComponent } from './capital-exposure-dashboard/capital-exposure-dashboard.component';
 import { DecisionSupportDashboardComponent } from './decision-support-dashboard/decision-support-dashboard.component';
 import { JobQueueComponent } from './job-queue/job-queue.component';
+import { NotFoundPageComponent } from './not-found-page/not-found-page.component';
 import { dataReadyGuard } from './core/guards/data-ready.guard';
 
 export const routes: Routes = [
@@ -37,5 +38,5 @@ export const routes: Routes = [
   { path: 'app/decisions', component: DecisionSupportDashboardComponent, canActivate: [dataReadyGuard], title: 'Hỗ trợ Quyết định — SupplyForge AI' },
 
   // ── Fallback ──
-  { path: '**', redirectTo: '' }
+  { path: '**', component: NotFoundPageComponent, title: 'Không tìm thấy trang — SupplyForge AI' }
 ];

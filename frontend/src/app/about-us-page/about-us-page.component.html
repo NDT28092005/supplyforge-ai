@@ -1,22 +1,21 @@
 <main sfPageMotion class="public-page about-page">
-  <div *ngIf="loading" class="public-loading"><span></span>Đang mở câu chuyện của SupplyForge</div>
+  <div *ngIf="loading" class="public-loading"><span></span>Đang tải thông tin giải pháp</div>
 
   <ng-container *ngIf="!loading && data">
     <section data-motion="header" class="internal-hero" aria-labelledby="about-heading">
       <div class="internal-hero__copy">
-        <p class="eyebrow"><span class="eyebrow-dot"></span> Vì sao SupplyForge tồn tại</p>
-        <h1 id="about-heading">Kho hàng không thiếu dữ liệu. Nó thiếu một thứ tự để hành động.</h1>
+        <p class="eyebrow"><span class="eyebrow-dot"></span> Giải pháp SupplyForge</p>
+        <h1 id="about-heading">Dữ liệu tồn kho cần được chuyển thành thứ tự ưu tiên rõ ràng.</h1>
         <p>{{ data.description }}</p>
         <div class="hero-actions">
-          <button type="button" class="button button-primary" (click)="onAction('csv-upload')">Bắt đầu với file CSV <span aria-hidden="true">↗</span></button>
-          <button type="button" class="button button-quiet" (click)="onAction('services')">Xem cách hoạt động</button>
+          <button type="button" class="button button-primary" (click)="onAction('csv-upload')">Bắt đầu với tệp CSV <span aria-hidden="true">↗</span></button>
+          <button type="button" class="button button-quiet" (click)="onAction('services')">Khám phá nền tảng</button>
         </div>
       </div>
       <aside class="about-signal-card" aria-label="Nguyên tắc SupplyForge">
-        <img class="about-signal-image" src="assets/public/signal-shelf.svg" alt="Minh họa kệ hàng và tín hiệu thời gian" />
-        <span class="card-label">THE SUPPLYFORGE PROMISE</span>
-        <strong>Không đưa ra một điểm số rồi để bạn tự đoán bước tiếp theo.</strong>
-        <p>Mỗi tín hiệu cần có thời điểm dữ liệu, cửa sổ quan sát và lý do để đội ngũ kiểm tra lại.</p>
+        <span class="card-label">CAM KẾT VẬN HÀNH</span>
+        <strong>Không chỉ đưa ra điểm số, mà cung cấp cơ sở để đội ngũ ra quyết định.</strong>
+        <p>Mỗi tín hiệu được trình bày cùng mốc dữ liệu, cửa sổ quan sát và các yếu tố liên quan để có thể rà soát.</p>
         <div class="mini-window">
           <span>DATA WINDOW</span>
           <b>7D</b><b>30D</b><b>90D</b>
@@ -27,19 +26,19 @@
     <section data-motion="priority" class="about-section" aria-labelledby="context-heading">
       <div class="section-heading">
         <span class="section-index">01</span>
-        <div><p class="section-caption">Điểm xuất phát</p><h2 id="context-heading">Ba khoảng trống khiến vốn nằm yên lâu hơn cần thiết.</h2></div>
+        <div><p class="section-caption">Bối cảnh vận hành</p><h2 id="context-heading">Ba điểm cần được làm rõ để quản trị tồn kho hiệu quả hơn.</h2></div>
       </div>
       <div class="context-grid">
-        <article><span>01 / INPUT</span><h3>File bán hàng không đồng nhất</h3><p>Cột, ngày bán và bản ghi trùng cần được làm rõ trước khi bất kỳ mô hình nào đưa ra kết luận.</p></article>
-        <article><span>02 / SIGNAL</span><h3>SKU chậm bị lẫn trong danh mục</h3><p>Biết đã bán gì chưa đủ. Merchant cần biết mã nào nên được nhìn trước và vốn liên quan là bao nhiêu.</p></article>
-        <article><span>03 / DECISION</span><h3>Quyết định thiếu lý do để cùng duyệt</h3><p>Giảm giá, bán kèm hay chờ thêm đều nên bắt đầu từ dữ liệu có thể giải thích.</p></article>
+        <article><span>01 / INPUT</span><h3>Dữ liệu bán hàng thiếu chuẩn hóa</h3><p>Trường dữ liệu, ngày bán và bản ghi trùng cần được xác thực trước khi mô hình tạo tín hiệu.</p></article>
+        <article><span>02 / SIGNAL</span><h3>SKU chậm luân chuyển bị phân tán trong danh mục</h3><p>Doanh số đơn lẻ chưa đủ để thiết lập ưu tiên; cần đánh giá đồng thời mức độ rủi ro và giá trị vốn liên quan.</p></article>
+        <article><span>03 / DECISION</span><h3>Quyết định thiếu cơ sở để phê duyệt</h3><p>Điều chỉnh giá, kết hợp bán hàng hoặc tiếp tục theo dõi cần được bắt đầu từ dữ liệu có thể giải trình.</p></article>
       </div>
     </section>
 
     <section data-motion="panel" class="about-section principle-section" aria-labelledby="principles-heading">
       <div class="section-heading">
         <span class="section-index">02</span>
-        <div><p class="section-caption">Nguyên tắc vận hành</p><h2 id="principles-heading">AI làm rõ công việc. Merchant vẫn cầm tay lái.</h2></div>
+        <div><p class="section-caption">Nguyên tắc vận hành</p><h2 id="principles-heading">Hệ thống hỗ trợ phân tích; quyền quyết định thuộc về đội ngũ vận hành.</h2></div>
       </div>
       <div class="principle-rail">
         <article *ngFor="let val of data.core_values; let index = index">
@@ -52,21 +51,21 @@
     <section data-motion="panel" class="evidence-strip" aria-labelledby="evidence-heading">
       <div class="evidence-intro">
         <p class="section-caption">Minh bạch theo thời gian</p>
-        <h2 id="evidence-heading">Một đợt import mới không xóa câu chuyện cũ.</h2>
-        <p>Dữ liệu mới tạo ra một phiên bản mới để đối chiếu. Bạn luôn biết báo cáo đang đọc đến ngày nào và cửa sổ nào.</p>
+        <h2 id="evidence-heading">Mỗi phiên nạp mới đều duy trì lịch sử phân tích.</h2>
+        <p>Dữ liệu bổ sung tạo ra một phiên bản để đối chiếu. Báo cáo luôn thể hiện rõ mốc dữ liệu và cửa sổ quan sát đang được sử dụng.</p>
       </div>
       <div class="version-track">
-        <div><span>LẦN NẠP 01</span><strong>File hôm nay</strong><small>Thiết lập đường cơ sở</small></div>
+        <div><span>PHIÊN NẠP 01</span><strong>Dữ liệu cơ sở</strong><small>Thiết lập phạm vi đánh giá</small></div>
         <i></i>
-        <div class="is-current"><span>LẦN NẠP 02</span><strong>File tuần sau</strong><small>Bổ sung dữ liệu, tính lại cửa sổ</small></div>
+        <div class="is-current"><span>PHIÊN NẠP 02</span><strong>Dữ liệu bổ sung</strong><small>Cập nhật dữ liệu, tính lại cửa sổ</small></div>
         <i></i>
-        <div><span>HIỆN TẠI</span><strong>Góc nhìn mới nhất</strong><small>Biết dữ liệu đang đọc đến đâu</small></div>
+        <div><span>HIỆN TẠI</span><strong>Phiên bản hiện hành</strong><small>Xác định rõ phạm vi dữ liệu</small></div>
       </div>
     </section>
 
     <section data-motion="panel" class="closing-cta">
-      <div><p class="section-caption">Không cần thay quy trình ngay hôm nay</p><h2>Bắt đầu bằng file đang có trong kho.</h2></div>
-      <button type="button" class="button button-light" (click)="onAction('csv-upload')">Nạp file CSV <span aria-hidden="true">↗</span></button>
+      <div><p class="section-caption">Phù hợp với quy trình hiện hữu</p><h2>Bắt đầu từ tệp dữ liệu đang được sử dụng.</h2></div>
+      <button type="button" class="button button-light" (click)="onAction('csv-upload')">Nạp tệp CSV <span aria-hidden="true">↗</span></button>
     </section>
   </ng-container>
 </main>

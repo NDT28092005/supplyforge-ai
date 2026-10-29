@@ -12,11 +12,11 @@
         <div class="flex items-center gap-2.5">
           <span
             class="px-3 py-1 rounded-full text-[11px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80 shadow-2xs">
-            Bước 1 / 4 · Tải dữ liệu
+            Bước 1 / 4 · Tải tệp dữ liệu
           </span>
           <span class="text-xs text-slate-400 font-bold">|</span>
           <span class="text-xs text-slate-500 font-semibold flex items-center gap-1">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Sẵn sàng phân tích AI
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Sẵn sàng kiểm tra
           </span>
         </div>
 
@@ -25,8 +25,7 @@
         </h1>
 
         <p class="text-slate-600 text-xs sm:text-sm font-medium leading-relaxed">
-          Tải lên tệp CSV lịch sử đơn hàng từ các sàn Thương mại điện tử (Shopee, Lazada, TikTok Shop, Haravan,
-          KiotViet...). Hệ thống sẽ tự động quét kiểm tra cấu trúc, nhận diện mã SKU và đo lường khoảng thời gian bán.
+          Tải lên tệp CSV lịch sử giao dịch. Hệ thống sẽ kiểm tra cấu trúc, nhận diện mã SKU và xác định phạm vi thời gian có thể phân tích.
         </p>
       </div>
 
@@ -44,8 +43,8 @@
             <div *ngIf="sessionType === 'INITIAL'" class="w-2 h-2 rounded-full bg-indigo-600"></div>
           </div>
           <div>
-            <div class="font-bold">Khởi tạo ban đầu</div>
-            <div class="text-[10px] text-slate-500 font-normal">Nạp dữ liệu kho mới</div>
+            <div class="font-bold">Thiết lập bộ dữ liệu</div>
+            <div class="text-[10px] text-slate-500 font-normal">Thay thế bộ dữ liệu hiện hành</div>
           </div>
         </button>
 
@@ -61,8 +60,8 @@
             <div *ngIf="sessionType === 'INCREMENTAL'" class="w-2 h-2 rounded-full bg-indigo-600"></div>
           </div>
           <div>
-            <div class="font-bold">Tải thêm đơn mới</div>
-            <div class="text-[10px] text-slate-500 font-normal">Nạp bổ sung ghép trùng</div>
+            <div class="font-bold">Bổ sung dữ liệu</div>
+            <div class="text-[10px] text-slate-500 font-normal">Đối soát và hợp nhất với dữ liệu hiện có</div>
           </div>
         </button>
       </div>
@@ -98,11 +97,10 @@
         <!-- Main Prominent Text Callout -->
         <div class="space-y-2">
           <h2 class="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-            Kéo &amp; thả tệp CSV bán hàng vào đây
+            Kéo và thả tệp CSV vào đây
           </h2>
           <p class="text-xs sm:text-sm text-slate-600 font-medium max-w-md mx-auto">
-            hoặc <span class="text-indigo-600 font-bold underline underline-offset-2">bấm để chọn tệp từ máy tính</span>
-            của bạn
+            hoặc <span class="text-indigo-600 font-bold underline underline-offset-2">chọn tệp từ thiết bị</span>
           </p>
           <div class="text-[11px] text-slate-400 font-mono font-semibold pt-1">
             Hỗ trợ định dạng chuẩn UTF-8 / CSV (Tối đa 500 MB / 5.000.000 dòng)
@@ -133,7 +131,7 @@
           </span>
           <span
             class="px-3 py-1.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 flex items-center gap-1.5 shadow-2xs">
-            <span class="w-2 h-2 rounded-full bg-purple-500"></span> Sàn khác / Excel
+            <span class="w-2 h-2 rounded-full bg-purple-500"></span> Nguồn CSV khác
           </span>
         </div>
 
@@ -148,7 +146,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
         </svg>
-        <span>Bạn chưa có file mẫu đúng chuẩn?</span>
+        <span>Cần tệp mẫu theo cấu trúc chuẩn?</span>
       </div>
 
       <div class="flex items-center gap-3 shrink-0">
@@ -287,7 +285,7 @@
     </div>
 
     <div class="space-y-1">
-      <h3 class="text-lg font-bold text-slate-900">Đang nạp &amp; phân tích cấu trúc dữ liệu...</h3>
+      <h3 class="text-lg font-bold text-slate-900">{{ uploadStage }}</h3>
       <p class="text-xs text-slate-500 font-mono">Tệp: <strong class="text-slate-800">{{ selectedFile?.name }}</strong>
         ({{ selectedFile?.size | number }} bytes)</p>
     </div>
@@ -300,7 +298,7 @@
           [style.width.%]="uploadProgress"></div>
       </div>
       <div class="flex items-center justify-between text-xs font-mono">
-        <span class="text-slate-500 font-semibold">Tiến độ phân tích tệp</span>
+        <span class="text-slate-500 font-semibold">Tiến độ phản hồi từ phiên nạp dữ liệu</span>
         <span class="text-indigo-600 font-bold">{{ uploadProgress }}%</span>
       </div>
     </div>

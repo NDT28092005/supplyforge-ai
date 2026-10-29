@@ -19,7 +19,7 @@ export interface SkuRiskItem {
   sku: string;
   name: string;
   category?: string;
-  riskClass: 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK';
+  riskClass: 'CRITICAL' | 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK';
   probabilityPct: string;
   probabilityValue: number;
   velocity: number;
@@ -36,11 +36,11 @@ export interface SkuRiskItem {
   demandPattern: string;
 
   // LightGBM Tweedie Demand Forecast Fields
-  forecast7d: number;
-  forecast14d: number;
-  forecast30d: number;
-  forecastTrend: number;
-  forecastModel: string;
+  forecast7d: number | null;
+  forecast14d: number | null;
+  forecast30d: number | null;
+  forecastTrend: string | null;
+  forecastModel: string | null;
 
   shapFactors: ShapFactorItem[];
   conclusion: string;
@@ -74,6 +74,8 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   showShapCalcModal: boolean = false;
 
   items: SkuRiskItem[] = [];
+  dataState: 'loading' | 'ready' | 'empty' | 'error' = 'loading';
+  loadError = '';
 
   constructor(
     private apiService: ApiService,
@@ -96,131 +98,41 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void { }
 
   loadRealAssessments(): void {
-    this.apiService.getM3RiskAssessments().subscribe({
+    this.dataState = 'loading';
+    this.loadError = '';
+    this.items = [];
+    this.apiService.getAllM3RiskAssessments().subscribe({
       next: (res: any) => {
-        if (res && res.assessments && res.assessments.length > 0) {
+        if (res && Array.isArray(res.assessments) && res.assessments.length > 0) {
           this.items = res.assessments.map((a: any) => this.mapAssessmentToSkuRiskItem(a));
           if (this.skuId) {
             const match = this.items.find(i => i.sku === this.skuId || i.name === this.skuId);
             if (match) this.openDrawer(match);
           }
+          this.dataState = 'ready';
         } else {
-          this.loadFromDashboardData();
+          this.dataState = 'empty';
         }
       },
-      error: () => {
-        this.loadFromDashboardData();
+      error: (err: any) => {
+        this.dataState = 'error';
+        this.loadError = err?.error?.error || 'Không thể tải kết quả đánh giá rủi ro. Vui lòng thử lại.';
       }
     });
   }
 
-  loadFromDashboardData(): void {
-    this.apiService.getDashboard(1).subscribe({
-      next: (res: any) => {
-        if (!res) {
-          this.items = [];
-          return;
-        }
-        const healthyList = (res.healthySkus || []).map((item: any) => ({ ...item, _riskClass: 'LOW_RISK' }));
-        const watchList = (res.watchlistSkus || []).map((item: any) => ({ ...item, _riskClass: 'MEDIUM_RISK' }));
-        const slowList = (res.slowMovingSkus || []).map((item: any) => ({ ...item, _riskClass: 'HIGH_RISK' }));
-        const deadList = (res.deadStockSkus || []).map((item: any) => ({ ...item, _riskClass: 'HIGH_RISK' }));
-
-        const allSkus = [...deadList, ...slowList, ...watchList, ...healthyList];
-        if (allSkus.length > 0) {
-          this.items = allSkus.map((item: any) => this.mapDashboardSkuToRiskItem(item));
-          if (this.skuId) {
-            const match = this.items.find(i => i.sku === this.skuId || i.name === this.skuId);
-            if (match) this.openDrawer(match);
-          }
-        } else {
-          this.items = [];
-        }
-      },
-      error: () => {
-        this.items = [];
-      }
-    });
-  }
-
-  mapDashboardSkuToRiskItem(item: any): SkuRiskItem {
-    const riskClass = item._riskClass as 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK';
-    const capVal = item.totalValue || ((item.quantity || 1) * (item.costPrice || 50000));
-    const formatCap = (val: number) => {
-      if (!val || val === 0) return '0';
-      if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
-      if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
-      if (val >= 1000) return `${(val / 1000).toFixed(0)}K`;
-      return `${Math.round(val)}`;
-    };
-
-    const dslsDays = item.daysInInventory || 0;
-    
-    // Read dynamic AI probability from model if available
-    const rawProb = item.risk_probability ?? item.riskProbability ?? item.probability;
-    const probVal = rawProb !== undefined && rawProb !== null 
-      ? Number(rawProb) 
-      : (riskClass === 'HIGH_RISK' ? 0.95 : (riskClass === 'MEDIUM_RISK' ? 0.65 : 0.15));
-    const probPct = `${(probVal * 100).toFixed(1)}%`;
-    const zeroRatePct = dslsDays > 90 ? '92.5%' : (dslsDays > 30 ? '55.0%' : '12.0%');
-
-    const shapFactors: ShapFactorItem[] = [];
-    if (dslsDays > 30) {
-      shapFactors.push({
-        label: 'Số ngày chưa có đơn hàng mới (DSLS)',
-        subDesc: `Đã ${dslsDays} ngày chưa phát sinh giao dịch mới`,
-        impactText: dslsDays > 90 ? 'Tác động rất mạnh (+)' : 'Tác động mạnh (+)',
-        score: dslsDays > 90 ? 5 : 4,
-        pct: Math.min(100, Math.round(dslsDays / 2)),
-        severity: dslsDays > 90 ? 'red' : 'amber'
-      });
-    }
-    if (shapFactors.length === 0) {
-      shapFactors.push({
-        label: 'Tốc độ bán hàng ổn định',
-        subDesc: 'Sức mua đều đặn hàng ngày',
-        impactText: 'Mức an toàn (-)',
-        score: 1,
-        pct: 15,
-        severity: 'emerald'
-      });
-    }
-
-    const sales30d = item.sales30Days || 0;
-
-    return {
-      sku: item.sku || item.item_sku || item.name || 'SKU_UNSET',
-      name: item.name || item.product_name || item.sku || 'Sản phẩm',
-      riskClass: riskClass,
-      probabilityPct: probPct,
-      probabilityValue: probVal,
-      velocity: Number(item.salesVelocity ?? item.velocities?.simple ?? item.velocities?.weighted ?? 0.1).toFixed(2) as any,
-      dslsDays: dslsDays,
-      capitalExposure: formatCap(capVal),
-      sales30d: sales30d,
-      sales90d: item.sales90Days || 0,
-      zeroRatePct: zeroRatePct,
-      demandProb: probVal,
-      demandPattern: item.demandPattern || 'Smooth',
-
-      // LightGBM Tweedie Demand Forecast
-      forecast7d: Math.max(0, Math.round((sales30d / 30) * 7)),
-      forecast14d: Math.max(0, Math.round((sales30d / 30) * 14)),
-      forecast30d: Math.max(0, Math.round(sales30d)),
-      forecastTrend: 1.0,
-      forecastModel: 'LightGBM v1.0.0 (Tweedie Objective)',
-
-      shapFactors: shapFactors,
-      conclusion: item.llmReasoning || 'Sản phẩm có nguy cơ đọng vốn nhẹ, cần tiếp tục quan sát.'
-    };
+  goToImport(): void {
+    this.router.navigate(['/app/import']);
   }
 
   mapAssessmentToSkuRiskItem(a: any): SkuRiskItem {
     // 1. Extract risk class safely from backend response schema
     const rawClass = (a.risk?.class || a.risk_class || a.risk_level || 'LOW_RISK').toString().toUpperCase();
 
-    let riskClass: 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK' = 'LOW_RISK';
-    if (rawClass.includes('CRITICAL') || rawClass.includes('HIGH') || rawClass.includes('DEAD')) {
+    let riskClass: SkuRiskItem['riskClass'] = 'LOW_RISK';
+    if (rawClass.includes('CRITICAL') || rawClass.includes('DEAD')) {
+      riskClass = 'CRITICAL';
+    } else if (rawClass.includes('HIGH')) {
       riskClass = 'HIGH_RISK';
     } else if (rawClass.includes('MEDIUM') || rawClass.includes('WATCH')) {
       riskClass = 'MEDIUM_RISK';
@@ -228,11 +140,11 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
       riskClass = 'LOW_RISK';
     }
 
-    // 2. Extract real AI risk probability from XGBoost Classifier backend response
+    // 2. Extract the risk probability from the classifier response.
     const rawProb = a.risk?.probability ?? a.risk_probability ?? a.slow_moving_probability ?? (a.risk?.score ? (a.risk.score / 100.0) : undefined);
-    const probVal = rawProb !== undefined && rawProb !== null 
+    const probVal = rawProb !== undefined && rawProb !== null
       ? (Number(rawProb) > 1.0 ? Number(rawProb) / 100.0 : Number(rawProb))
-      : (riskClass === 'HIGH_RISK' ? 0.95 : (riskClass === 'MEDIUM_RISK' ? 0.65 : 0.15));
+      : 0;
     const probPct = `${(probVal * 100).toFixed(1)}%`;
 
     // 3. Extract evidence metrics
@@ -242,10 +154,10 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
     const velocity = Number(Number(rawVel).toFixed(2));
     const sales30d = ev.sold_30d ?? a.sales_30d ?? 0;
     const sales90d = ev.sold_90d ?? a.sales_90d ?? 0;
-    const zeroRateVal = ev.zero_rate_90d ?? a.zero_sales_rate ?? (dslsDays > 90 ? 1.0 : (dslsDays > 30 ? 0.6 : 0.1));
+    const zeroRateVal = ev.zero_rate_90d ?? a.zero_sales_rate ?? 0;
     const zeroRatePct = `${(zeroRateVal * 100).toFixed(1)}%`;
 
-    const capVal = a.capital_exposure_vnd || (sales90d ? sales90d * 150000 : 0);
+    const capVal = Number(a.capital_exposure_vnd ?? 0);
     const formatCap = (val: number) => {
       if (!val || val === 0) return '0';
       if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
@@ -254,44 +166,18 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
       return `${Math.round(val)}`;
     };
 
-    // 4. Build SHAP Factors
-    const shapFactors: ShapFactorItem[] = [];
-    if (dslsDays > 30 || riskClass === 'HIGH_RISK') {
-      shapFactors.push({
-        label: 'Số ngày chưa có đơn hàng mới (DSLS)',
-        subDesc: dslsDays >= 999 ? 'Chưa phát sinh bất kỳ đơn hàng nào' : `Đã ${dslsDays} ngày chưa phát sinh giao dịch`,
-        impactText: dslsDays > 90 ? 'Tác động cực mạnh (+)' : 'Tác động mạnh (+)',
-        score: dslsDays > 90 ? 5 : 4,
-        pct: Math.min(100, Math.max(50, Math.round(dslsDays / 2))),
-        severity: dslsDays > 90 ? 'red' : 'amber'
-      });
-    }
-
-    if (velocity < 0.5 || riskClass === 'HIGH_RISK') {
-      shapFactors.push({
-        label: 'Tốc độ bán hàng thấp (Sales Velocity)',
-        subDesc: `Tỉ lệ xuất kho trung bình chỉ ${velocity} sp/ngày`,
-        impactText: 'Nguy cơ đọng vốn sản phẩm (+)',
-        score: 4,
-        pct: 75,
-        severity: riskClass === 'HIGH_RISK' ? 'red' : 'amber'
-      });
-    }
-
-    if (shapFactors.length === 0) {
-      shapFactors.push({
-        label: 'Tốc độ bán hàng ổn định',
-        subDesc: 'Sức mua đều đặn hàng ngày',
-        impactText: 'Mức an toàn (-)',
-        score: 1,
-        pct: 15,
-        severity: 'emerald'
-      });
-    }
+    // These are persisted diagnostic signals from the risk pipeline, not
+    // synthetic SHAP scores produced by the UI.
+    const shapFactors = this.buildDiagnosticFactors(
+      [...(a.primary_signals || []), ...(a.supporting_signals || []), ...(a.diagnostics || [])],
+      ev,
+      velocity,
+      dslsDays
+    );
 
     const rec = a.recommendation || a.conclusion;
-    const conclusion = rec || (riskClass === 'HIGH_RISK'
-      ? 'Sản phẩm thuộc nhóm nguy cơ đọng vốn cao/rất cao. Cần lập kế hoạch khuyến mãi hoặc xả hàng khẩn cấp.'
+    const conclusion = rec || (riskClass === 'CRITICAL' || riskClass === 'HIGH_RISK'
+      ? 'Sản phẩm thuộc nhóm nguy cơ đọng vốn cao hoặc rất cao. Cần lập phương án khuyến mãi hoặc xử lý tồn kho ưu tiên.'
       : (riskClass === 'MEDIUM_RISK'
         ? 'Sản phẩm thuộc nhóm cần theo dõi sát. Tốc độ xuất kho đang chậm lại.'
         : 'Sản phẩm an toàn, tốc độ lưu chuyển hàng tốt.'));
@@ -313,18 +199,60 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
       sales90d: sales90d,
       zeroRatePct: zeroRatePct,
       demandProb: probVal,
-      demandPattern: a.demand_pattern || (dslsDays > 90 ? 'Lumpy' : (dslsDays > 30 ? 'Intermittent' : 'Smooth')),
+      demandPattern: a.demand_pattern || ev.demand_pattern || 'Chưa xác định',
 
       // LightGBM Tweedie Demand Forecast Fields
-      forecast7d: a.forecast_7d ?? ev.forecast_7d ?? Math.max(0, Math.round((sales30d / 30) * 7)),
-      forecast14d: a.forecast_14d ?? ev.forecast_14d ?? Math.max(0, Math.round((sales30d / 30) * 14)),
-      forecast30d: a.forecast_30d ?? ev.forecast_30d ?? Math.max(0, Math.round(sales30d)),
-      forecastTrend: a.forecast_trend ?? ev.forecast_trend ?? 1.0,
-      forecastModel: 'LightGBM v1.0.0 (Tweedie Objective)',
+      forecast7d: this.toNullableNumber(a.forecast_7d ?? ev.forecast_7d),
+      forecast14d: this.toNullableNumber(a.forecast_14d ?? ev.forecast_14d),
+      forecast30d: this.toNullableNumber(a.forecast_30d ?? ev.forecast_30d),
+      forecastTrend: (a.forecast_trend ?? ev.forecast_trend ?? null) as string | null,
+      forecastModel: (a.forecast_model ?? ev.forecast_model ?? null) as string | null,
 
       shapFactors: shapFactors,
       conclusion: conclusion
     };
+  }
+
+  private toNullableNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) ? numberValue : null;
+  }
+
+  private buildDiagnosticFactors(signals: unknown[], evidence: any, velocity: number, dslsDays: number): ShapFactorItem[] {
+    const uniqueSignals = [...new Set(signals.filter((signal): signal is string => typeof signal === 'string'))];
+    const descriptions: Record<string, Pick<ShapFactorItem, 'label' | 'subDesc' | 'impactText' | 'severity'>> = {
+      LOW_SALES_VELOCITY: {
+        label: 'Tốc độ bán hàng thấp',
+        subDesc: `Tốc độ ghi nhận: ${velocity} sản phẩm/ngày.`,
+        impactText: 'Tín hiệu chính', severity: 'amber'
+      },
+      POSSIBLE_OBSOLESCENCE: {
+        label: 'Dấu hiệu nhu cầu suy giảm kéo dài',
+        subDesc: dslsDays >= 999 ? 'Chưa ghi nhận đơn hàng trong cửa sổ quan sát.' : `Đã ${dslsDays} ngày chưa phát sinh đơn hàng.`,
+        impactText: 'Tín hiệu chính', severity: 'red'
+      },
+      LUMPY_DEMAND: {
+        label: 'Nhu cầu phát sinh không đều',
+        subDesc: `Tỷ lệ ngày không có đơn trong 90 ngày: ${(Number(evidence.zero_rate_90d || 0) * 100).toFixed(1)}%.`,
+        impactText: 'Tín hiệu chính', severity: 'amber'
+      },
+      HIGH_ZERO_SALES_RATE: {
+        label: 'Tỷ lệ ngày không có đơn cao',
+        subDesc: `Tỷ lệ ngày không có đơn trong 90 ngày: ${(Number(evidence.zero_rate_90d || 0) * 100).toFixed(1)}%.`,
+        impactText: 'Tín hiệu hỗ trợ', severity: 'amber'
+      }
+    };
+
+    const factors = uniqueSignals.map((signal) => descriptions[signal]).filter(Boolean) as Array<Pick<ShapFactorItem, 'label' | 'subDesc' | 'impactText' | 'severity'>>;
+    if (factors.length === 0) {
+      return [{
+        label: 'Chưa có tín hiệu chẩn đoán chi tiết',
+        subDesc: 'Pipeline chưa cung cấp danh sách tín hiệu giải thích cho bản ghi này.',
+        impactText: 'Chưa xác định', score: 0, pct: 0, severity: 'emerald'
+      }];
+    }
+    return factors.map((factor) => ({ ...factor, score: 0, pct: 0 }));
   }
 
   get filteredItems(): SkuRiskItem[] {
@@ -389,12 +317,12 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   }
 
   exportReport(format: 'csv' | 'excel' = 'csv'): void {
-    const headers = ['Mã sản phẩm', 'Tên sản phẩm', 'Danh mục', 'Mức rủi ro', 'Xác suất rủi ro (%)', 'Số ngày tồn kho (DSLS)', 'Giá trị vốn kẹt (VND)', 'Mô hình sức mua', 'Đánh giá AI'];
+    const headers = ['Mã sản phẩm', 'Tên sản phẩm', 'Danh mục', 'Mức rủi ro', 'Xác suất rủi ro (%)', 'Số ngày tồn kho (DSLS)', 'Giá trị vốn tồn đọng (VND)', 'Tín hiệu tiêu thụ', 'Đánh giá mô hình'];
     const rows = this.filteredItems.map(item => [
       item.sku,
       `"${item.name.replace(/"/g, '""')}"`,
       `"${(item.category || 'Thiết bị & Phụ kiện').replace(/"/g, '""')}"`,
-      item.riskClass === 'HIGH_RISK' ? 'Rủi ro cao' : (item.riskClass === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'An toàn'),
+      item.riskClass === 'CRITICAL' ? 'Rủi ro rất cao' : (item.riskClass === 'HIGH_RISK' ? 'Rủi ro cao' : (item.riskClass === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'Rủi ro thấp')),
       item.probabilityPct,
       item.dslsDays,
       item.capitalExposureVal || 0,
@@ -421,6 +349,10 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
     return this.items.filter(i => i.riskClass === 'HIGH_RISK').length;
   }
 
+  get criticalCount(): number {
+    return this.items.filter(i => i.riskClass === 'CRITICAL').length;
+  }
+
   get mediumRiskCount(): number {
     return this.items.filter(i => i.riskClass === 'MEDIUM_RISK').length;
   }
@@ -445,7 +377,7 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
     if (!pattern) return 'Chưa xác định';
     const lower = pattern.toLowerCase();
     if (lower.includes('smooth')) return 'Bán đều đặn';
-    if (lower.includes('intermittent')) return 'Bán lắt nhắt';
+    if (lower.includes('intermittent')) return 'Bán không liên tục';
     if (lower.includes('erratic')) return 'Bán biến động';
     if (lower.includes('lumpy')) return 'Bán gián đoạn';
     return pattern;

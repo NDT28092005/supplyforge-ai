@@ -3,11 +3,11 @@
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 1. TIÊU ĐỀ TRANG                                                   -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div data-motion="header" class="operations-hero"
-    class="bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  <div data-motion="header"
+    class="operations-hero bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div class="space-y-1">
       <h1 class="font-bold text-2xl sm:text-3xl text-slate-900 tracking-tight">
-        Đánh Giá Rủi Ro Hàng Tồn Kho
+        Đánh giá rủi ro tồn kho
       </h1>
       <p class="text-slate-500 text-sm font-normal">
         Hệ thống tự động phát hiện các sản phẩm bán chậm và phân tích các nguyên nhân ảnh hưởng tới tốc độ tiêu thụ.
@@ -15,23 +15,35 @@
     </div>
   </div>
 
+  <div *ngIf="dataState === 'loading'" role="status" class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
+    <span class="mx-auto block h-7 w-7 rounded-full border-2 border-indigo-200 border-t-indigo-600 animate-spin"></span>
+    <h3 class="text-base font-bold text-slate-900">Đang tải đánh giá rủi ro</h3>
+    <p class="text-xs sm:text-sm text-slate-500">Đang lấy kết quả phân tích cho bộ dữ liệu hiện tại.</p>
+  </div>
+
+  <div *ngIf="dataState === 'error'" role="alert" class="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-3">
+    <h3 class="text-base font-bold text-rose-900">Chưa thể tải đánh giá rủi ro</h3>
+    <p class="text-xs sm:text-sm text-rose-700">{{ loadError }}</p>
+    <button (click)="loadRealAssessments()" class="px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-semibold text-xs transition-all cursor-pointer">Thử tải lại</button>
+  </div>
+
   <!-- Thông báo khi chưa có dữ liệu -->
-  <div *ngIf="items.length === 0" class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
+  <div *ngIf="dataState === 'empty'" class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
     <h3 class="text-base font-bold text-slate-900">Chưa có dữ liệu đánh giá rủi ro</h3>
     <p class="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
       Hiện chưa có bản ghi sản phẩm nào. Vui lòng nạp tệp CSV lịch sử đơn hàng để hệ thống đánh giá tốc độ bán và phân
       tích rủi ro.
     </p>
-    <button (click)="navigateTo.emit('csv-upload')"
+    <button (click)="goToImport()"
       class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition-all cursor-pointer inline-block">
-      Tải tệp CSV mới ngay
+      Nạp tệp CSV
     </button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 2. BẢNG DANH SÁCH ĐÁNH GIÁ RỦI RO (MAIN TABLE)                      -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div data-motion="table" class="bg-white border border-slate-200 p-6 rounded-2xl space-y-5">
+  <div *ngIf="dataState === 'ready'" data-motion="table" class="bg-white border border-slate-200 p-6 rounded-2xl space-y-5">
 
     <!-- Bộ lọc & Công cụ tìm kiếm nâng cao (SEARCH-001, FILTER-001, SORT-001, EXPORT-001) -->
     <div class="space-y-4 border-b border-slate-100 pb-4">
@@ -48,6 +60,12 @@
             class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer border"
             [ngClass]="selectedRiskFilter === 'HIGH_RISK' ? 'bg-red-700 text-white border-red-700' : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'">
             Rủi ro cao ({{ highRiskCount }})
+          </button>
+
+          <button (click)="setFilter('CRITICAL')"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer border"
+            [ngClass]="selectedRiskFilter === 'CRITICAL' ? 'bg-rose-900 text-white border-rose-900' : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'">
+            Rủi ro rất cao ({{ criticalCount }})
           </button>
 
           <button (click)="setFilter('MEDIUM_RISK')"
@@ -67,11 +85,11 @@
         <div class="flex items-center gap-2 shrink-0">
           <button (click)="exportReport('csv')"
             class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
-            <span>Xuất file CSV</span>
+            <span>Xuất CSV</span>
           </button>
           <button (click)="exportReport('excel')"
             class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
-            <span>Xuất file Excel</span>
+            <span>Xuất Excel</span>
           </button>
         </div>
       </div>
@@ -144,6 +162,10 @@
             </td>
 
             <td class="py-3.5 px-4 text-center whitespace-nowrap">
+              <span *ngIf="item.riskClass === 'CRITICAL'"
+                class="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-rose-100 text-rose-900 border border-rose-300 inline-block">
+                Rủi ro rất cao
+              </span>
               <span *ngIf="item.riskClass === 'HIGH_RISK'"
                 class="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200 inline-block">
                 Bán rất chậm
@@ -159,7 +181,7 @@
             </td>
 
             <td class="py-3.5 px-4 text-right font-mono font-bold text-sm"
-              [ngClass]="item.riskClass === 'HIGH_RISK' ? 'text-red-700' : item.riskClass === 'MEDIUM_RISK' ? 'text-amber-700' : 'text-emerald-700'">
+              [ngClass]="item.riskClass === 'CRITICAL' ? 'text-rose-900' : item.riskClass === 'HIGH_RISK' ? 'text-red-700' : item.riskClass === 'MEDIUM_RISK' ? 'text-amber-700' : 'text-emerald-700'">
               {{ item.probabilityPct }}
             </td>
 
@@ -187,16 +209,16 @@
   <!-- 3. MODAL CHI TIẾT SẢN PHẨM RỦI RO                                   -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <div *ngIf="drawerOpen" (click)="closeDrawer()"
-    class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    class="sf-modal-overlay backdrop-blur-xs">
 
-    <div (click)="$event.stopPropagation()"
-      class="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden text-xs">
+    <section (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="risk-sku-dialog-title"
+      class="sf-modal-panel bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-2xl flex flex-col overflow-hidden text-xs">
 
       <!-- Modal Header -->
       <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/50 shrink-0">
         <div>
           <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Phân tích rủi ro chi tiết</span>
-          <h2 class="text-base font-bold text-slate-900 mt-0.5">
+          <h2 id="risk-sku-dialog-title" class="text-base font-bold text-slate-900 mt-0.5">
             {{ selectedSku?.sku }} - {{ selectedSku?.name }}
           </h2>
         </div>
@@ -213,7 +235,7 @@
         <!-- Nguyên nhân bán chậm -->
         <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
           <div class="flex items-center justify-between">
-            <h3 class="font-bold text-sm text-slate-900">Vì sao sản phẩm này bán chậm?</h3>
+          <h3 class="font-bold text-sm text-slate-900">Tín hiệu đánh giá của mô hình</h3>
             <button (click)="openShapCalcModal()" class="text-slate-600 hover:text-slate-900 underline font-semibold">
               Xem cách tính toán
             </button>
@@ -257,8 +279,9 @@
           </div>
         </div>
 
-        <!-- Dự báo nhu cầu từ Mô hình LightGBM Tweedie -->
-        <div class="p-4 rounded-xl border border-indigo-200 bg-indigo-50/40 space-y-3">
+        <!-- Only show forecasts returned by the trained pipeline. -->
+        <div *ngIf="selectedSku?.forecast7d !== null || selectedSku?.forecast14d !== null || selectedSku?.forecast30d !== null"
+          class="p-4 rounded-xl border border-indigo-200 bg-indigo-50/40 space-y-3">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <h3 class="font-bold text-sm text-indigo-950">Dự Báo Nhu Cầu Tương Lai</h3>
@@ -268,19 +291,19 @@
           <div class="grid grid-cols-3 gap-2.5 text-xs">
             <div class="p-2.5 bg-white rounded-lg border border-indigo-100 space-y-0.5">
               <span class="text-slate-500 text-[11px] font-medium block">Dự báo 7 ngày tới</span>
-              <span class="font-mono font-bold text-indigo-900 text-sm block">{{ selectedSku?.forecast7d || 0 }} đơn
+              <span class="font-mono font-bold text-indigo-900 text-sm block">{{ selectedSku?.forecast7d ?? '—' }} đơn
                 vị</span>
             </div>
 
             <div class="p-2.5 bg-white rounded-lg border border-indigo-100 space-y-0.5">
               <span class="text-slate-500 text-[11px] font-medium block">Dự báo 14 ngày tới</span>
-              <span class="font-mono font-bold text-indigo-900 text-sm block">{{ selectedSku?.forecast14d || 0 }} đơn
+              <span class="font-mono font-bold text-indigo-900 text-sm block">{{ selectedSku?.forecast14d ?? '—' }} đơn
                 vị</span>
             </div>
 
             <div class="p-2.5 bg-white rounded-lg border border-indigo-100 space-y-0.5">
               <span class="text-slate-500 text-[11px] font-medium block">Dự báo 30 ngày tới</span>
-              <span class="font-mono font-bold text-indigo-900 text-sm block">{{ selectedSku?.forecast30d || 0 }} đơn
+              <span class="font-mono font-bold text-indigo-900 text-sm block">{{ selectedSku?.forecast30d ?? '—' }} đơn
                 vị</span>
             </div>
           </div>
@@ -291,9 +314,8 @@
           <h3 class="font-bold text-sm text-slate-900">Đề xuất phương án xử lý</h3>
           <div class="p-3 bg-white rounded-lg border border-slate-200 space-y-1">
             <div class="font-bold text-slate-900">
-              <span *ngIf="selectedSku?.riskClass === 'HIGH_RISK'">Khuyến nghị: Xả kho gấp để giải phóng tiền mặt</span>
-              <span *ngIf="selectedSku?.riskClass === 'MEDIUM_RISK'">Khuyến nghị: Bán kèm combo hoặc khuyến mãi đẩy
-                đơn</span>
+              <span *ngIf="selectedSku?.riskClass === 'CRITICAL' || selectedSku?.riskClass === 'HIGH_RISK'">Ưu tiên đánh giá phương án giảm tồn kho và kịch bản thu hồi vốn</span>
+              <span *ngIf="selectedSku?.riskClass === 'MEDIUM_RISK'">Xem xét bán theo gói hoặc chương trình xúc tiến phù hợp</span>
               <span *ngIf="selectedSku?.riskClass === 'LOW_RISK'">Khuyến nghị: Giữ nguyên giá và tiếp tục theo
                 dõi</span>
             </div>
@@ -316,17 +338,17 @@
         </button>
       </div>
 
-    </div>
+    </section>
 
   </div>
 
   <!-- Modal hướng dẫn phương pháp đánh giá -->
   <div *ngIf="showShapCalcModal" (click)="closeShapCalcModal()"
-    class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    class="sf-modal-overlay backdrop-blur-xs">
 
-    <div (click)="$event.stopPropagation()"
-      class="bg-white rounded-2xl border border-slate-200 p-6 max-w-lg w-full space-y-4 shadow-xl">
-      <h3 class="font-bold text-base text-slate-900">Cách hệ thống đánh giá sản phẩm bán chậm</h3>
+    <section (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="risk-method-dialog-title"
+      class="sf-modal-panel bg-white rounded-2xl border border-slate-200 p-6 max-w-lg w-full space-y-4 shadow-xl overflow-y-auto">
+      <h3 id="risk-method-dialog-title" class="font-bold text-base text-slate-900">Cách hệ thống đánh giá sản phẩm bán chậm</h3>
 
       <div class="space-y-3 text-xs text-slate-600">
         <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
@@ -336,7 +358,7 @@
 
         <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
           <strong class="text-slate-900 block">2. Chuỗi ngày liên tục trống đơn:</strong>
-          <span>Đo khoảng thời gian từ đơn hàng gần nhất tới hiện tại. Thời gian trống càng dài thì rủi ro chôn vốn càng
+          <span>Đo khoảng thời gian từ đơn hàng gần nhất tới hiện tại. Thời gian trống càng dài thì rủi ro vốn tồn đọng càng
             lớn.</span>
         </div>
 
@@ -352,7 +374,7 @@
           Tôi đã hiểu
         </button>
       </div>
-    </div>
+    </section>
   </div>
 
 </div>

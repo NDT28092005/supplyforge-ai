@@ -34,6 +34,7 @@ export class AuthPageComponent implements OnInit {
   devResetCode = '';
   newPassword = '';
   confirmNewPassword = '';
+  private returnUrl = '/app/dashboard';
 
   loginForm = {
     email: '',
@@ -59,6 +60,13 @@ export class AuthPageComponent implements OnInit {
 
   ngOnInit(): void {
     const qTab = this.route.snapshot.queryParams['tab'] || this.route.snapshot.queryParams['mode'];
+    const requestedReturnUrl = this.route.snapshot.queryParams['returnUrl'];
+    if (typeof requestedReturnUrl === 'string' && requestedReturnUrl.startsWith('/app/')) {
+      this.returnUrl = requestedReturnUrl;
+    }
+    if (this.route.snapshot.queryParams['reason'] === 'session_expired') {
+      this.errorMessage = 'Phiên làm việc đã kết thúc. Vui lòng đăng nhập lại để tiếp tục thao tác.';
+    }
     if (qTab === 'register' || qTab === 'login' || qTab === 'verify' || qTab === 'forgot_password' || qTab === 'reset_password') {
       this.activeTab = qTab;
     } else {
@@ -96,7 +104,7 @@ export class AuthPageComponent implements OnInit {
         this.loading = false;
         const token = res.access_token || res.token;
         if (token) {
-          this.authService.setToken(token);
+          this.authService.setSession(token, res.refresh_token);
         }
         const userName = res.user?.name || res.user?.display_name || this.loginForm.email.split('@')[0];
         const userObj = {
@@ -105,7 +113,7 @@ export class AuthPageComponent implements OnInit {
         };
         this.authService.setCurrentUser(userObj);
         this.loginSuccess.emit(userObj);
-        this.router.navigate(['/app/dashboard']);
+        this.router.navigateByUrl(this.returnUrl);
       },
       error: (err: any) => {
         this.loading = false;
@@ -134,8 +142,8 @@ export class AuthPageComponent implements OnInit {
       return;
     }
 
-    if (this.registerForm.password.length < 6) {
-      this.errorMessage = 'Mật khẩu phải có ít nhất 6 ký tự.';
+    if (this.registerForm.password.length < 8) {
+      this.errorMessage = 'Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ cái và chữ số.';
       return;
     }
 
@@ -181,8 +189,8 @@ export class AuthPageComponent implements OnInit {
       return;
     }
 
-    if (!this.verificationCode || this.verificationCode.trim().length !== 6) {
-      this.errorMessage = 'Vui lòng nhập đầy đủ mã xác thực 6 chữ số.';
+    if (!this.verificationCode || this.verificationCode.trim().length < 20) {
+      this.errorMessage = 'Vui lòng nhập đầy đủ mã xác thực được gửi đến email.';
       return;
     }
 
@@ -193,7 +201,7 @@ export class AuthPageComponent implements OnInit {
         this.loading = false;
         const token = res.access_token || res.token;
         if (token) {
-          this.authService.setToken(token);
+          this.authService.setSession(token, res.refresh_token);
         }
 
         const userName = res.user?.name || res.user?.display_name || this.registerForm.fullName || this.registeredEmail.split('@')[0];
@@ -207,7 +215,7 @@ export class AuthPageComponent implements OnInit {
         this.loginSuccess.emit(userObj);
 
         setTimeout(() => {
-          this.router.navigate(['/app/dashboard']);
+          this.router.navigateByUrl(this.returnUrl);
         }, 600);
       },
       error: (err: any) => {
@@ -241,8 +249,9 @@ export class AuthPageComponent implements OnInit {
   onDemoLogin(): void {
     this.apiService.loginUser('demo@supplyforge.ai', 'demo123').subscribe({
       next: (res: any) => {
-        if (res.token) {
-          this.authService.setToken(res.token);
+        const token = res.access_token || res.token;
+        if (token) {
+          this.authService.setSession(token, res.refresh_token);
         }
         this.demoLogin.emit();
         this.router.navigate(['/app/dashboard']);
@@ -296,8 +305,9 @@ export class AuthPageComponent implements OnInit {
     this.apiService.completeGoogleLogin(response.credential).subscribe({
       next: (res: any) => {
         this.loading = false;
-        if (res.token) {
-          this.authService.setToken(res.token);
+        const token = res.access_token || res.token;
+        if (token) {
+          this.authService.setSession(token, res.refresh_token);
         }
         const userName = res.user?.name || res.user?.email?.split('@')[0] || 'Google User';
         const userObj = {

@@ -6,26 +6,40 @@
   <div data-motion="header" class="operations-hero bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div class="space-y-1">
       <h1 class="font-bold text-2xl sm:text-3xl text-slate-900 tracking-tight">
-        Đánh Giá Vốn Tồn Đọng Trong Kho
+        Đánh giá vốn tồn đọng
       </h1>
       <p class="text-slate-500 text-sm font-normal">
-        Đo lường tổng số tiền vốn bị chôn kẹt trong kho, phân rã mức độ rủi ro và xác định thứ tự ưu tiên giải phóng dòng tiền.
+        Đo lường giá trị vốn lưu kho, phân rã mức độ rủi ro và xác định thứ tự ưu tiên xử lý danh mục.
       </p>
     </div>
   </div>
 
+  <div *ngIf="dataState === 'loading'" role="status" class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
+    <span class="mx-auto block h-7 w-7 rounded-full border-2 border-indigo-200 border-t-indigo-600 animate-spin"></span>
+    <h3 class="text-base font-bold text-slate-900">Đang tải đánh giá vốn tồn đọng</h3>
+    <p class="text-xs sm:text-sm text-slate-500">Đang tổng hợp danh mục, giá trị vốn và thời gian lưu kho.</p>
+  </div>
+
+  <div *ngIf="dataState === 'error'" role="alert" class="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-3">
+    <h3 class="text-base font-bold text-rose-900">Chưa thể tải đánh giá vốn tồn đọng</h3>
+    <p class="text-xs sm:text-sm text-rose-700">{{ loadError }}</p>
+    <button (click)="loadRealCapitalExposureData()" class="px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-semibold text-xs transition-all cursor-pointer">Thử tải lại</button>
+  </div>
+
   <!-- Thông báo khi chưa có dữ liệu -->
-  <div *ngIf="skuItems.length === 0"
+  <div *ngIf="dataState === 'empty'"
     class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
     <h3 class="text-base font-bold text-slate-900">Chưa có dữ liệu đánh giá vốn đọng</h3>
     <p class="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
       Hiện tại chưa có bản ghi sản phẩm nào. Vui lòng nạp tệp CSV bán hàng mới để hệ thống tính toán giá trị vốn tồn đọng.
     </p>
-    <button (click)="navigateTo.emit('csv-upload')"
+    <button (click)="goToImport()"
       class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition-all cursor-pointer inline-block">
-      Tải tệp CSV mới ngay
+      Nạp tệp CSV
     </button>
   </div>
+
+  <ng-container *ngIf="dataState === 'ready'">
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 2. TỔNG QUAN CHỈ SỐ VỐN TỒN (KPI METRICS GRID)                     -->
@@ -38,32 +52,32 @@
       <div class="text-2xl sm:text-3xl font-bold text-slate-900 font-mono">
         {{ summaryGrid.totalExposure }}
       </div>
-      <p class="text-xs text-slate-500">Tổng giá trị tiền vốn đọng trên tất cả sản phẩm</p>
+      <p class="text-xs text-slate-500">Tổng giá trị tồn kho theo dữ liệu đầu vào</p>
     </div>
 
     <!-- KPI 2: Vốn ưu tiên giải phóng gấp -->
-    <div (click)="setFilter('HIGH_RISK')"
+    <div (click)="setFilter('AT_RISK')"
       class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2 hover:border-slate-400 transition-all cursor-pointer">
-      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Vốn ưu tiên giải phóng</span>
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Vốn thuộc nhóm rủi ro cao</span>
       <div class="text-2xl sm:text-3xl font-bold text-red-700 font-mono">
         {{ summaryGrid.highRiskExposure }}
       </div>
-      <p class="text-xs text-slate-500">Vốn bị chôn ở {{ highRiskCount }} sản phẩm thuộc nhóm rủi ro cao</p>
+      <p class="text-xs text-slate-500">Giá trị tồn kho tại {{ highRiskCount }} SKU thuộc nhóm rủi ro cao</p>
     </div>
 
     <!-- KPI 3: Chi phí gánh vốn ước tính -->
     <div class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2">
-      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Chi phí gánh vốn ước tính</span>
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Chi phí cơ hội ước tính</span>
       <div class="text-2xl sm:text-3xl font-bold text-amber-700 font-mono">
         {{ summaryGrid.opportunityCost }}
       </div>
-      <p class="text-xs text-slate-500">Chi phí cơ hội bị mất do chôn vốn kéo dài</p>
+      <p class="text-xs text-slate-500">Theo cấu hình tỷ lệ chi phí cơ hội của bản phân tích</p>
     </div>
 
-    <!-- KPI 4: Số sản phẩm đang bị chôn vốn -->
+    <!-- KPI 4: Số SKU cần ưu tiên đánh giá -->
     <div (click)="setFilter('HIGH_RISK')"
       class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2 hover:border-slate-400 transition-all cursor-pointer">
-      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Sản phẩm bị chôn vốn</span>
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">SKU cần ưu tiên đánh giá</span>
       <div class="text-2xl sm:text-3xl font-bold text-slate-900 font-mono">
         {{ summaryGrid.affectedSkus }} <span class="text-xs font-sans font-normal text-slate-500">mã</span>
       </div>
@@ -151,10 +165,16 @@
             Tất cả ({{ totalCount }})
           </button>
 
-          <button (click)="setFilter('HIGH_RISK')"
+          <button (click)="setFilter('AT_RISK')"
             class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer border"
-            [ngClass]="selectedRiskFilter === 'HIGH_RISK' ? 'bg-red-700 text-white border-red-700' : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'">
-            Vốn rủi ro cao ({{ highRiskCount }})
+            [ngClass]="selectedRiskFilter === 'AT_RISK' ? 'bg-red-700 text-white border-red-700' : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'">
+            Vốn rủi ro cao trở lên ({{ highRiskCount }})
+          </button>
+
+          <button (click)="setFilter('CRITICAL')"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer border"
+            [ngClass]="selectedRiskFilter === 'CRITICAL' ? 'bg-rose-900 text-white border-rose-900' : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'">
+            Vốn rủi ro rất cao ({{ criticalCount }})
           </button>
 
           <button (click)="setFilter('MEDIUM_RISK')"
@@ -174,11 +194,11 @@
         <div class="flex items-center gap-2 shrink-0">
           <button (click)="exportReport('csv')"
             class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
-            <span>Xuất file CSV</span>
+            <span>Xuất CSV</span>
           </button>
           <button (click)="exportReport('excel')"
             class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
-            <span>Xuất file Excel</span>
+            <span>Xuất Excel</span>
           </button>
         </div>
       </div>
@@ -193,7 +213,7 @@
         <div>
           <select [(ngModel)]="capitalFilter"
             class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400">
-            <option value="">Vốn đọng: Tất cả</option>
+            <option value="">Vốn tồn đọng: Tất cả</option>
             <option value="LOW">Dưới 10 triệu VND</option>
             <option value="MID">10 – 50 triệu VND</option>
             <option value="HIGH">Trên 50 triệu VND</option>
@@ -203,7 +223,7 @@
         <div>
           <select [(ngModel)]="sortField"
             class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400">
-            <option value="capitalExposureVal">Sắp xếp: Vốn đọng (VND)</option>
+            <option value="capitalExposureVal">Sắp xếp: Vốn tồn đọng (VND)</option>
             <option value="opportunityCostVal">Sắp xếp: Chi phí cơ hội</option>
             <option value="dslsDays">Sắp xếp: Số ngày tồn (DSLS)</option>
           </select>
@@ -219,8 +239,8 @@
             <th class="py-3.5 px-4 whitespace-nowrap">Sản phẩm</th>
             <th class="py-3.5 px-4 text-center whitespace-nowrap">Mức rủi ro</th>
             <th class="py-3.5 px-4 text-right whitespace-nowrap">Vốn đang đọng</th>
-            <th class="py-3.5 px-4 text-right whitespace-nowrap">Vốn ưu tiên giải phóng</th>
-            <th class="py-3.5 px-4 text-right whitespace-nowrap">Chi phí gánh vốn</th>
+            <th class="py-3.5 px-4 text-right whitespace-nowrap">Vốn theo trọng số rủi ro</th>
+            <th class="py-3.5 px-4 text-right whitespace-nowrap">Chi phí cơ hội</th>
             <th class="py-3.5 px-4 text-center whitespace-nowrap">Thời gian nằm kho</th>
             <th class="py-3.5 px-4 text-center whitespace-nowrap">Thao tác</th>
           </tr>
@@ -237,11 +257,12 @@
             <td class="py-3.5 px-4 text-center whitespace-nowrap">
               <span class="inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold border"
                 [ngClass]="{
+                  'bg-rose-100 text-rose-900 border-rose-300': item.riskClass === 'CRITICAL',
                   'bg-red-50 text-red-700 border-red-200': item.riskClass === 'HIGH_RISK',
                   'bg-amber-50 text-amber-700 border-amber-200': item.riskClass === 'MEDIUM_RISK',
                   'bg-emerald-50 text-emerald-700 border-emerald-200': item.riskClass === 'LOW_RISK'
                 }">
-                {{ item.riskClass === 'HIGH_RISK' ? 'Rủi ro cao' : item.riskClass === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'An toàn' }}
+                {{ item.riskClass === 'CRITICAL' ? 'Rủi ro rất cao' : item.riskClass === 'HIGH_RISK' ? 'Rủi ro cao' : item.riskClass === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'Rủi ro thấp' }}
               </span>
             </td>
 
@@ -286,16 +307,16 @@
   <!-- 5. MODAL CHI TIẾT TÁC ĐỘNG DÒNG VỐN                                -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <div *ngIf="drawerOpen && selectedSkuItem" (click)="closeSkuDetail()"
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+    class="sf-modal-overlay backdrop-blur-xs">
 
-    <div (click)="$event.stopPropagation()"
-      class="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden max-w-2xl w-full max-h-[85vh] flex flex-col text-xs">
+    <section (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="capital-sku-dialog-title"
+      class="sf-modal-panel bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden max-w-2xl w-full flex flex-col text-xs">
 
       <!-- Modal Header -->
       <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/50 shrink-0">
         <div>
           <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Chi tiết tác động vốn đọng</span>
-          <h2 class="text-base font-bold text-slate-900 font-mono mt-0.5">
+          <h2 id="capital-sku-dialog-title" class="text-base font-bold text-slate-900 font-mono mt-0.5">
             {{ selectedSkuItem.sku }} - {{ selectedSkuItem.name }}
           </h2>
         </div>
@@ -317,12 +338,12 @@
           </div>
 
           <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-            <span class="text-[10px] text-slate-500 font-medium block">Vốn cần giải phóng</span>
+            <span class="text-[10px] text-slate-500 font-medium block">Vốn theo trọng số rủi ro</span>
             <span class="font-mono font-bold text-red-700 text-sm block">{{ selectedSkuItem.capitalPriority }}</span>
           </div>
 
           <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-            <span class="text-[10px] text-slate-500 font-medium block">Chi phí gánh vốn</span>
+            <span class="text-[10px] text-slate-500 font-medium block">Chi phí cơ hội</span>
             <span class="font-mono font-bold text-slate-900 text-sm block">{{ selectedSkuItem.opportunityCost }}</span>
           </div>
 
@@ -338,24 +359,12 @@
           <p class="text-slate-600 leading-relaxed">{{ selectedSkuItem.conclusion }}</p>
         </div>
 
-        <!-- Phân tích chi tiết -->
+        <!-- Phương pháp định giá -->
         <div class="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-          <h4 class="font-bold text-slate-900 text-xs">Chi phí gánh vốn theo thời gian</h4>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-              <span class="text-slate-500 font-semibold block">Chi phí lưu kho & Lãi suất chôn vốn / tháng</span>
-              <span class="font-mono font-bold text-slate-900 text-sm block">
-                {{ getMonthlyHoldingCost(selectedSkuItem.capitalExposure) }}
-              </span>
-            </div>
-
-            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-              <span class="text-slate-500 font-semibold block">Phí cơ hội mất đi</span>
-              <span class="font-mono font-bold text-red-700 text-sm block">
-                {{ selectedSkuItem.opportunityCost }}
-              </span>
-            </div>
-          </div>
+          <h4 class="font-bold text-slate-900 text-xs">Cơ sở định giá</h4>
+          <p class="text-xs leading-relaxed text-slate-600">
+            Vốn theo trọng số rủi ro và chi phí cơ hội được lấy trực tiếp từ bản phân tích. Hệ thống không suy diễn chi phí theo tháng khi bộ dữ liệu không cung cấp cấu hình phù hợp.
+          </p>
         </div>
 
       </div>
@@ -376,8 +385,9 @@
         </button>
       </div>
 
-    </div>
+    </section>
 
   </div>
 
+  </ng-container>
 </div>

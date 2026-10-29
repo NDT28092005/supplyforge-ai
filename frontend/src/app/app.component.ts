@@ -42,6 +42,7 @@ export class AppComponent implements OnInit {
   // Clear Data Modal State
   isClearModalOpen = false;
   isClearingData = false;
+  clearDataError = '';
 
   constructor(
     public apiService: ApiService,
@@ -55,10 +56,12 @@ export class AppComponent implements OnInit {
     console.info('[Auth Debug] Khởi động ứng dụng với Router. URL:', window.location.href);
 
     const tokenMatch = window.location.href.match(/[?&]token=([^&]+)/);
+    const refreshTokenMatch = window.location.href.match(/[?&]refresh_token=([^&]+)/);
     const urlToken = tokenMatch ? tokenMatch[1] : null;
+    const urlRefreshToken = refreshTokenMatch ? refreshTokenMatch[1] : null;
     if (urlToken) {
       console.info('[Auth Debug] Phát hiện token trên URL. Tiến hành lưu trữ...');
-      this.authService.setToken(urlToken);
+      this.authService.setSession(urlToken, urlRefreshToken || undefined);
     }
 
     const requiresPhoneMatch = window.location.href.match(/[?&]requires_phone=true/);
@@ -84,11 +87,14 @@ export class AppComponent implements OnInit {
     }
 
     this.authService.loadUserFromToken();
+    // Dashboard cache is tenant-specific. Never trust a browser session cache
+    // before the API confirms that it belongs to the authenticated workspace.
+    this.dashboardState.reset();
 
     // Check if database already has imported data
     this.apiService.checkData().subscribe({
       next: (res) => {
-        if (res && res.hasData) {
+        if (res && res.hasData && !this.ingestionState.isDatasetTransitionActive) {
           this.dashboardState.setHasData(true);
         }
       },
@@ -116,6 +122,10 @@ export class AppComponent implements OnInit {
 
   get isProfileRoute(): boolean {
     return this.router.url.startsWith('/app/import/profile');
+  }
+
+  get canReturnToDashboard(): boolean {
+    return this.authService.isLoggedIn() && !this.ingestionState.isDatasetTransitionActive;
   }
 
   // --- Ingestion Pipeline Stepper Indicators ---
@@ -157,34 +167,51 @@ export class AppComponent implements OnInit {
   // --- Navigation Actions ---
   startIncrementalImport(): void {
     this.ingestionState.reset();
+    this.ingestionState.setSessionType('INCREMENTAL');
     this.router.navigate(['/app/import']);
   }
 
+  returnToDashboard(): void {
+    this.router.navigate(['/app/dashboard']);
+  }
+
   openClearModal(): void {
+    this.clearDataError = '';
     this.isClearModalOpen = true;
   }
 
   cancelClearModal(): void {
+    if (this.isClearingData) return;
+    this.clearDataError = '';
     this.isClearModalOpen = false;
   }
 
   confirmClearData(): void {
-    this.isClearModalOpen = false;
     this.isClearingData = true;
+    this.clearDataError = '';
+    this.ingestionState.setDatasetStatus('clearing', 'Đang xóa bộ dữ liệu hiện tại.');
     this.apiService.clearData().subscribe({
-      next: () => {
+      next: (res: any) => {
+        if (res?.status !== 'SUCCESS') {
+          this.handleClearDataError(res?.error || 'Hệ thống chưa xác nhận thao tác xóa dữ liệu.');
+          return;
+        }
         this.isClearingData = false;
+        this.isClearModalOpen = false;
         this.ingestionState.reset();
         this.dashboardState.reset();
         this.router.navigate(['/app/import']);
       },
-      error: () => {
-        this.isClearingData = false;
-        this.ingestionState.reset();
-        this.dashboardState.reset();
-        this.router.navigate(['/app/import']);
+      error: (err: any) => {
+        this.handleClearDataError(err?.error?.error || 'Không thể xóa dữ liệu. Dữ liệu hiện tại vẫn được giữ nguyên.');
       }
     });
+  }
+
+  private handleClearDataError(message: string): void {
+    this.isClearingData = false;
+    this.clearDataError = message;
+    this.ingestionState.setDatasetStatus('error', message);
   }
 
   clearAllDataAndRestart(): void {
@@ -208,14 +235,17 @@ export class AppComponent implements OnInit {
 
   performLogout(): void {
     this.authService.clearToken();
+    this.dashboardState.reset();
+    this.ingestionState.reset();
     this.router.navigate(['/']);
   }
 
   performDemoLogin(): void {
     this.apiService.loginUser('demo@supplyforge.ai', 'demo123').subscribe({
       next: (res: any) => {
-        if (res && res.token) {
-          this.authService.setToken(res.token);
+        const token = res?.access_token || res?.token;
+        if (token) {
+          this.authService.setSession(token, res.refresh_token);
           this.router.navigate(['/app/dashboard']);
         }
       },
@@ -240,8 +270,9 @@ export class AppComponent implements OnInit {
       next: (res: any) => {
         this.phoneLoading = false;
         this.requiresPhone = false;
-        if (res && res.token) {
-          this.authService.setToken(res.token);
+        const token = res?.access_token || res?.token;
+        if (token) {
+          this.authService.setSession(token, res.refresh_token);
           this.router.navigate(['/app/dashboard']);
         }
       },

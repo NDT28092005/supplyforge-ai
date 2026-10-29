@@ -341,8 +341,14 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
 REDIS_CACHE_URL = os.getenv('REDIS_CACHE_URL', f'redis://{REDIS_HOST}:{REDIS_PORT}/1')
+# A local UI should remain usable without separately starting Redis. Production
+# retains Redis unless it is explicitly configured otherwise.
+USE_LOCMEM_CACHE = os.getenv(
+    'USE_LOCMEM_CACHE',
+    '1' if not IS_DEPLOYED else '0',
+).lower() in {'1', 'true', 'yes'}
 
-if 'test' in os.sys.argv or os.getenv('USE_LOCMEM_CACHE') == '1':
+if 'test' in os.sys.argv or USE_LOCMEM_CACHE:
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',

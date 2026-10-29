@@ -4,11 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ApiService } from '../api.service';
 import { IngestionStateService } from '../core/state/ingestion-state.service';
+import { DashboardStateService } from '../core/state/dashboard-state.service';
 import { PageMotionDirective } from '../core/motion/page-motion.directive';
 
 export interface ProfileResponse {
   sessionId: string;
   status: string;
+  error?: string;
   idempotent_retry?: boolean;
   message?: string;
   file: {
@@ -65,6 +67,7 @@ export class CsvUploadComponent implements OnInit, OnChanges {
   // Status state: 'idle' | 'uploading' | 'profiled' | 'error'
   uploadStatus: 'idle' | 'uploading' | 'profiled' | 'error' = 'idle';
   uploadProgress = 0;
+  uploadStage = 'Đang chuẩn bị tệp để tải lên';
   errorMessage = '';
   profileResult: ProfileResponse | null = null;
 
@@ -99,6 +102,7 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
   constructor(
     private apiService: ApiService,
     private ingestionState: IngestionStateService,
+    private dashboardState: DashboardStateService,
     private router: Router
   ) {}
 
@@ -170,25 +174,40 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
     }
 
     this.selectedFile = file;
-    this.ingestionState.setSessionType(this.sessionType);
-    this.ingestionState.setFile(file);
+    // A new initial import replaces the active dataset. Hide cached reports
+    // immediately so no previous or example figures are shown during import.
+    if (this.sessionType === 'INITIAL') {
+      this.dashboardState.reset();
+    }
+    this.ingestionState.beginImport(file, this.sessionType);
     this.errorMessage = '';
-    this.ingestionState.setErrorMessage('');
     this.uploadStatus = 'uploading';
-    this.uploadProgress = 15;
+    this.uploadProgress = 8;
+    this.uploadStage = 'Đang tải tệp lên máy chủ';
 
     const progressInterval = setInterval(() => {
-      if (this.uploadProgress < 85) {
-        this.uploadProgress += 10;
+      if (this.uploadProgress < 88) {
+        this.uploadProgress += 4;
+        if (this.uploadProgress >= 52) {
+          this.uploadStage = 'Đang kiểm tra cấu trúc, cột dữ liệu và bản ghi lỗi';
+        }
       }
     }, 200);
 
-    this.apiService.uploadCsvV2(file, 1, this.sessionType).subscribe({
+    this.apiService.uploadCsvV2(file, this.apiService.getCurrentWorkspaceId(), this.sessionType).subscribe({
       next: (res: ProfileResponse) => {
         clearInterval(progressInterval);
         this.uploadProgress = 100;
+        if (res?.status === 'REJECT' || res?.profile?.validation?.status === 'REJECT') {
+          const message = res?.error || res?.profile?.validation?.errors?.join('; ') || 'Tệp CSV không đạt yêu cầu kiểm tra.';
+          this.uploadStatus = 'error';
+          this.errorMessage = message;
+          this.ingestionState.setErrorMessage(message);
+          return;
+        }
         this.profileResult = res;
         this.uploadStatus = 'profiled';
+        this.ingestionState.setDatasetStatus('profiling', 'Tệp đã được kiểm tra. Cần xác nhận ánh xạ cột trước khi nhập dữ liệu.');
 
         if (res.sessionId) {
           this.ingestionState.setSessionId(res.sessionId);
@@ -225,7 +244,9 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
   enqueueBackgroundJob(): void {
     if (!this.selectedFile) return;
     this.uploadStatus = 'uploading';
-    this.apiService.enqueueUploadJob(this.selectedFile, 1, this.sessionType).subscribe({
+    this.uploadStage = 'Đang đưa tệp vào hàng chờ xử lý';
+    this.ingestionState.setDatasetStatus('uploading', this.uploadStage);
+    this.apiService.enqueueUploadJob(this.selectedFile, this.apiService.getCurrentWorkspaceId(), this.sessionType).subscribe({
       next: (res: any) => {
         this.router.navigate(['/app/queue']);
       },

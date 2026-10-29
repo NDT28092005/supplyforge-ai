@@ -14,6 +14,14 @@ from src.analytics.risk_assessment_assembler import RiskAssessmentAssembler
 logger = logging.getLogger(__name__)
 
 
+def _risk_queryset_for_request(request):
+    """Return only the risk records visible to an authenticated workspace."""
+    queryset = SlowMovingRiskAssessment.objects.all()
+    if getattr(request, 'tenant_context_validated', False) and getattr(request, 'workspace_id', None):
+        queryset = queryset.filter(session__workspace_id=request.workspace_id)
+    return queryset
+
+
 # ── M3-07 Risk API & Persistence Views ─────────────────────────────────
 
 @api_view(['POST'])
@@ -170,12 +178,12 @@ def list_risk_assessments(request):
     sku = request.query_params.get('sku')
     sort_by = request.query_params.get('sort_by', '-risk_score')
 
-    queryset = SlowMovingRiskAssessment.objects.all()
+    queryset = _risk_queryset_for_request(request)
 
     # If table is completely empty, attempt auto-populating from existing Product records or CSV
     if not queryset.exists():
         _auto_populate_assessments_from_products(session_id)
-        queryset = SlowMovingRiskAssessment.objects.all()
+        queryset = _risk_queryset_for_request(request)
 
     if session_id and queryset.filter(session_id=session_id).exists():
         queryset = queryset.filter(session_id=session_id)
@@ -210,11 +218,11 @@ def list_risk_assessments(request):
             'supporting_signals': r.supporting_signals,
             'diagnostics': r.diagnostics,
             'evidence': r.evidence,
-            'capital_exposure_vnd': r.evidence.get('capital_exposure_vnd') if isinstance(r.evidence, dict) and r.evidence.get('capital_exposure_vnd') else (r.evidence.get('sold_90d', 0) * 150000 if isinstance(r.evidence, dict) else 5000000),
+            'capital_exposure_vnd': r.evidence.get('capital_exposure_vnd') if isinstance(r.evidence, dict) else None,
             'stock_quantity': r.evidence.get('stock_quantity', 0) if isinstance(r.evidence, dict) else 0,
             'unit_cost': r.evidence.get('unit_cost', 0) if isinstance(r.evidence, dict) else 0,
             'model': {
-                'name': 'XGBoost',
+                'name': 'LightGBM' if 'lightgbm' in (r.model_version or '').lower() else 'Risk classifier',
                 'version': r.model_version
             },
             'calibration_version': r.calibration_version,
@@ -241,7 +249,7 @@ def get_risk_assessment_detail(request, id):
     Retrieve Single Risk Assessment Detail Record by UUID.
     """
     try:
-        r = SlowMovingRiskAssessment.objects.get(id=id)
+        r = _risk_queryset_for_request(request).get(id=id)
     except (SlowMovingRiskAssessment.DoesNotExist, ValueError):
         return Response({'error': f'Không tìm thấy Risk Assessment với ID {id}'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -261,7 +269,7 @@ def get_risk_assessment_detail(request, id):
         'diagnostics': r.diagnostics,
         'evidence': r.evidence,
         'model': {
-            'name': 'XGBoost',
+            'name': 'LightGBM' if 'lightgbm' in (r.model_version or '').lower() else 'Risk classifier',
             'version': r.model_version
         },
         'calibration_version': r.calibration_version,
@@ -278,7 +286,9 @@ def get_sku_risk_assessment(request, sku_id):
     GET /api/v1/risk/skus/<sku_id>
     Direct SKU Risk Assessment lookup.
     """
-    r = SlowMovingRiskAssessment.objects.filter(Q(sku=sku_id) | Q(canonical_sku_id=sku_id)).order_by('-assessment_timestamp').first()
+    r = _risk_queryset_for_request(request).filter(
+        Q(sku=sku_id) | Q(canonical_sku_id=sku_id)
+    ).order_by('-assessment_timestamp').first()
     if not r:
         return Response({'error': f'Không tìm thấy Risk Assessment cho SKU {sku_id}'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -298,7 +308,7 @@ def get_sku_risk_assessment(request, sku_id):
         'diagnostics': r.diagnostics,
         'evidence': r.evidence,
         'model': {
-            'name': 'XGBoost',
+            'name': 'LightGBM' if 'lightgbm' in (r.model_version or '').lower() else 'Risk classifier',
             'version': r.model_version
         },
         'calibration_version': r.calibration_version,
@@ -609,7 +619,9 @@ def _auto_populate_assessments_from_products(session_id=None):
         SlowMovingRiskAssessment.objects.bulk_create(assessments_to_create, ignore_conflicts=True)
         try:
             from supplyforge.services.auto_decision_generator import AutoDecisionGeneratorService
-            AutoDecisionGeneratorService.generate_decisions_from_assessments()
+            AutoDecisionGeneratorService.generate_decisions_from_assessments(
+                workspace_id=session_obj.workspace_id,
+            )
         except Exception as e:
             logger.error("Auto decision generator failed: %s", e)
 
@@ -621,11 +633,11 @@ def get_global_risk_summary(request):
     Aggregated count summary across all 4 risk classes.
     """
     session_id = request.query_params.get('session_id')
-    qs = SlowMovingRiskAssessment.objects.all()
+    qs = _risk_queryset_for_request(request)
 
     if not qs.exists():
         _auto_populate_assessments_from_products(session_id)
-        qs = SlowMovingRiskAssessment.objects.all()
+        qs = _risk_queryset_for_request(request)
 
     if session_id and qs.filter(session_id=session_id).exists():
         qs = qs.filter(session_id=session_id)

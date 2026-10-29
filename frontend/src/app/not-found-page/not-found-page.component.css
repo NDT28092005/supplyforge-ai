@@ -1,0 +1,93 @@
+:host { display: block; }
+
+.not-found-page {
+  align-items: center;
+  display: grid;
+  margin: 0 auto;
+  max-width: var(--workspace-max);
+  min-height: calc(100vh - 4.5rem);
+  padding: clamp(1rem, 3vw, 2.25rem);
+}
+
+.not-found-card {
+  align-items: center;
+  background:
+    radial-gradient(circle at 88% 16%, rgba(22, 123, 114, .14), transparent 15rem),
+    linear-gradient(135deg, #f8fbfa, #eef5f4);
+  border: 1px solid #ccddd8;
+  border-radius: 1.5rem;
+  display: grid;
+  gap: clamp(2rem, 6vw, 5rem);
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, .55fr);
+  overflow: hidden;
+  padding: clamp(2rem, 7vw, 5.5rem);
+  position: relative;
+}
+
+.not-found-card::after {
+  background: repeating-linear-gradient(90deg, transparent 0 24px, rgba(22, 123, 114, .06) 25px 26px);
+  content: '';
+  height: 24rem;
+  position: absolute;
+  right: -7rem;
+  top: -10rem;
+  transform: rotate(-22deg);
+  width: 27rem;
+}
+
+.not-found-copy,
+.not-found-mark { position: relative; z-index: 1; }
+
+.not-found-code {
+  color: #167b72;
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+.not-found-copy h1 {
+  color: #112f37;
+  font-size: clamp(2.35rem, 5vw, 4.8rem);
+  letter-spacing: -.065em;
+  line-height: 1.03;
+  margin: .85rem 0 1.15rem;
+  max-width: 12ch;
+}
+
+.not-found-copy > p:not(.not-found-code) {
+  color: #526b70;
+  font-size: .92rem;
+  line-height: 1.75;
+  max-width: 34rem;
+}
+
+.not-found-action {
+  align-items: center;
+  background: #123b45;
+  border-radius: .72rem;
+  color: #fff;
+  display: inline-flex;
+  font-size: .76rem;
+  font-weight: 800;
+  gap: .65rem;
+  margin-top: 1.8rem;
+  padding: .82rem 1rem;
+  text-decoration: none;
+  transition: background-color 180ms ease, transform 180ms ease;
+}
+
+.not-found-action:hover { background: #1c5661; transform: translateY(-1px); }
+.not-found-mark { max-width: 16rem; justify-self: end; width: 100%; }
+.not-found-mark__route { fill: none; stroke: #2e837e; stroke-linecap: round; stroke-width: 2; }
+.not-found-mark__route--muted { stroke: #b1c9c3; stroke-dasharray: 5 8; }
+.not-found-mark__node { fill: #e1f1ed; stroke: #2e837e; stroke-width: 2; }
+.not-found-mark__node--focus { fill: #123b45; stroke: #92d4c9; }
+.not-found-mark__node--muted { fill: #f4f7f5; stroke: #a8c5be; }
+.not-found-mark__signal { fill: none; stroke: #e5bc58; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+
+@media (max-width: 640px) {
+  .not-found-page { min-height: calc(100vh - 4rem); }
+  .not-found-card { grid-template-columns: 1fr; }
+  .not-found-mark { justify-self: start; max-width: 11rem; }
+}

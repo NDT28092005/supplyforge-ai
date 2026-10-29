@@ -6,16 +6,16 @@
   <div data-motion="header" class="operations-hero bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-6">
     <div class="space-y-1">
       <h1 class="font-bold text-2xl sm:text-3xl text-slate-900 tracking-tight">
-        Tổng Quan Cửa Hàng
+        Bảng điều hành tồn kho
       </h1>
       <p class="text-slate-500 text-sm font-normal">
-        Bức tranh toàn cảnh về tình hình bán hàng, hàng tồn và sức khỏe dòng vốn
+        Tổng hợp rủi ro tiêu thụ, giá trị tồn và ưu tiên giải phóng vốn theo bộ dữ liệu hiện hành.
       </p>
     </div>
 
     <!-- Header Controls -->
     <div class="flex items-center gap-3 shrink-0 flex-wrap">
-      <button (click)="refreshData()" [disabled]="isRefreshing"
+      <button (click)="refreshData()" [disabled]="isRefreshing || viewState === 'loading'"
         class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-xs px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-xs whitespace-nowrap active:scale-95">
         <svg class="w-3.5 h-3.5 text-indigo-600 transition-transform" [ngClass]="{'animate-spin': isRefreshing}"
           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -26,33 +26,38 @@
         <span>Cập nhật dữ liệu</span>
       </button>
 
-      <div class="relative">
-        <select [(ngModel)]="selectedPeriod"
-          class="bg-white border border-slate-200 text-slate-700 font-semibold text-xs px-4 py-2.5 pr-9 rounded-xl cursor-pointer outline-none focus:border-indigo-500 shadow-xs appearance-none">
-          <option value="30 ngày qua">30 ngày gần đây</option>
-          <option value="90 ngày qua">90 ngày gần đây</option>
-          <option value="Từ trước tới nay">Toàn bộ thời gian</option>
-        </select>
-        <svg class="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3 pointer-events-none" viewBox="0 0 24 24"
-          fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-      </div>
+      <span class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold text-slate-600 shadow-xs">
+        Theo bộ dữ liệu hiện hành
+      </span>
     </div>
   </div>
 
+  <div *ngIf="viewState === 'loading'" role="status" class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3 shadow-xs">
+    <span class="mx-auto block h-7 w-7 rounded-full border-2 border-indigo-200 border-t-indigo-600 animate-spin"></span>
+    <h3 class="text-base font-bold text-slate-900">Đang tải báo cáo vận hành</h3>
+    <p class="text-xs text-slate-500 font-medium">Đang đồng bộ chỉ số từ bộ dữ liệu hiện tại.</p>
+  </div>
+
+  <div *ngIf="viewState === 'error'" role="alert" class="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-4 shadow-xs">
+    <h3 class="text-base font-bold text-rose-900">Chưa thể tải báo cáo vận hành</h3>
+    <p class="text-xs text-rose-700 font-medium max-w-lg mx-auto">{{ loadError }}</p>
+    <button (click)="fetchDashboardData()" class="px-4 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-semibold text-xs transition-all cursor-pointer">Thử tải lại</button>
+  </div>
+
   <!-- Thông báo khi chưa có dữ liệu -->
-  <div *ngIf="kpiGrid.monitoredSkus === '0 sản phẩm'" class="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center space-y-4 shadow-xs">
+  <div *ngIf="viewState === 'empty'" class="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center space-y-4 shadow-xs">
     <div class="space-y-1">
       <h3 class="text-base font-bold text-slate-900">Chưa có dữ liệu sản phẩm trong hệ thống</h3>
       <p class="text-xs text-slate-500 font-medium max-w-lg mx-auto">
-        Vui lòng tải lên tệp CSV bán hàng để khởi tạo báo cáo Tổng quan &amp; Đánh giá rủi ro.
+        Tải tệp dữ liệu bán hàng để khởi tạo báo cáo điều hành và đánh giá rủi ro.
       </p>
     </div>
-    <button (click)="navigateTo.emit('csv-upload')" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-all cursor-pointer shadow-xs inline-flex items-center gap-2">
-      <span>Tải tệp CSV mới ngay</span>
+    <button (click)="goToImport()" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-all cursor-pointer shadow-xs inline-flex items-center gap-2">
+      <span>Nạp tệp CSV</span>
     </button>
   </div>
+
+  <ng-container *ngIf="viewState === 'ready'">
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 2. LUỒNG PHÂN TÍCH TỪNG BƯỚC (DRILL DOWN STEPPER BANNER)           -->
@@ -92,7 +97,7 @@
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
       <div class="flex items-center gap-3">
         <h2 class="text-base font-bold text-slate-900 uppercase tracking-wider">
-          Tình trạng cửa hàng hiện tại
+          Đánh giá danh mục hiện tại
         </h2>
         <span class="px-3 py-1 rounded-lg text-xs font-bold"
           [ngClass]="shopHealthSummary.statusLevel === 'HIGH_RISK' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'">
@@ -126,7 +131,7 @@
   <div class="space-y-3">
     <div class="flex items-center justify-between">
       <h3 class="font-bold text-sm text-slate-800 uppercase tracking-wider">
-        5 chỉ số sức khỏe chính
+        Chỉ số điều hành trọng yếu
       </h3>
       <span class="text-xs text-slate-400 font-medium">Cập nhật theo dữ liệu thực tế</span>
     </div>
@@ -168,7 +173,7 @@
       <div (click)="onNavigateToStage('capital-exposure')" title="Xem đánh giá tổng vốn đọng"
         class="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs space-y-2 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group">
         <div class="text-xs text-slate-600 font-semibold">
-          Ước tính tổng vốn đọng
+          Tổng giá trị vốn tồn kho
         </div>
         <div class="font-bold text-2xl text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
           {{ kpiGrid.totalCapitalExposure }}
@@ -189,7 +194,7 @@
           {{ kpiGrid.atRiskCapital }}
         </div>
         <div class="text-[11px] text-slate-400 font-medium flex items-center justify-between pt-1">
-          <span>Kẹt ở sản phẩm bán chậm</span>
+          <span>Thuộc nhóm tiêu thụ chậm</span>
           <span class="text-amber-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">&rarr;</span>
         </div>
       </div>
@@ -198,7 +203,7 @@
       <div (click)="onNavigateToStage('capital-exposure')" title="Xem vốn đọng lâu ngày"
         class="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs space-y-2 hover:border-rose-300 hover:shadow-md transition-all cursor-pointer group">
         <div class="text-xs text-rose-700 font-semibold">
-          Vốn đọng lâu (>90 ngày)
+          Vốn lưu kho lâu (>90 ngày)
         </div>
         <div class="font-bold text-2xl text-rose-600 tracking-tight">
           {{ kpiGrid.agedCapital }}
@@ -221,36 +226,20 @@
     <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-xs space-y-4 overflow-visible">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <h3 class="font-bold text-sm text-slate-900 uppercase tracking-wider">
-          Tỷ lệ phân bổ kho hàng
+          Cơ cấu danh mục theo mức rủi ro
         </h3>
-        <span class="text-xs text-slate-400 font-medium">Tỷ lệ phần trăm</span>
+        <span class="text-xs text-slate-400 font-medium">Theo số lượng SKU</span>
       </div>
 
       <div class="flex flex-col sm:flex-row items-center justify-between gap-6 overflow-visible">
         <!-- List Text Metrics -->
         <div class="space-y-3 text-xs w-full sm:w-1/2">
-          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+          <div *ngFor="let item of riskBreakdown" class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/80">
             <span class="font-semibold text-slate-700 flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-              An toàn
+              <span class="w-2.5 h-2.5 rounded-full" [style.background-color]="item.color"></span>
+              {{ item.label }}
             </span>
-            <span class="font-bold text-slate-900 font-mono text-sm">{{ riskBreakdown[0]?.pct || '0%' }}</span>
-          </div>
-
-          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/80">
-            <span class="font-semibold text-slate-700 flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-              Cần theo dõi
-            </span>
-            <span class="font-bold text-slate-900 font-mono text-sm">{{ riskBreakdown[1]?.pct || '0%' }}</span>
-          </div>
-
-          <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/80">
-            <span class="font-semibold text-slate-700 flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-              Rủi ro cao
-            </span>
-            <span class="font-bold text-rose-600 font-mono text-sm">{{ riskBreakdown[2]?.pct || '0%' }}</span>
+            <span class="font-bold font-mono text-sm" [style.color]="item.color">{{ item.pct }}</span>
           </div>
         </div>
 
@@ -274,12 +263,12 @@
         <ul class="mt-4 space-y-3 text-xs">
           <li class="flex items-center gap-3 text-slate-700 font-medium p-3 bg-slate-50 rounded-xl border border-slate-200/80">
             <span class="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
-            <span><strong class="text-slate-900 font-bold">{{ attentionNotice.highRiskCountText }}</strong> cần được xem xét xử lý ngay</span>
+            <span><strong class="text-slate-900 font-bold">{{ attentionNotice.highRiskCountText }}</strong> thuộc nhóm rủi ro cao hoặc rất cao, cần được ưu tiên đánh giá</span>
           </li>
 
           <li class="flex items-center gap-3 text-slate-700 font-medium p-3 bg-slate-50 rounded-xl border border-slate-200/80">
             <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-            <span><strong class="text-slate-900 font-bold">{{ attentionNotice.slowCountText }}</strong> đang tồn kho từ 61–90 ngày</span>
+            <span><strong class="text-slate-900 font-bold">{{ attentionNotice.slowCountText }}</strong> thuộc nhóm rủi ro rất cao</span>
           </li>
 
           <li class="flex items-center gap-3 text-slate-700 font-medium p-3 bg-slate-50 rounded-xl border border-slate-200/80">
@@ -300,6 +289,36 @@
 
   </div>
 
+  <div data-motion="panel" class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+    <section class="bg-white border border-slate-200 p-6 rounded-2xl shadow-xs space-y-4">
+      <div class="flex flex-col gap-1 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 class="font-bold text-sm text-slate-900 uppercase tracking-wider">Giá trị vốn theo mức rủi ro</h3>
+          <p class="mt-0.5 text-xs text-slate-500">So sánh giá trị tồn kho giữa bốn cấp độ rủi ro; chọn biểu đồ để mở phân tích vốn.</p>
+        </div>
+        <span class="text-xs font-medium text-slate-400">Theo giá trị vốn</span>
+      </div>
+      <div *ngIf="hasRiskCapitalChartData; else noRiskCapitalChart" #riskCapitalChartRef class="h-72 w-full"></div>
+      <ng-template #noRiskCapitalChart>
+        <p class="py-12 text-center text-xs text-slate-500">Chưa có giá trị vốn để lập biểu đồ phân bổ.</p>
+      </ng-template>
+    </section>
+
+    <section class="bg-white border border-slate-200 p-6 rounded-2xl shadow-xs space-y-4">
+      <div class="flex flex-col gap-1 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 class="font-bold text-sm text-slate-900 uppercase tracking-wider">SKU ưu tiên theo giá trị vốn rủi ro</h3>
+          <p class="mt-0.5 text-xs text-slate-500">Xếp hạng theo giá trị vốn ước tính; chọn một cột để mở đánh giá SKU.</p>
+        </div>
+        <span class="text-xs font-medium text-slate-400">Tối đa 5 SKU</span>
+      </div>
+      <div *ngIf="topRiskChartData.length; else noPriorityChart" #priorityChartRef class="h-72 w-full"></div>
+      <ng-template #noPriorityChart>
+        <p class="py-12 text-center text-xs text-slate-500">Chưa có đủ dữ liệu vốn để lập xếp hạng ưu tiên.</p>
+      </ng-template>
+    </section>
+  </div>
+
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 6. SẢN PHẨM ƯU TIÊN XỬ LÝ HÔM NAY                                  -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -307,9 +326,9 @@
     <div class="flex items-center justify-between border-b border-slate-100 pb-3">
       <div>
         <h3 class="font-bold text-sm text-slate-900 uppercase tracking-wider">
-          Sản phẩm ưu tiên xử lý hôm nay
+          Danh mục ưu tiên xử lý
         </h3>
-        <p class="text-slate-500 text-xs mt-0.5 font-normal">3 mặt hàng có lượng vốn bị giam đọng lớn nhất trong kho</p>
+        <p class="text-slate-500 text-xs mt-0.5 font-normal">Ba SKU có giá trị vốn tồn đọng ước tính cao nhất trong danh mục rủi ro.</p>
       </div>
     </div>
 
@@ -319,7 +338,7 @@
         <thead>
           <tr class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200/80">
             <th class="py-3 px-4">Mã sản phẩm</th>
-            <th class="py-3 px-4 text-right">Giá trị vốn kẹt</th>
+            <th class="py-3 px-4 text-right">Giá trị vốn có rủi ro</th>
             <th class="py-3 px-4 text-center">Trạng thái</th>
           </tr>
         </thead>
@@ -334,7 +353,7 @@
             </td>
             <td class="py-3.5 px-4 text-center">
               <span class="px-2.5 py-1 rounded-md text-[11px] font-bold inline-block bg-rose-50 text-rose-700 border border-rose-200">
-                Cần xả kho sớm
+                Ưu tiên xử lý
               </span>
             </td>
           </tr>
@@ -352,4 +371,5 @@
     </div>
   </div>
 
+  </ng-container>
 </div>
