@@ -55,7 +55,7 @@ class TestActionPlanACT001ACT002(TestCase):
         self.assertEqual(data["status"], "DRAFT")
 
     def test_act_002_action_status_transitions(self):
-        """ACT-002: Verifies all mandatory action plan status transitions (DRAFT -> CONFIRMED -> IN_PROGRESS -> COMPLETED / CANCELLED)."""
+        """ACT-002: The plan must follow approval, execution, then outcome recording."""
         plan = ActionPlanRecord.objects.create(
             campaign_name="Clearance CRIT-024",
             sku="CRIT-024",
@@ -66,9 +66,7 @@ class TestActionPlanACT001ACT002(TestCase):
             status="DRAFT"
         )
 
-        valid_statuses = ["DRAFT", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]
-
-        for next_status in ["CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]:
+        for next_status in ["CONFIRMED", "IN_PROGRESS"]:
             res = self.client.patch(
                 f"/api/v1/action-plans/{plan.plan_id}/status/",
                 {"status": next_status},
@@ -79,6 +77,23 @@ class TestActionPlanACT001ACT002(TestCase):
 
             plan.refresh_from_db()
             self.assertEqual(plan.status, next_status)
+
+        # Completion is not a selectable state; observed outcome closes a plan.
+        completed_res = self.client.patch(
+            f"/api/v1/action-plans/{plan.plan_id}/status/",
+            {"status": "COMPLETED"},
+            format="json"
+        )
+        self.assertEqual(completed_res.status_code, 400)
+        self.assertEqual(completed_res.json()["error"]["code"], "OUTCOME_REQUIRED")
+
+        outcome_res = self.client.patch(
+            f"/api/v1/action-plans/{plan.plan_id}/outcome/",
+            {"actual_recovery_value": 1000000, "actual_units_sold": 10},
+            format="json"
+        )
+        self.assertEqual(outcome_res.status_code, 200)
+        self.assertEqual(outcome_res.json()["status"], "COMPLETED")
 
     def test_act_002_invalid_status_blocking(self):
         """ACT-002: Verifies invalid status transition is rejected with 400 Bad Request."""

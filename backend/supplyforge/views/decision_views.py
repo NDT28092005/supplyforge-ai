@@ -11,6 +11,7 @@ Provides REST endpoints:
 - GET /api/v1/decisions/{decision_id}/explanation/: Retrieve explanation payload & evidence.
 """
 
+from django.db.models import Q
 from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -38,6 +39,18 @@ def _decision_queryset_for_request(request, queryset):
     if not getattr(request, "tenant_context_validated", False):
         return queryset
     return queryset.filter(workspace_id=request.workspace_id)
+
+
+def _positive_query_int(value, *, default: int, maximum: int, field_name: str) -> int:
+    if value in (None, ''):
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f'{field_name} must be a positive integer.') from exc
+    if parsed < 1:
+        raise ValueError(f'{field_name} must be greater than zero.')
+    return min(parsed, maximum)
 
 
 class DecisionListCreateView(APIView):
@@ -80,6 +93,8 @@ class DecisionListCreateView(APIView):
         status_param = request.query_params.get("status")
         sku = request.query_params.get("sku")
         dataset_version = request.query_params.get("dataset_version")
+        search = str(request.query_params.get('q') or '').strip()
+        sort = str(request.query_params.get('sort') or 'priority').lower()
 
         queryset = DecisionPersistenceService.list_decisions(
             risk_class=risk_class,
@@ -92,8 +107,46 @@ class DecisionListCreateView(APIView):
         )
         queryset = _decision_queryset_for_request(request, queryset)
 
-        serializer = DecisionSerializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        if search:
+            queryset = queryset.filter(
+                Q(sku__icontains=search)
+                | Q(decision_id__icontains=search)
+                | Q(action_type__icontains=search)
+            )
+        ordering = {
+            'priority': ('-priority_score', '-created_at'),
+            'capital': ('-capital_exposure', '-created_at'),
+            'recovery': ('-expected_recovery_value', '-created_at'),
+            'risk': ('-risk_score', '-created_at'),
+        }.get(sort, ('-priority_score', '-created_at'))
+        queryset = queryset.order_by(*ordering)
+
+        # Existing API consumers receive the original array unless they opt in
+        # to page controls. The operations dashboard always opts in.
+        if 'page' not in request.query_params and 'page_size' not in request.query_params:
+            serializer = DecisionSerializer(queryset, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        try:
+            page = _positive_query_int(request.query_params.get('page'), default=1, maximum=1_000_000, field_name='page')
+            page_size = _positive_query_int(request.query_params.get('page_size'), default=20, maximum=100, field_name='page_size')
+        except ValueError as exc:
+            return Response({'success': False, 'error': {'code': 'INVALID_PAGINATION', 'message': str(exc)}}, status=status.HTTP_400_BAD_REQUEST)
+        total = queryset.count()
+        total_pages = max(1, (total + page_size - 1) // page_size)
+        page = min(page, total_pages)
+        start = (page - 1) * page_size
+        serializer = DecisionSerializer(queryset[start:start + page_size], many=True)
+        return Response({
+            'items': serializer.data,
+            'pagination': {
+                'page': page,
+                'page_size': page_size,
+                'total_items': total,
+                'total_pages': total_pages,
+                'has_previous': page > 1,
+                'has_next': page < total_pages,
+            },
+        }, status=status.HTTP_200_OK)
 
 
 class DecisionDetailView(APIView):

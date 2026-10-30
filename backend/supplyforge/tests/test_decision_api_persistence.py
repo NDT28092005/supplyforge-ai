@@ -137,6 +137,11 @@ class TestDecisionAPIPersistence(TestCase):
         self.assertEqual(list_res.status_code, status.HTTP_200_OK)
         self.assertGreater(len(list_res.json()), 0)
 
+        paged_res = self.client.get(reverse('decision_list_create_v1') + '?page=1&page_size=1')
+        self.assertEqual(paged_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(paged_res.json()['items']), 1)
+        self.assertEqual(paged_res.json()['pagination']['total_items'], 1)
+
     def test_patch_status_transition_and_audit(self):
         """AC-06, AC-07, AC-08: Tests status lifecycle transitions and immutable audit event logging."""
         self.client.post(reverse('decision_list_create_v1'), data=json.dumps({"recommendation": self.rec, "explanation": self.exp}), content_type='application/json')

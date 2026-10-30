@@ -77,6 +77,8 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
   selectedStatus = 'ALL';
   selectedSortField = 'priority'; // priority, capital, recovery, risk
   searchQuery = '';
+  decisionPagination = { page: 1, page_size: 20, total_items: 0, total_pages: 1, has_previous: false, has_next: false };
+  private decisionSearchTimer: ReturnType<typeof setTimeout> | null = null;
   targetSkuParam: string | null = null;
   autoOpenedSku = false;
 
@@ -97,26 +99,53 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
 
   // ACT-001 & ACT-002 Action Plan State
   actionPlans: any[] = [];
+  actionPlanSummary = {
+    open_plans: 0,
+    overdue_plans: 0,
+    in_progress_plans: 0,
+    completed_plans: 0,
+    completed_sku_count: 0,
+    expected_recovery_value: 0,
+    actual_recovery_value: 0,
+    expected_sales_value: 0,
+    actual_sales_value: 0,
+  };
+  isActionPlansLoading = false;
+  actionPlanStatusFilter = 'ALL';
+  actionPlanSearch = '';
+  actionPlanPagination = { page: 1, page_size: 10, total_items: 0, total_pages: 1, has_previous: false, has_next: false };
+  private actionPlanSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  actionPlanAssignees: Array<{ user_id: number; display_name: string; email: string; role: string }> = [];
+  decisionEffectiveness: any = { status: 'PENDING_GROUND_TRUTH', k: 100, evaluated_k: 0 };
+  isDecisionEffectivenessLoading = false;
   isCreatePlanModalOpen = false;
   planCampaign = '';
   planSku = '';
   planDuration = 14;
   planStrategy = 'Giảm giá 15%';
   planOwner = 'Merchant';
-  planStartDate = '2026-09-28';
-  planStatus = 'DRAFT';
+  planStartDate = '';
+  planDueDate = '';
+  planExpectedRecovery = 0;
+  planExpectedSales = 0;
+  planExpectedUnits = 0;
+  planAssigneeUserId: number | null = null;
+  planDecisionId: string | null = null;
   planNotes = '';
 
   // Outcome Tracking Modal State (ACT-004)
   isOutcomeModalOpen = false;
   selectedPlanForOutcome: any = null;
-  outcomeExpectedRecovery = 12000000;
-  outcomeActualRecovery = 9500000;
-  outcomeExpectedUnits = 100;
-  outcomeActualUnits = 82;
-  outcomeAccuracyRecoveryPct = 79.2;
-  outcomeAccuracyUnitsPct = 82.0;
-  outcomeUsefulnessRating = 'Rất chính xác (Đề xuất hiệu quả cao)';
+  outcomeExpectedRecovery = 0;
+  outcomeActualRecovery = 0;
+  outcomeExpectedSales = 0;
+  outcomeActualSales = 0;
+  outcomeExpectedUnits = 0;
+  outcomeActualUnits = 0;
+  outcomeNotes = '';
+  outcomeAccuracyRecoveryPct = 0;
+  outcomeAccuracyUnitsPct = 0;
+  outcomeUsefulnessRating = 'Chưa đủ dữ liệu kết quả';
 
   // Rejection Modal State
   isRejectModalOpen = false;
@@ -149,13 +178,17 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
     }
     this.loadDecisions();
     this.loadActionPlans();
+    this.loadActionPlanAssignees();
+    this.loadDecisionEffectiveness();
   }
 
   ngOnDestroy(): void {
+    if (this.actionPlanSearchTimer) clearTimeout(this.actionPlanSearchTimer);
+    if (this.decisionSearchTimer) clearTimeout(this.decisionSearchTimer);
     document.body.style.overflow = '';
   }
 
-  loadDecisions(): void {
+  loadDecisions(page: number = this.decisionPagination.page): void {
     this.isLoading = true;
     this.dataState = 'loading';
     this.errorMessage = '';
@@ -167,9 +200,18 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
     if (this.selectedPriority !== 'ALL') filters.priority = this.selectedPriority;
     if (this.selectedActionType !== 'ALL') filters.action_type = this.selectedActionType;
     if (this.selectedStatus !== 'ALL') filters.status = this.selectedStatus;
+    filters.page = page;
+    filters.page_size = this.decisionPagination.page_size;
+    filters.q = this.searchQuery.trim();
+    filters.sort = this.selectedSortField;
 
     this.apiService.listDecisions(filters).subscribe({
-      next: (data: DecisionItem[]) => {
+      next: (response: DecisionItem[] | { items?: DecisionItem[]; pagination?: any }) => {
+        const data = Array.isArray(response) ? response : (response?.items || []);
+        this.decisionPagination = {
+          ...this.decisionPagination,
+          ...(Array.isArray(response) ? { page: 1, total_items: data.length, total_pages: 1, has_previous: false, has_next: false } : (response?.pagination || {})),
+        };
         if (data && data.length > 0) {
           this.decisions = this.normalizeDecisionsData(data);
           this.applySearchFilter();
@@ -331,18 +373,21 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
   }
 
   exportActionPlanReport(format: 'csv' | 'excel' = 'csv'): void {
-    const headers = ['Mã kế hoạch', 'Tên chiến dịch', 'Mã sản phẩm', 'Thời gian thực hiện (ngày)', 'Chiến lược áp dụng', 'Người phụ trách', 'Ngày bắt đầu', 'Trạng thái thực hiện', 'Vốn thu hồi dự kiến (VND)', 'Vốn thu hồi thực tế (VND)', 'Độ chính xác AI (%)'];
-    const rows = this.actionPlans.map(p => [
+    const headers = ['Mã kế hoạch', 'Tên chiến dịch', 'Mã sản phẩm', 'Thời gian thực hiện (ngày)', 'Chiến lược áp dụng', 'Người phụ trách', 'Ngày bắt đầu', 'Hạn xử lý', 'Trạng thái thực hiện', 'Vốn thu hồi dự kiến (VND)', 'Vốn thu hồi thực tế (VND)', 'Doanh số dự kiến (VND)', 'Doanh số thực tế (VND)', 'Tỷ lệ đạt (%)'];
+    const rows = this.filteredActionPlans.map(p => [
       p.plan_id,
       `"${(p.campaign_name || '').replace(/"/g, '""')}"`,
       p.sku,
       p.duration_days || 14,
       `"${(p.strategy || '').replace(/"/g, '""')}"`,
       `"${(p.owner || 'Chủ cửa hàng').replace(/"/g, '""')}"`,
-      p.start_date || '2026-09-28',
+      p.start_date || '',
+      p.due_date || '',
       `"${this.translateActionPlanStatus(p.status)}"`,
       p.expected_recovery_value || 0,
       p.actual_recovery_value !== null && p.actual_recovery_value !== undefined ? p.actual_recovery_value : 0,
+      p.expected_sales_value || 0,
+      p.actual_sales_value !== null && p.actual_sales_value !== undefined ? p.actual_sales_value : 0,
       p.recovery_accuracy_pct ? `${p.recovery_accuracy_pct}%` : 'Chưa đánh giá'
     ]);
 
@@ -358,7 +403,18 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
   }
 
   onFilterChange(): void {
-    this.applySearchFilter();
+    this.decisionPagination.page = 1;
+    this.loadDecisions(1);
+  }
+
+  onDecisionSearchChanged(): void {
+    if (this.decisionSearchTimer) clearTimeout(this.decisionSearchTimer);
+    this.decisionSearchTimer = setTimeout(() => this.onFilterChange(), 300);
+  }
+
+  changeDecisionPage(page: number): void {
+    if (page < 1 || page > this.decisionPagination.total_pages || page === this.decisionPagination.page) return;
+    this.loadDecisions(page);
   }
 
   calculateKpis(): void {
@@ -600,19 +656,75 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
   }
 
   // ── ACT-001 & ACT-002 Action Plan Management ──────────────────────────────
-  loadActionPlans(): void {
-    this.apiService.getActionPlans().subscribe({
+  loadActionPlans(page: number = this.actionPlanPagination.page): void {
+    this.isActionPlansLoading = true;
+    this.apiService.getActionPlans({
+      page,
+      page_size: this.actionPlanPagination.page_size,
+      status: this.actionPlanStatusFilter,
+      q: this.actionPlanSearch.trim(),
+    }).subscribe({
       next: (res: any) => {
-        if (res && res.success && res.plans) {
-          this.actionPlans = res.plans;
-        } else if (Array.isArray(res)) {
-          this.actionPlans = res;
-        } else {
-          this.actionPlans = [];
-        }
+        this.actionPlans = Array.isArray(res) ? res : (res?.items || []);
+        this.actionPlanPagination = {
+          ...this.actionPlanPagination,
+          ...(res?.pagination || { page: 1, total_items: this.actionPlans.length, total_pages: 1, has_previous: false, has_next: false }),
+        };
+        this.isActionPlansLoading = false;
       },
       error: () => {
         this.actionPlans = [];
+        this.isActionPlansLoading = false;
+      }
+    });
+    this.apiService.getActionPlanSummary().subscribe({
+      next: (summary: any) => {
+        this.actionPlanSummary = { ...this.actionPlanSummary, ...(summary || {}) };
+      }
+    });
+  }
+
+  get filteredActionPlans(): any[] {
+    return this.actionPlans;
+  }
+
+  onActionPlanFiltersChanged(): void {
+    this.actionPlanPagination.page = 1;
+    this.loadActionPlans(1);
+  }
+
+  onActionPlanSearchChanged(): void {
+    if (this.actionPlanSearchTimer) clearTimeout(this.actionPlanSearchTimer);
+    this.actionPlanSearchTimer = setTimeout(() => this.onActionPlanFiltersChanged(), 300);
+  }
+
+  changeActionPlanPage(page: number): void {
+    if (page < 1 || page > this.actionPlanPagination.total_pages || page === this.actionPlanPagination.page) return;
+    this.loadActionPlans(page);
+  }
+
+  loadActionPlanAssignees(): void {
+    this.apiService.getActionPlanAssignees().subscribe({
+      next: (res: any) => this.actionPlanAssignees = res?.assignees || [],
+      error: () => this.actionPlanAssignees = [],
+    });
+  }
+
+  selectPlanAssignee(): void {
+    const assignee = this.actionPlanAssignees.find(item => item.user_id === this.planAssigneeUserId);
+    if (assignee) this.planOwner = assignee.display_name;
+  }
+
+  loadDecisionEffectiveness(): void {
+    this.isDecisionEffectivenessLoading = true;
+    this.apiService.getDecisionEffectiveness(this.decisionEffectiveness.k || 100).subscribe({
+      next: (res: any) => {
+        this.decisionEffectiveness = res || this.decisionEffectiveness;
+        this.isDecisionEffectivenessLoading = false;
+      },
+      error: () => {
+        this.decisionEffectiveness = { ...this.decisionEffectiveness, status: 'UNAVAILABLE' };
+        this.isDecisionEffectivenessLoading = false;
       }
     });
   }
@@ -629,8 +741,11 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
     this.selectedPlanForOutcome = plan;
     this.outcomeExpectedRecovery = plan.expected_recovery_value || 0;
     this.outcomeActualRecovery = plan.actual_recovery_value ?? 0;
+    this.outcomeExpectedSales = plan.expected_sales_value || 0;
+    this.outcomeActualSales = plan.actual_sales_value ?? 0;
     this.outcomeExpectedUnits = plan.expected_units_sold || 0;
     this.outcomeActualUnits = plan.actual_units_sold ?? 0;
+    this.outcomeNotes = plan.outcome_notes || '';
     this.calculateOutcomeMetrics();
     this.isOutcomeModalOpen = true;
   }
@@ -668,9 +783,9 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
 
     const outcomeData = {
       actual_recovery_value: this.outcomeActualRecovery,
+      actual_sales_value: this.outcomeActualSales,
       actual_units_sold: this.outcomeActualUnits,
-      expected_recovery_value: this.outcomeExpectedRecovery,
-      expected_units_sold: this.outcomeExpectedUnits
+      outcome_notes: this.outcomeNotes,
     };
 
     this.apiService.recordActionPlanOutcome(this.selectedPlanForOutcome.plan_id, outcomeData).subscribe({
@@ -678,11 +793,7 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
         if (this.selectedPlanForOutcome) {
           this.selectedPlanForOutcome.actual_recovery_value = this.outcomeActualRecovery;
           this.selectedPlanForOutcome.actual_units_sold = this.outcomeActualUnits;
-          this.selectedPlanForOutcome.expected_recovery_value = this.outcomeExpectedRecovery;
-          this.selectedPlanForOutcome.expected_units_sold = this.outcomeExpectedUnits;
-          this.selectedPlanForOutcome.recovery_accuracy_pct = this.outcomeAccuracyRecoveryPct;
-          this.selectedPlanForOutcome.units_accuracy_pct = this.outcomeAccuracyUnitsPct;
-          this.selectedPlanForOutcome.status = 'COMPLETED';
+          Object.assign(this.selectedPlanForOutcome, res);
         }
         this.closeOutcomeModal();
         this.loadActionPlans();
@@ -694,21 +805,29 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
   }
 
   openCreatePlanModal(decision?: DecisionItem): void {
+    this.planDecisionId = decision?.decision_id || null;
     if (decision) {
       this.planSku = decision.sku;
       this.planCampaign = `Kế hoạch xử lý tồn kho ${decision.sku}`;
       const discPct = Math.round((decision.decision.discount_rate || 0.15) * 100);
       this.planStrategy = `Giảm giá ${discPct}%`;
       this.planDuration = 14;
+      this.planExpectedRecovery = decision.financial_impact.expected_recovery_value || 0;
+      this.planExpectedSales = 0;
+      this.planExpectedUnits = 0;
     } else {
       this.planSku = '';
       this.planCampaign = '';
       this.planStrategy = 'Giảm giá 15%';
       this.planDuration = 14;
+      this.planExpectedRecovery = 0;
+      this.planExpectedSales = 0;
+      this.planExpectedUnits = 0;
     }
     this.planOwner = 'Merchant';
+    this.planAssigneeUserId = null;
     this.planStartDate = new Date().toISOString().split('T')[0];
-    this.planStatus = 'DRAFT';
+    this.planDueDate = this.calculateDueDate(this.planStartDate, this.planDuration);
     this.planNotes = '';
     this.isCreatePlanModalOpen = true;
   }
@@ -718,6 +837,10 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
   }
 
   submitCreateActionPlan(): void {
+    if (!this.planCampaign.trim() || !this.planSku.trim() || !this.planOwner.trim()) {
+      this.errorMessage = 'Cần nhập tên kế hoạch, SKU và người phụ trách trước khi tạo hàng chờ.';
+      return;
+    }
     const payload = {
       campaign: this.planCampaign,
       sku: this.planSku,
@@ -725,15 +848,19 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
       strategy: this.planStrategy,
       owner: this.planOwner,
       start: this.planStartDate,
-      status: this.planStatus,
+      due_date: this.planDueDate,
+      expected_recovery_value: this.planExpectedRecovery,
+      expected_sales_value: this.planExpectedSales,
+      expected_units_sold: this.planExpectedUnits,
+      assignee_user_id: this.planAssigneeUserId,
       notes: this.planNotes,
-      decision_id: this.selectedDecision?.decision_id
+      decision_id: this.planDecisionId,
     };
 
     this.apiService.createActionPlan(payload).subscribe({
       next: (res: any) => {
         if (res && res.success) {
-          this.actionPlans.unshift(res);
+          this.actionPlanPagination.page = 1;
         }
         this.closeCreatePlanModal();
         this.loadActionPlans();
@@ -747,12 +874,29 @@ export class DecisionSupportDashboardComponent implements OnInit, OnDestroy {
   updateActionPlanStatus(plan: any, newStatus: string): void {
     this.apiService.updateActionPlanStatus(plan.plan_id, newStatus).subscribe({
       next: (res: any) => {
-        plan.status = newStatus;
+        Object.assign(plan, res);
+        this.loadDecisions();
+        this.loadActionPlans();
       },
       error: (err: any) => {
         this.errorMessage = err?.error?.error || 'Không thể cập nhật trạng thái kế hoạch. Vui lòng thử lại.';
       }
     });
+  }
+
+  cancelActionPlan(plan: any): void {
+    this.updateActionPlanStatus(plan, 'CANCELLED');
+  }
+
+  updatePlanDueDate(): void {
+    this.planDueDate = this.calculateDueDate(this.planStartDate, this.planDuration);
+  }
+
+  private calculateDueDate(startDate: string, durationDays: number): string {
+    const start = new Date(`${startDate}T00:00:00`);
+    if (Number.isNaN(start.getTime())) return '';
+    start.setDate(start.getDate() + Math.max(1, Number(durationDays) || 1));
+    return start.toISOString().split('T')[0];
   }
 
   translateActionPlanStatus(status: string): string {

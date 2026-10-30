@@ -422,10 +422,18 @@ urlpatterns = [
     # ── Module 07 Action Planning: ACT-001, ACT-002, ACT-003 & ACT-004 ──
     path('api/v1/action-plans/', views.ActionPlanListCreateView.as_view(), name='action_plan_list_create_v1'),
     path('api/v1/action-plans', views.ActionPlanListCreateView.as_view()),
+    path('api/v1/action-plans/summary/', views.ActionPlanSummaryView.as_view(), name='action_plan_summary_v1'),
+    path('api/v1/action-plans/summary', views.ActionPlanSummaryView.as_view()),
+    path('api/v1/action-plans/assignees/', views.ActionPlanAssigneeListView.as_view(), name='action_plan_assignees_v1'),
+    path('api/v1/action-plans/assignees', views.ActionPlanAssigneeListView.as_view()),
+    path('api/v1/decision-effectiveness/', views.DecisionEffectivenessView.as_view(), name='decision_effectiveness_v1'),
+    path('api/v1/decision-effectiveness', views.DecisionEffectivenessView.as_view()),
     path('api/v1/action-plans/<str:plan_id>/status/', views.ActionPlanStatusUpdateView.as_view(), name='action_plan_status_update_v1'),
     path('api/v1/action-plans/<str:plan_id>/status', views.ActionPlanStatusUpdateView.as_view()),
     path('api/v1/action-plans/<str:plan_id>/outcome/', views.ActionPlanOutcomeView.as_view(), name='action_plan_outcome_update_v1'),
     path('api/v1/action-plans/<str:plan_id>/outcome', views.ActionPlanOutcomeView.as_view()),
+    path('api/v1/action-plans/<str:plan_id>/history/', views.ActionPlanHistoryView.as_view(), name='action_plan_history_v1'),
+    path('api/v1/action-plans/<str:plan_id>/history', views.ActionPlanHistoryView.as_view()),
 
     # ── Module 07 Copilot: COP-001 Context Awareness & COP-002 Grounded Answers ──
     path('api/v1/copilot/chat/', views.CopilotChatView.as_view(), name='copilot_chat_v1'),

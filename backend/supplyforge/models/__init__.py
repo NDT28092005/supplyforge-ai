@@ -25,7 +25,7 @@ from .copilot_models import (
     CopilotConversation, CopilotMessage,
     CopilotToolCall, CopilotAuditLog,
 )
-from .action_plan import ActionPlanRecord
+from .action_plan import ActionPlanRecord, ActionPlanEventRecord
 from .archived_dataset import ArchivedDataSet
 from .notification import NotificationRecord
 from .background_job import BackgroundJob
@@ -50,11 +50,10 @@ __all__ = [
     'DecisionEvidenceRecord', 'DecisionAuditEventRecord',
     'CopilotConversation', 'CopilotMessage',
     'CopilotToolCall', 'CopilotAuditLog',
-    'ActionPlanRecord',
+    'ActionPlanRecord', 'ActionPlanEventRecord',
     'NotificationRecord',
     'BackgroundJob',
     'TenantFeatureSnapshot',
     'TrainingDatasetManifest',
     'ModelVersion',
 ]
-

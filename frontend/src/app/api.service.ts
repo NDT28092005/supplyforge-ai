@@ -712,10 +712,30 @@ export class ApiService {
   }
 
   // ── Module 06 ACT-001 & ACT-002 Action Plan & Status Management APIs ──
-  getActionPlans(sku?: string): Observable<any> {
+  getActionPlans(filters: { sku?: string; status?: string; owner?: string; q?: string; overdue?: boolean; page?: number; page_size?: number } = {}): Observable<any> {
     let params = new HttpParams();
-    if (sku) params = params.set('sku', sku);
+    if (filters.sku) params = params.set('sku', filters.sku);
+    if (filters.status && filters.status !== 'ALL') params = params.set('status', filters.status);
+    if (filters.owner) params = params.set('owner', filters.owner);
+    if (filters.q) params = params.set('q', filters.q);
+    if (filters.overdue) params = params.set('overdue', 'true');
+    if (filters.page) params = params.set('page', String(filters.page));
+    if (filters.page_size) params = params.set('page_size', String(filters.page_size));
     return this.http.get(`${this.apiUrl}/api/v1/action-plans/`, { params });
+  }
+
+  getActionPlanSummary(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/action-plans/summary/`);
+  }
+
+  getActionPlanAssignees(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/action-plans/assignees/`);
+  }
+
+  getDecisionEffectiveness(k: number = 100): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/decision-effectiveness/`, {
+      params: new HttpParams().set('k', String(k)),
+    });
   }
 
   createActionPlan(payload: any): Observable<any> {
@@ -726,7 +746,11 @@ export class ApiService {
     return this.http.patch(`${this.apiUrl}/api/v1/action-plans/${planId}/status/`, { status, notes });
   }
 
-  recordActionPlanOutcome(planId: string, outcome: { actual_recovery_value?: number, actual_units_sold?: number, expected_recovery_value?: number, expected_units_sold?: number }): Observable<any> {
+  recordActionPlanOutcome(planId: string, outcome: { actual_recovery_value?: number, actual_units_sold?: number, outcome_notes?: string }): Observable<any> {
     return this.http.patch(`${this.apiUrl}/api/v1/action-plans/${planId}/outcome/`, outcome);
+  }
+
+  getActionPlanHistory(planId: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/action-plans/${planId}/history/`);
   }
 }

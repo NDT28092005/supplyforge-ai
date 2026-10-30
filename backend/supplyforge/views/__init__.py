@@ -99,9 +99,13 @@ from .decision_views import (
     DecisionSimulationView
 )
 from .action_plan_views import (
+    ActionPlanAssigneeListView,
     ActionPlanListCreateView,
     ActionPlanStatusUpdateView,
-    ActionPlanOutcomeView
+    ActionPlanOutcomeView,
+    ActionPlanSummaryView,
+    ActionPlanHistoryView,
+    DecisionEffectivenessView,
 )
 from .content_views import (
     about_us_api,
@@ -197,7 +201,9 @@ __all__ = [
     'DecisionListCreateView', 'DecisionDetailView',
     'DecisionStatusUpdateView', 'DecisionHistoryView',
     'DecisionExplanationView', 'DecisionSimulationView',
-    'ActionPlanListCreateView', 'ActionPlanStatusUpdateView', 'ActionPlanOutcomeView',
+    'ActionPlanAssigneeListView', 'ActionPlanListCreateView', 'ActionPlanStatusUpdateView', 'ActionPlanOutcomeView',
+    'ActionPlanSummaryView', 'ActionPlanHistoryView',
+    'DecisionEffectivenessView',
     'CopilotChatView',
     'list_notifications', 'mark_notifications_read', 'create_notification',
     'ExportRiskReportView', 'ExportCapitalReportView',
