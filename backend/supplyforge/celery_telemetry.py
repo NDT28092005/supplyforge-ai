@@ -17,6 +17,7 @@ MONITORED_QUEUES = {
     'data_worker': ('data', 'data_worker'),
     'ml_worker': ('ml', 'ml_worker'),
     'decision_worker': ('decision', 'decision_worker'),
+    'integration_worker': ('integration', 'integration_worker'),
 }
 
 
@@ -39,7 +40,12 @@ def update_celery_queue_depths(redis_url=None) -> dict:
         return depths
     except Exception as e:
         logger.warning(f"[CeleryTelemetry] Failed to fetch queue depth from broker: {e}")
-        return {'data_worker': 0, 'ml_worker': 0, 'decision_worker': 0}
+        return {
+            'data_worker': 0,
+            'ml_worker': 0,
+            'decision_worker': 0,
+            'integration_worker': 0,
+        }
 
 
 def record_task_age(queue_name: str, enqueue_time: float, worker_start_time: float = None):
@@ -57,6 +63,8 @@ def record_task_age(queue_name: str, enqueue_time: float, worker_start_time: flo
             w_type = 'ml'
         elif 'decision' in q_clean:
             w_type = 'decision'
+        elif 'integration' in q_clean:
+            w_type = 'integration'
 
         TASK_AGE_SECONDS.labels(worker_type=w_type, queue=q_clean).set(task_age)
         return task_age

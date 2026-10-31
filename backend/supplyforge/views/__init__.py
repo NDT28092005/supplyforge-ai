@@ -90,6 +90,14 @@ from .capital_exposure_views import (
     get_capital_exposure_aging_distribution,
     get_capital_exposure_risk_distribution
 )
+from .integration_views import (
+    IntegrationConnectionListCreateView, IntegrationConnectionDetailView,
+    IntegrationRunView, IntegrationOverviewView, IntegrationSkuMappingView,
+    IntegrationSkuCandidateView, IntegrationOperationalRiskView,
+    IntegrationOperationalRiskSummaryView, IntegrationOperationalCapitalView,
+    IntegrationOperationalExecutiveSummaryView,
+    integration_webhook,
+)
 from .decision_views import (
     DecisionListCreateView,
     DecisionDetailView,
@@ -207,5 +215,11 @@ __all__ = [
     'CopilotChatView',
     'list_notifications', 'mark_notifications_read', 'create_notification',
     'ExportRiskReportView', 'ExportCapitalReportView',
-    'ExportDecisionReportView', 'ExportActionPlanReportView'
+    'ExportDecisionReportView', 'ExportActionPlanReportView',
+    'IntegrationConnectionListCreateView', 'IntegrationConnectionDetailView',
+    'IntegrationRunView', 'IntegrationSkuMappingView', 'IntegrationSkuCandidateView',
+    'IntegrationOverviewView', 'IntegrationOperationalRiskView',
+    'IntegrationOperationalRiskSummaryView', 'IntegrationOperationalCapitalView',
+    'IntegrationOperationalExecutiveSummaryView',
+    'integration_webhook'
 ]

@@ -68,7 +68,7 @@ class APIPyramidTests(TestCase):
         )
         self.cap_analysis = CapitalExposureAnalysisRecord.objects.create(
             analysis_id="default",
-            merchant_id="default_merchant",
+            merchant_id=f"workspace:{self.workspace.id}",
             total_skus=1,
             total_inventory_value=5000000.0
         )

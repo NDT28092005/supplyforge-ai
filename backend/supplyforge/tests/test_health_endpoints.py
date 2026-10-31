@@ -9,11 +9,11 @@ class HealthEndpointsTest(TestCase):
         """AC-01: /health/live returns 200 OK with status ok without calling dependencies"""
         response = self.client.get('/health/live')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"status": "ok"})
+        self.assertEqual(response.json()["status"], "ok")
 
         response_v1 = self.client.get('/api/v1/health/live')
         self.assertEqual(response_v1.status_code, 200)
-        self.assertEqual(response_v1.json(), {"status": "ok"})
+        self.assertEqual(response_v1.json()["status"], "ok")
 
     @patch('supplyforge.views.health._check_mysql')
     @patch('supplyforge.views.health._check_redis')
@@ -24,7 +24,9 @@ class HealthEndpointsTest(TestCase):
 
         response = self.client.get('/health/ready')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"status": "ready"})
+        self.assertEqual(response.json(), {
+            "status": "ready", "database": "ok", "redis": "ok",
+        })
 
     @patch('supplyforge.views.health._check_mysql')
     @patch('supplyforge.views.health._check_redis')
@@ -35,7 +37,9 @@ class HealthEndpointsTest(TestCase):
 
         response = self.client.get('/health/ready')
         self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.json(), {"status": "not_ready"})
+        self.assertEqual(response.json(), {
+            "status": "not_ready", "database": "unavailable", "redis": "ok",
+        })
 
     @patch('supplyforge.views.health._check_mysql')
     @patch('supplyforge.views.health._check_redis')
@@ -46,7 +50,9 @@ class HealthEndpointsTest(TestCase):
 
         response = self.client.get('/health/ready')
         self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.json(), {"status": "not_ready"})
+        self.assertEqual(response.json(), {
+            "status": "not_ready", "database": "ok", "redis": "unavailable",
+        })
 
     @patch('supplyforge.views.health._check_mysql')
     @patch('supplyforge.views.health._check_redis')

@@ -11,9 +11,11 @@ import { Router, RouterModule } from '@angular/router';
 })
 export class SidebarComponent {
   @Input() activeStage: string = 'dashboard';
+  @Input() collapsed = false;
   @Output() selectStage = new EventEmitter<string>();
   @Output() importNew = new EventEmitter<void>();
   @Output() importIncremental = new EventEmitter<void>();
+  @Output() toggleCollapsed = new EventEmitter<void>();
 
   constructor(public router: Router) {}
 
@@ -23,5 +25,9 @@ export class SidebarComponent {
 
   onImportNewClick(): void {
     this.importNew.emit();
+  }
+
+  onToggleCollapsed(): void {
+    this.toggleCollapsed.emit();
   }
 }

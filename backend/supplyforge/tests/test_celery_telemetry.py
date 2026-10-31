@@ -32,7 +32,7 @@ class CeleryTelemetryTest(TestCase):
         self.assertEqual(recorded_val, 0.0)
 
     def test_03_queue_identification(self):
-        """Test 3: Verify data_worker, ml_worker, and decision_worker are mapped correctly."""
+        """Test 3: Every bounded worker queue maps to its own metric label."""
         record_task_age(queue_name="data_worker", enqueue_time=100.0, worker_start_time=110.0)
         val_data = TASK_AGE_SECONDS.labels(worker_type="data", queue="data_worker")._value.get()
         self.assertEqual(val_data, 10.0)
@@ -45,12 +45,23 @@ class CeleryTelemetryTest(TestCase):
         val_dec = TASK_AGE_SECONDS.labels(worker_type="decision", queue="decision_worker")._value.get()
         self.assertEqual(val_dec, 20.0)
 
+        record_task_age(queue_name="integration_worker", enqueue_time=100.0, worker_start_time=125.0)
+        val_integration = TASK_AGE_SECONDS.labels(
+            worker_type="integration", queue="integration_worker"
+        )._value.get()
+        self.assertEqual(val_integration, 25.0)
+
     @patch("redis.Redis.from_url")
     def test_04_queue_depth(self, mock_from_url):
-        """Test 4: Mock broker queue depths (data_worker=10, ml_worker=3, decision_worker=2)."""
+        """Test 4: Mock broker queue depths for all worker classes."""
         mock_r = MagicMock()
         def llen_side_effect(q):
-            mapping = {"data_worker": 10, "ml_worker": 3, "decision_worker": 2}
+            mapping = {
+                "data_worker": 10,
+                "ml_worker": 3,
+                "decision_worker": 2,
+                "integration_worker": 4,
+            }
             return mapping.get(q, 0)
         mock_r.llen.side_effect = llen_side_effect
         mock_from_url.return_value = mock_r
@@ -60,14 +71,19 @@ class CeleryTelemetryTest(TestCase):
         self.assertEqual(depths["data_worker"], 10)
         self.assertEqual(depths["ml_worker"], 3)
         self.assertEqual(depths["decision_worker"], 2)
+        self.assertEqual(depths["integration_worker"], 4)
 
         val_data = TASK_QUEUE_DEPTH.labels(worker_type="data", queue="data_worker")._value.get()
         val_ml = TASK_QUEUE_DEPTH.labels(worker_type="ml", queue="ml_worker")._value.get()
         val_dec = TASK_QUEUE_DEPTH.labels(worker_type="decision", queue="decision_worker")._value.get()
+        val_integration = TASK_QUEUE_DEPTH.labels(
+            worker_type="integration", queue="integration_worker"
+        )._value.get()
 
         self.assertEqual(val_data, 10)
         self.assertEqual(val_ml, 3)
         self.assertEqual(val_dec, 2)
+        self.assertEqual(val_integration, 4)
 
     def test_05_telemetry_failure_isolation(self):
         """Test 5: Force metric recording failure to verify task/telemetry does not crash."""

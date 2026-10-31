@@ -72,9 +72,12 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
   private priorityChartInstance: any = null;
   private riskCapitalChartInstance: any = null;
 
-  isRefreshing: boolean = false;
   viewState: 'loading' | 'ready' | 'empty' | 'error' = 'loading';
   loadError = '';
+  sourceMode: 'CSV' | 'ODOO' = 'CSV';
+  odooConnections: any[] = [];
+  selectedOdooConnectionId = '';
+  sourceMetadata: any = null;
 
   // Color Coding Constants (Strict Compliance)
   readonly COLOR_SAFE = '#22C55E';     // Green-500
@@ -157,6 +160,7 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
   ngOnInit(): void {
     // Do not render a client-side cache before the backend confirms that it
     // belongs to the currently active dataset.
+    this.loadOdooSources();
     this.fetchDashboardData();
   }
 
@@ -179,9 +183,17 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
     this.viewState = 'loading';
     this.loadError = '';
     this.data = null;
-    this.apiService.getExecutiveDashboardSummaryCached().subscribe({
+    if (this.sourceMode === 'ODOO' && !this.selectedOdooConnectionId) {
+      this.loading = false;
+      this.viewState = 'empty';
+      return;
+    }
+    const request = this.sourceMode === 'ODOO'
+      ? this.apiService.getOperationalExecutiveDashboardSummary(this.selectedOdooConnectionId)
+      : this.apiService.getExecutiveDashboardSummaryCached();
+    request.subscribe({
       next: (summary: any) => {
-        this.isRefreshing = false;
+        this.sourceMetadata = summary?.source || null;
         if (summary && summary.hasData) {
           this.loading = false;
           const hasCapitalReadModel = summary.capitalStatus !== 'RISK_READ_MODEL_ONLY';
@@ -264,10 +276,30 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
         }
       },
       error: (err: any) => {
-        this.isRefreshing = false;
         this.setDashboardError(err?.error?.error || 'Không thể tải dữ liệu tổng quan. Vui lòng thử lại.');
       }
     });
+  }
+
+  private loadOdooSources(): void {
+    this.apiService.listIntegrationConnections().subscribe({
+      next: (response: any) => {
+        this.odooConnections = (response?.connections || []).filter((connection: any) => connection.status === 'ACTIVE');
+      },
+      error: () => { this.odooConnections = []; },
+    });
+  }
+
+  onSourceChanged(): void {
+    if (this.sourceMode === 'ODOO' && !this.selectedOdooConnectionId) {
+      this.selectedOdooConnectionId = this.odooConnections[0]?.id || '';
+    }
+    this.sourceMetadata = null;
+    this.fetchDashboardData();
+  }
+
+  get selectedOdooConnectionName(): string {
+    return this.odooConnections.find(connection => connection.id === this.selectedOdooConnectionId)?.display_name || 'Odoo';
   }
 
   goToImport(): void {
@@ -526,9 +558,20 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
     if (this.riskCapitalChartInstance) this.riskCapitalChartInstance.resize();
   }
 
-  private setRiskCapitalChartData(values: Record<string, unknown> | undefined): void {
+  private setRiskCapitalChartData(
+    values: Record<string, unknown> | Array<{ group?: string; inventory_value?: unknown }> | undefined
+  ): void {
+    // Odoo summaries before the normalized API contract used a list of
+    // reporting rows. Accept it during rollout so an already-running backend
+    // does not leave the chart blank in the browser.
+    const normalizedValues: Record<string, unknown> = Array.isArray(values)
+      ? values.reduce<Record<string, unknown>>((result, row) => {
+        if (row?.group) result[row.group] = row.inventory_value;
+        return result;
+      }, {})
+      : (values || {});
     const amount = (key: string): number => {
-      const value = Number(values?.[key] ?? 0);
+      const value = Number(normalizedValues[key] ?? 0);
       return Number.isFinite(value) && value > 0 ? value : 0;
     };
     this.riskCapitalChartData = [
@@ -745,30 +788,20 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
     }
   }
 
-  refreshData(): void {
-    this.isRefreshing = true;
-    this.apiService.refreshExecutiveDashboardCache().subscribe({
-      next: () => this.fetchDashboardData(),
-      // Users without the cache-refresh permission can still reload their
-      // latest accessible read model; the control must not strand the page.
-      error: () => this.fetchDashboardData()
-    });
-  }
-
   onViewRiskAnalysisClick(): void {
     this.navigateTo.emit('slow-moving-risk');
-    this.router.navigate(['/app/risk']);
+    this.router.navigate(['/app/risk'], { queryParams: this.sourceQuery() });
   }
 
   onViewAllClick(): void {
     this.navigateTo.emit('slow-moving-risk');
-    this.router.navigate(['/app/risk']);
+    this.router.navigate(['/app/risk'], { queryParams: this.sourceQuery() });
   }
 
   onSelectSku(sku: string): void {
     this.analyzeSku.emit(sku);
     this.dashboardState.setSelectedSkuId(sku);
-    this.router.navigate(['/app/risk'], { queryParams: { sku } });
+    this.router.navigate(['/app/risk'], { queryParams: this.sourceQuery({ sku }) });
   }
 
   onNavigateToStage(targetStage: string, sku?: string): void {
@@ -778,13 +811,19 @@ export class ExecutiveDashboardComponent implements OnInit, OnChanges, AfterView
     }
     this.navigateTo.emit(targetStage);
     if (targetStage === 'slow-moving-risk') {
-      this.router.navigate(['/app/risk'], sku ? { queryParams: { sku } } : {});
+      this.router.navigate(['/app/risk'], { queryParams: this.sourceQuery(sku ? { sku } : {}) });
     } else if (targetStage === 'capital-exposure') {
-      this.router.navigate(['/app/capital']);
+      this.router.navigate(['/app/capital'], { queryParams: this.sourceQuery() });
     } else if (targetStage === 'decision-support') {
       this.router.navigate(['/app/decisions']);
     } else if (targetStage === 'dashboard') {
       this.router.navigate(['/app/dashboard']);
     }
+  }
+
+  private sourceQuery(extra: Record<string, string> = {}): Record<string, string> {
+    return this.sourceMode === 'ODOO'
+      ? { ...extra, source: 'odoo', connection: this.selectedOdooConnectionId }
+      : extra;
   }
 }

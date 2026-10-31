@@ -29,6 +29,21 @@ urlpatterns = [
     path('api/v1/ping', views.ping, name='ping'),
     path('api/v1/data/check', views.check_data, name='check_data'),
 
+    # ERP integrations are workspace-scoped and provider-neutral. Odoo is
+    # the first adapter; the API contract remains reusable for SAP later.
+    path('api/v1/integrations/connections/', views.IntegrationConnectionListCreateView.as_view(), name='integration_connections'),
+    path('api/v1/integrations/connections/<uuid:connection_id>/', views.IntegrationConnectionDetailView.as_view(), name='integration_connection_detail'),
+    path('api/v1/integrations/connections/<uuid:connection_id>/runs/<str:run_type>/', views.IntegrationRunView.as_view(), name='integration_run'),
+    path('api/v1/integrations/connections/<uuid:connection_id>/overview/', views.IntegrationOverviewView.as_view(), name='integration_overview'),
+    path('api/v1/integrations/connections/<uuid:connection_id>/operational-risk/', views.IntegrationOperationalRiskView.as_view(), name='integration_operational_risk'),
+    path('api/v1/integrations/connections/<uuid:connection_id>/operational-risk/summary/', views.IntegrationOperationalRiskSummaryView.as_view(), name='integration_operational_risk_summary'),
+    path('api/v1/integrations/connections/<uuid:connection_id>/operational-capital/latest/', views.IntegrationOperationalCapitalView.as_view(), name='integration_operational_capital_latest'),
+    path('api/v1/integrations/connections/<uuid:connection_id>/operational-dashboard/summary/', views.IntegrationOperationalExecutiveSummaryView.as_view(), name='integration_operational_dashboard_summary'),
+    path('api/v1/integrations/connections/<uuid:connection_id>/sku-mappings/', views.IntegrationSkuMappingView.as_view(), name='integration_sku_mappings'),
+    path('api/v1/integrations/connections/<uuid:connection_id>/sku-mappings/<int:mapping_id>/', views.IntegrationSkuMappingView.as_view(), name='integration_sku_mapping_detail'),
+    path('api/v1/integrations/connections/<uuid:connection_id>/sku-candidates/', views.IntegrationSkuCandidateView.as_view(), name='integration_sku_candidates'),
+    path('api/v1/integrations/webhooks/<uuid:webhook_token>/', views.integration_webhook, name='integration_webhook'),
+
 
     # Authentication & User Management (AUTH-001 & AUTH-002)
     path('api/auth/register', views.register_user, name='register_user'),

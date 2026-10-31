@@ -19,11 +19,6 @@
         class="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl transition-all cursor-pointer active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
         Tạo kế hoạch xử lý
       </button>
-      <button (click)="loadDecisions()" [disabled]="isLoading"
-        class="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl transition-all cursor-pointer active:scale-95 disabled:opacity-50">
-        <span *ngIf="!isLoading">Cập nhật dữ liệu</span>
-        <span *ngIf="isLoading">Đang tải...</span>
-      </button>
     </div>
   </div>
 

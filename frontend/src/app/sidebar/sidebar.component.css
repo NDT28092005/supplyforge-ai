@@ -5,6 +5,43 @@
 .operations-sidebar {
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 12px 0 32px -28px rgba(15, 23, 42, 0.42);
+  padding: 6rem 1.5rem 1.5rem;
+  transition: width 200ms ease, padding 200ms ease;
+  width: 15.5rem;
+}
+
+.sidebar-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.7rem;
+  min-height: 1.8rem;
+}
+
+.sidebar-toggle {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #dce4ee;
+  border-radius: 0.55rem;
+  color: #526477;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 1.8rem;
+  justify-content: center;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+  width: 1.8rem;
+}
+
+.sidebar-toggle:hover {
+  background: #eef4fb;
+  border-color: #b9cbe2;
+  color: #1d5fd1;
+}
+
+.sidebar-toggle svg {
+  height: 0.9rem;
+  width: 0.9rem;
 }
 
 .sidebar-kicker {
@@ -12,7 +49,7 @@
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  margin: 0 0 0.7rem 0.8rem;
+  margin: 0 0 0 0.8rem;
   text-transform: uppercase;
 }
 
@@ -22,4 +59,54 @@
 
 .sidebar-nav .sidebar-link.active-link {
   box-shadow: inset 3px 0 0 #1d5fd1, 0 8px 18px -16px rgba(29, 95, 209, 0.6);
+}
+
+.operations-sidebar.is-collapsed {
+  padding-inline: 0.65rem;
+  width: 4.75rem;
+}
+
+.operations-sidebar.is-collapsed .sidebar-heading {
+  justify-content: center;
+}
+
+.operations-sidebar.is-collapsed .sidebar-kicker,
+.operations-sidebar.is-collapsed .sidebar-label,
+.operations-sidebar.is-collapsed .sidebar-action-label {
+  display: none;
+}
+
+.operations-sidebar.is-collapsed .sidebar-link {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.operations-sidebar.is-collapsed .sidebar-actions button {
+  padding-inline: 0;
+}
+
+@media (max-width: 768px) {
+  .operations-sidebar {
+    padding-inline: 0.65rem;
+    width: 4.75rem;
+  }
+
+  .sidebar-heading {
+    justify-content: center;
+  }
+
+  .sidebar-kicker,
+  .sidebar-label,
+  .sidebar-action-label {
+    display: none;
+  }
+
+  .sidebar-link {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .sidebar-actions button {
+    padding-inline: 0;
+  }
 }

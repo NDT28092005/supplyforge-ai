@@ -5,12 +5,27 @@ Tests notification listing, auto-seeding of 6 trigger types, mark-as-read, and c
 """
 
 from django.test import TestCase
-from django.urls import reverse
 import json
-from supplyforge.models import NotificationRecord
+from supplyforge.models import NotificationRecord, User, Workspace, WorkspaceMember
+from supplyforge.views.auth import generate_access_token
 
 
 class NotificationSystemTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create(
+            email='notifications-owner@example.test', display_name='Notification Owner',
+            status=User.STATUS_ACTIVE, is_email_verified=True, role=User.ROLE_OWNER,
+        )
+        self.workspace = Workspace.objects.create(
+            name='Notification Workspace', slug='notification-workspace', owner=self.user,
+        )
+        WorkspaceMember.objects.create(
+            workspace=self.workspace, user=self.user, role=User.ROLE_OWNER,
+        )
+        self.client.defaults['HTTP_AUTHORIZATION'] = (
+            f'Bearer {generate_access_token(self.user, self.workspace.id)}'
+        )
+
     def test_auto_seed_notifications_covering_all_triggers(self):
         """GET /api/v1/notifications/ auto-seeds sample alerts if empty."""
         response = self.client.get('/api/v1/notifications/')
@@ -35,7 +50,7 @@ class NotificationSystemTests(TestCase):
     def test_mark_notifications_read(self):
         """POST /api/v1/notifications/mark-read/ marks notification as read."""
         record = NotificationRecord.objects.create(
-            workspace_id=1,
+            workspace_id=self.workspace.id,
             notification_type=NotificationRecord.TRIGGER_NEW_CRITICAL_SKU,
             title='Test Alert',
             message='Test Message',
@@ -65,13 +80,13 @@ class NotificationSystemTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['unread_count'], 0)
 
-        unread_in_db = NotificationRecord.objects.filter(workspace_id=1, is_read=False).count()
+        unread_in_db = NotificationRecord.objects.filter(workspace_id=self.workspace.id, is_read=False).count()
         self.assertEqual(unread_in_db, 0)
 
     def test_create_notification(self):
         """POST /api/v1/notifications/create/ creates a new alert trigger."""
         payload = {
-            'workspace_id': 1,
+            'workspace_id': self.workspace.id,
             'notification_type': NotificationRecord.TRIGGER_CAPITAL_EXPOSURE_INCREASE,
             'title': 'Vốn đọng tăng đọt biến',
             'message': 'Đo lường rủi ro vốn tăng.',

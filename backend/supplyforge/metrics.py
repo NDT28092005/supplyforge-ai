@@ -214,6 +214,37 @@ TASK_AGE_SECONDS = _get_or_create_metric(
 )
 
 
+# ── G. ERP Integration Metrics ──────────────────────────────────────
+ERP_SYNC_TOTAL = _get_or_create_metric(
+    Counter,
+    'supplyforge_erp_sync_total',
+    'Total ERP synchronization runs.',
+    ['provider', 'run_type', 'status'],
+)
+
+ERP_SYNC_DURATION_SECONDS = _get_or_create_metric(
+    Histogram,
+    'supplyforge_erp_sync_duration_seconds',
+    'Duration of an ERP synchronization run.',
+    ['provider', 'run_type'],
+    buckets=(0.5, 1.0, 5.0, 15.0, 30.0, 60.0, 120.0, 300.0, 900.0),
+)
+
+ERP_SOURCE_RECORDS_TOTAL = _get_or_create_metric(
+    Counter,
+    'supplyforge_erp_source_records_total',
+    'ERP source records read by entity type.',
+    ['provider', 'entity'],
+)
+
+ERP_WEBHOOK_TOTAL = _get_or_create_metric(
+    Counter,
+    'supplyforge_erp_webhook_total',
+    'Inbound ERP webhooks by verification outcome.',
+    ['provider', 'status'],
+)
+
+
 # ── SAFE NON-INTRUSIVE RECORDING HELPERS ─────────────────────────────
 
 def record_ingestion(pipeline='medallion', source_type='csv', status='success', duration=None, rows=0):
@@ -269,6 +300,35 @@ def update_high_risk_sku_gauge(critical_count=0, high_count=0, medium_count=0, l
         HIGH_RISK_SKU_TOTAL.labels(risk_level='LOW_RISK').set(low_count)
     except Exception as e:
         logger.warning(f"[Metrics] Failed to update high-risk SKU gauge: {e}")
+
+
+def record_erp_sync(provider='odoo', run_type='incremental', status='success', duration=None, summary=None):
+    """Emit bounded ERP worker metrics without tenant or SKU labels."""
+    try:
+        provider = str(provider).lower()
+        run_type = str(run_type).lower()
+        ERP_SYNC_TOTAL.labels(provider=provider, run_type=run_type, status=status).inc()
+        if duration is not None:
+            ERP_SYNC_DURATION_SECONDS.labels(provider=provider, run_type=run_type).observe(duration)
+        for entity, key in {
+            'product': 'products_read',
+            'sales_line': 'sales_lines_read',
+            'receipt_move': 'receipt_moves_read',
+            'inventory_quant': 'inventory_quants_read',
+            'daily_metric': 'daily_metrics_written',
+        }.items():
+            value = int((summary or {}).get(key) or 0)
+            if value > 0:
+                ERP_SOURCE_RECORDS_TOTAL.labels(provider=provider, entity=entity).inc(value)
+    except Exception as exc:
+        logger.warning('[Metrics] Failed to record ERP sync metrics: %s', exc)
+
+
+def record_erp_webhook(status='accepted'):
+    try:
+        ERP_WEBHOOK_TOTAL.labels(provider='odoo', status=status).inc()
+    except Exception as exc:
+        logger.warning('[Metrics] Failed to record ERP webhook metrics: %s', exc)
 
 
 def record_decision(decision_type='PO_REORDER', action='generated', status='success'):

@@ -15,6 +15,7 @@ class BackgroundJob(models.Model):
         ('MODEL_EVALUATION', 'Model Offline Evaluation'),
         ('DATA_EXPORT', 'Data Export'),
         ('REPORT_GENERATION', 'Report Generation'),
+        ('INTEGRATION_SYNC', 'ERP Integration Sync'),
     ]
 
     STATUS_CHOICES = [
@@ -33,6 +34,7 @@ class BackgroundJob(models.Model):
         ('IMPORTING', 'Nhập dữ liệu vào hệ thống'),
         ('ML_INFERENCE', 'Chạy mô hình AI đánh giá rủi ro'),
         ('FINALIZING', 'Hoàn tất'),
+        ('INTEGRATION_SYNC', 'Đồng bộ ERP'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

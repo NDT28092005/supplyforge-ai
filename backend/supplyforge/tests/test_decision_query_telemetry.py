@@ -111,7 +111,10 @@ class QueryCacheTelemetryTest(TestCase):
 
         before_hit = CACHE_HIT_TOTAL.labels(cache_area="dashboard", operation="get")._value.get()
         res2, status2 = DashboardQueryService.get_executive_summary(workspace_id=999)
-        self.assertEqual(status2, "HIT")
+        # A cached negative response is safely repaired if a read model becomes
+        # available between calls. Both values are cache hits and must count as
+        # one in telemetry.
+        self.assertIn(status2, {"HIT", "HIT_REPAIRED"})
 
         after_hit = CACHE_HIT_TOTAL.labels(cache_area="dashboard", operation="get")._value.get()
         self.assertEqual(after_hit, before_hit + 1)

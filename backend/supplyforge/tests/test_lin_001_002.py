@@ -1,7 +1,7 @@
 import json
 from django.test import TestCase, Client
-from supplyforge.models import User, IngestionSession, SlowMovingRiskAssessment
-from supplyforge.views.auth import get_or_create_user_tenant
+from supplyforge.models import User, IngestionSession, SlowMovingRiskAssessment, WorkspaceMember
+from supplyforge.views.auth import generate_access_token, get_or_create_user_tenant
 from supplyforge.services.lineage_service import LineageService
 
 
@@ -16,6 +16,12 @@ class Lin001AndLin002TestCase(TestCase):
             role=User.ROLE_OWNER
         )
         self.tenant = get_or_create_user_tenant(self.user)
+        WorkspaceMember.objects.get_or_create(
+            workspace=self.tenant, user=self.user, defaults={'role': User.ROLE_OWNER},
+        )
+        self.client.defaults['HTTP_AUTHORIZATION'] = (
+            f'Bearer {generate_access_token(self.user, self.tenant.id)}'
+        )
         self.session = IngestionSession.objects.create(
             workspace=self.tenant,
             original_filename="orders_import_sept.csv",

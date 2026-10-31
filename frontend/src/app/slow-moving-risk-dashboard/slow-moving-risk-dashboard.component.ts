@@ -62,6 +62,10 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
 
   selectedRiskFilter: string = '';
   searchTerm: string = '';
+  sourceMode: 'CSV' | 'ODOO' = 'CSV';
+  odooConnections: any[] = [];
+  selectedOdooConnectionId = '';
+  sourceMetadata: any = null;
 
   categoryFilter: string = '';
   capitalFilter: string = ''; // ALL, LOW (<10M), MID (10M-50M), HIGH (>50M)
@@ -98,12 +102,19 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     const routeSku = this.route.snapshot.queryParamMap.get('sku');
+    const routeSource = this.route.snapshot.queryParamMap.get('source');
+    const routeConnection = this.route.snapshot.queryParamMap.get('connection');
     if (routeSku) {
       this.skuId = routeSku;
     } else {
       this.skuId = null;
     }
+    if (routeSource === 'odoo') {
+      this.sourceMode = 'ODOO';
+      this.selectedOdooConnectionId = routeConnection || '';
+    }
 
+    this.loadOdooSources();
     this.loadRealAssessments();
   }
 
@@ -116,12 +127,28 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
     else this.tableLoading = true;
     this.loadError = '';
     const params = this.buildListParams();
-    forkJoin({
-      list: this.apiService.getM3RiskAssessments(params),
-      summary: this.apiService.getM3RiskSummary(this.sessionId || undefined),
-    }).subscribe({
+    if (this.sourceMode === 'ODOO' && !this.selectedOdooConnectionId) {
+      this.items = [];
+      this.totalItems = 0;
+      this.riskSummary = { total_skus: 0, critical: 0, high_risk: 0, medium_risk: 0, low_risk: 0 };
+      this.sourceMetadata = null;
+      this.dataState = 'empty';
+      this.tableLoading = false;
+      return;
+    }
+    const requests = this.sourceMode === 'ODOO'
+      ? {
+          list: this.apiService.getOperationalRiskAssessments(this.selectedOdooConnectionId, params),
+          summary: this.apiService.getOperationalRiskSummary(this.selectedOdooConnectionId),
+        }
+      : {
+          list: this.apiService.getM3RiskAssessments(params),
+          summary: this.apiService.getM3RiskSummary(this.sessionId || undefined),
+        };
+    forkJoin(requests).subscribe({
       next: ({ list, summary }: any) => {
         const res = list;
+        this.sourceMetadata = summary?.source || res?.source || null;
         this.riskSummary = {
           total_skus: Number(summary?.total_skus || 0),
           critical: Number(summary?.critical || 0),
@@ -151,6 +178,31 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
         this.loadError = err?.error?.detail || err?.error?.error || 'Không thể tải kết quả đánh giá rủi ro. Vui lòng thử lại.';
       }
     });
+  }
+
+  private loadOdooSources(): void {
+    this.apiService.listIntegrationConnections().subscribe({
+      next: (response: any) => {
+        this.odooConnections = (response?.connections || []).filter((connection: any) => connection.status === 'ACTIVE');
+      },
+      // ERP is a paid capability. A CSV-only workspace must not see an error
+      // merely because the optional source picker cannot be loaded.
+      error: () => { this.odooConnections = []; },
+    });
+  }
+
+  onSourceChanged(): void {
+    if (this.sourceMode === 'ODOO' && !this.selectedOdooConnectionId) {
+      this.selectedOdooConnectionId = this.odooConnections[0]?.id || '';
+    }
+    this.selectedRiskFilter = '';
+    this.searchTerm = '';
+    this.sourceMetadata = null;
+    this.loadRealAssessments(true);
+  }
+
+  get selectedOdooConnectionName(): string {
+    return this.odooConnections.find(connection => connection.id === this.selectedOdooConnectionId)?.display_name || 'Odoo';
   }
 
   private buildListParams(): Record<string, string | number> {
@@ -307,6 +359,21 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
         label: 'Tỷ lệ ngày không có đơn cao',
         subDesc: `Tỷ lệ ngày không có đơn trong 90 ngày: ${(Number(evidence.zero_rate_90d || 0) * 100).toFixed(1)}%.`,
         impactText: 'Tín hiệu hỗ trợ', severity: 'amber'
+      },
+      NO_SALES_LAST_30D: {
+        label: 'Không phát sinh doanh số gần đây',
+        subDesc: 'Odoo chưa ghi nhận sản lượng bán trong 30 ngày gần nhất.',
+        impactText: 'Quy tắc vận hành', severity: 'red'
+      },
+      LONG_TIME_SINCE_LAST_SALE: {
+        label: 'Khoảng cách từ lần bán gần nhất kéo dài',
+        subDesc: `Đã ${dslsDays} ngày kể từ lần bán gần nhất theo dữ liệu Odoo.`,
+        impactText: 'Quy tắc vận hành', severity: 'red'
+      },
+      MONITOR_SALES_VELOCITY: {
+        label: 'Theo dõi tốc độ tiêu thụ',
+        subDesc: `Tốc độ ghi nhận: ${velocity} sản phẩm/ngày.`,
+        impactText: 'Quy tắc vận hành', severity: 'emerald'
       }
     };
 
@@ -422,7 +489,7 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   navigateToCapitalExposure(): void {
     this.closeDrawer();
     this.navigateTo.emit('capital-exposure');
-    this.router.navigate(['/app/capital']);
+    this.router.navigate(['/app/capital'], { queryParams: this.sourceQuery() });
   }
 
   navigateToDecisions(sku?: string): void {
@@ -455,8 +522,14 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
 
   onNavigateToStage(targetStage: string): void {
     this.navigateTo.emit(targetStage);
-    if (targetStage === 'capital-exposure') this.router.navigate(['/app/capital']);
+    if (targetStage === 'capital-exposure') this.router.navigate(['/app/capital'], { queryParams: this.sourceQuery() });
     else if (targetStage === 'decision-support') this.router.navigate(['/app/decisions']);
     else if (targetStage === 'executive-dashboard') this.router.navigate(['/app/dashboard']);
+  }
+
+  private sourceQuery(extra: Record<string, string> = {}): Record<string, string> {
+    return this.sourceMode === 'ODOO'
+      ? { ...extra, source: 'odoo', connection: this.selectedOdooConnectionId }
+      : extra;
   }
 }

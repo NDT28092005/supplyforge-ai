@@ -1,9 +1,10 @@
 from rest_framework.test import APIClient
 from django.test import TestCase
 from django.core.exceptions import PermissionDenied
-from supplyforge.models import IngestionSession, Workspace, Product, Order
+from supplyforge.models import IngestionSession, Workspace, WorkspaceMember, User, Product, Order
 from supplyforge.services.data_quality_service import DataQualityService
 from supplyforge.services.tenant_isolation import TenantIsolationService
+from supplyforge.views.auth import generate_access_token
 
 
 class DataQualityAndMultiTenantTestCase(TestCase):
@@ -17,8 +18,25 @@ class DataQualityAndMultiTenantTestCase(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.workspace_a = Workspace.objects.create(id=101, name="Merchant A Workspace", slug="merchant-a")
-        self.workspace_b = Workspace.objects.create(id=102, name="Merchant B Workspace", slug="merchant-b")
+        self.owner_a = User.objects.create(
+            email='merchant-a-quality@example.test', display_name='Merchant A',
+            status=User.STATUS_ACTIVE, is_email_verified=True, role=User.ROLE_OWNER,
+        )
+        self.owner_b = User.objects.create(
+            email='merchant-b-quality@example.test', display_name='Merchant B',
+            status=User.STATUS_ACTIVE, is_email_verified=True, role=User.ROLE_OWNER,
+        )
+        self.workspace_a = Workspace.objects.create(
+            id=101, name="Merchant A Workspace", slug="merchant-a", owner=self.owner_a,
+        )
+        self.workspace_b = Workspace.objects.create(
+            id=102, name="Merchant B Workspace", slug="merchant-b", owner=self.owner_b,
+        )
+        WorkspaceMember.objects.create(workspace=self.workspace_a, user=self.owner_a, role=User.ROLE_OWNER)
+        WorkspaceMember.objects.create(workspace=self.workspace_b, user=self.owner_b, role=User.ROLE_OWNER)
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer {generate_access_token(self.owner_a, self.workspace_a.id)}',
+        )
 
         # Session for Tenant A
         self.session_a = IngestionSession.objects.create(
@@ -117,6 +135,6 @@ class DataQualityAndMultiTenantTestCase(TestCase):
         response = self.client.get('/api/v2/tenant/verify-isolation', HTTP_X_WORKSPACE_ID='101')
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["current_tenant_id"], "101")
+        self.assertEqual(data["current_tenant_id"], "T101")
         self.assertEqual(data["sec_001_isolation"], "ENFORCED")
         self.assertIn("sec_002_resource_tagging", data)

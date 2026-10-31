@@ -1,0 +1,74 @@
+# Local-only Odoo fixture for exercising the SupplyForge read-only ERP flow.
+# It is intentionally separate from the production-oriented Compose stack.
+name: supplyforge-odoo-test
+
+services:
+  odoo-db:
+    image: postgres:15-alpine
+    network_mode: host
+    command: ["postgres", "-h", "127.0.0.1", "-p", "15432"]
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo-local-test-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 15432 -U odoo -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - supplyforge_odoo_test_db:/var/lib/postgresql/data
+
+  odoo:
+    image: odoo:17.0
+    depends_on:
+      odoo-db:
+        condition: service_healthy
+    # Host networking bypasses a Docker port-forwarding defect in this local
+    # development machine. It remains local-only because Odoo binds to the
+    # host loopback address below.
+    network_mode: host
+    environment:
+      HOST: 127.0.0.1
+      PORT: 15432
+      USER: odoo
+      PASSWORD: odoo-local-test-only
+    command:
+      - --db_host=127.0.0.1
+      - --db_port=15432
+      - --db_user=odoo
+      - --db_password=odoo-local-test-only
+      - --http-interface=127.0.0.1
+      - --http-port=8069
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import xmlrpc.client; xmlrpc.client.ServerProxy('http://127.0.0.1:8069/xmlrpc/2/common').version()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    volumes:
+      - ./tools/odoo_test:/opt/supplyforge-odoo-test:ro
+      - ./test-data:/opt/supplyforge-test-data:ro
+
+  # One-off seed runner. It is started explicitly with `docker compose run`
+  # after the database schema has been initialized; it never runs in normal
+  # development or production Compose flows.
+  odoo-csv-seed:
+    image: odoo:17.0
+    profiles: ["tools"]
+    network_mode: host
+    environment:
+      ODOO_CSV_E2E_DATABASE: ${ODOO_CSV_E2E_DATABASE:-odoo_supplyforge_e2e_1000}
+    volumes:
+      - ./tools/odoo_test:/opt/supplyforge-odoo-test:ro
+      - ./test-data:/opt/supplyforge-test-data:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        cat /opt/supplyforge-odoo-test/load_csv_e2e.py |
+        odoo shell --db_host=127.0.0.1 --db_port=15432
+        --db_user=odoo --db_password=odoo-local-test-only
+        -d "$$ODOO_CSV_E2E_DATABASE"
+
+volumes:
+  supplyforge_odoo_test_db:

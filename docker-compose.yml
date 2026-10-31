@@ -63,6 +63,8 @@ services:
       REDIS_PORT: 6379
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      INTEGRATION_CREDENTIAL_ENCRYPTION_KEY: ${INTEGRATION_CREDENTIAL_ENCRYPTION_KEY:-}
+      INTEGRATION_ALLOWED_HOSTS: ${INTEGRATION_ALLOWED_HOSTS:-}
       GEMINI_ENABLED: ${GEMINI_ENABLED:-false}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
@@ -151,6 +153,8 @@ services:
       REDIS_PORT: 6379
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      INTEGRATION_CREDENTIAL_ENCRYPTION_KEY: ${INTEGRATION_CREDENTIAL_ENCRYPTION_KEY:-}
+      INTEGRATION_ALLOWED_HOSTS: ${INTEGRATION_ALLOWED_HOSTS:-}
     depends_on:
       backend:
         condition: service_healthy
@@ -165,7 +169,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    command: celery -A config worker -l info -Q ml_worker,celery -n ml_worker@%h
+    command: celery -A config worker -l info -Q ml_worker -n ml_worker@%h
     restart: unless-stopped
     stop_grace_period: 45s
     environment:
@@ -194,6 +198,8 @@ services:
       REDIS_PORT: 6379
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      INTEGRATION_CREDENTIAL_ENCRYPTION_KEY: ${INTEGRATION_CREDENTIAL_ENCRYPTION_KEY:-}
+      INTEGRATION_ALLOWED_HOSTS: ${INTEGRATION_ALLOWED_HOSTS:-}
     depends_on:
       backend:
         condition: service_healthy
@@ -208,7 +214,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    command: celery -A config worker -l info -Q decision_worker,celery -n decision_worker@%h
+    command: celery -A config worker -l info -Q decision_worker -n decision_worker@%h
     restart: unless-stopped
     stop_grace_period: 45s
     environment:
@@ -237,6 +243,62 @@ services:
       REDIS_PORT: 6379
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      INTEGRATION_CREDENTIAL_ENCRYPTION_KEY: ${INTEGRATION_CREDENTIAL_ENCRYPTION_KEY:-}
+      INTEGRATION_ALLOWED_HOSTS: ${INTEGRATION_ALLOWED_HOSTS:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # ERP/WMS pulls have their own capacity so a slow provider cannot consume
+  # import, scoring or decision-processing workers.
+  celery_integration:
+    extends:
+      service: celery_data
+    command: celery -A config worker -l info -Q integration_worker -n integration_worker@%h
+
+  # Runs periodic ERP pull dispatching. It only schedules work; a worker
+  # performs the actual Odoo read on the dedicated integration queue.
+  celery_beat:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: celery -A config beat -l info
+    restart: unless-stopped
+    stop_grace_period: 20s
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY is required}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?ALLOWED_HOSTS is required}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS is required}
+      USE_SQLITE: "0"
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE is required}
+      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_AUTH_MODE: ${S3_AUTH_MODE:-auto}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_LAKE_BUCKET: ${S3_LAKE_BUCKET:-}
+      S3_REGION: ${S3_REGION:-}
+      S3_MULTIPART_PART_SIZE_BYTES: ${S3_MULTIPART_PART_SIZE_BYTES:-8388608}
+      S3_PRESIGNED_UPLOAD_TTL_SECONDS: ${S3_PRESIGNED_UPLOAD_TTL_SECONDS:-900}
+      SQS_INGESTION_QUEUE_URL: ${SQS_INGESTION_QUEUE_URL:-}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      INTEGRATION_CREDENTIAL_ENCRYPTION_KEY: ${INTEGRATION_CREDENTIAL_ENCRYPTION_KEY:-}
+      INTEGRATION_ALLOWED_HOSTS: ${INTEGRATION_ALLOWED_HOSTS:-}
     depends_on:
       backend:
         condition: service_healthy

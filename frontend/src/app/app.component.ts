@@ -43,6 +43,7 @@ export class AppComponent implements OnInit {
   isClearModalOpen = false;
   isClearingData = false;
   clearDataError = '';
+  isSidebarCollapsed = false;
 
   constructor(
     public apiService: ApiService,
@@ -53,6 +54,11 @@ export class AppComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    try {
+      this.isSidebarCollapsed = localStorage.getItem('supplyforge.sidebar-collapsed') === 'true';
+    } catch {
+      // The application remains usable when browser storage is unavailable.
+    }
     console.info('[Auth Debug] Khởi động ứng dụng với Router. URL:', window.location.href);
 
     const tokenMatch = window.location.href.match(/[?&]token=([^&]+)/);
@@ -126,6 +132,15 @@ export class AppComponent implements OnInit {
 
   get canReturnToDashboard(): boolean {
     return this.authService.isLoggedIn() && !this.ingestionState.isDatasetTransitionActive;
+  }
+
+  toggleSidebar(): void {
+    this.isSidebarCollapsed = !this.isSidebarCollapsed;
+    try {
+      localStorage.setItem('supplyforge.sidebar-collapsed', String(this.isSidebarCollapsed));
+    } catch {
+      // Persisting this display preference is optional.
+    }
   }
 
   // --- Ingestion Pipeline Stepper Indicators ---

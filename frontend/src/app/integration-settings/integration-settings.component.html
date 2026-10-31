@@ -1,0 +1,265 @@
+<section sfPageMotion class="integration-page operations-page">
+  <header data-motion="header" class="integration-hero operations-hero">
+    <div>
+      <p class="eyebrow">KẾT NỐI DỮ LIỆU / ODOO</p>
+      <h1>Nguồn dữ liệu ERP</h1>
+      <p>Kết nối Odoo để đưa dữ liệu bán hàng và tồn kho vào SupplyForge. Hệ thống chỉ đọc dữ liệu, không thay đổi chứng từ trên Odoo.</p>
+    </div>
+    <div class="hero-assurance">
+      <span class="assurance-dot"></span>
+      <span>Dữ liệu chỉ đọc</span>
+      <small>Không thay đổi dữ liệu trên Odoo</small>
+    </div>
+  </header>
+
+  <div *ngIf="isLoading" class="load-state" role="status">
+    <span class="spinner"></span>
+    <div><strong>Đang tải cấu hình tích hợp</strong><p>Đang kiểm tra quyền sử dụng của workspace.</p></div>
+  </div>
+
+  <section *ngIf="!isLoading && !entitled" data-motion="panel" class="entitlement-panel">
+    <span class="eyebrow">ERP INTEGRATIONS</span>
+    <h2>Tính năng tích hợp ERP chưa được kích hoạt</h2>
+    <p>Gói này dành cho workspace cần đồng bộ dữ liệu vận hành từ hệ thống ERP. Liên hệ bộ phận quản trị tài khoản để kích hoạt quyền sử dụng.</p>
+    <dl>
+      <div><dt>Phạm vi V1</dt><dd>Odoo, đồng bộ một chiều, chỉ đọc</dd></div>
+      <div><dt>Nhịp đồng bộ</dt><dd>15 phút, có webhook tăng tốc tùy chọn</dd></div>
+      <div><dt>Kiểm soát</dt><dd>Chọn company, kho và đối soát tồn khả dụng</dd></div>
+    </dl>
+  </section>
+
+  <ng-container *ngIf="!isLoading && entitled">
+    <p *ngIf="errorMessage" class="message message--error" role="alert">{{ errorMessage }}</p>
+    <p *ngIf="successMessage" class="message message--success" role="status">{{ successMessage }}</p>
+
+    <section data-motion="panel" class="connection-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">KẾT NỐI</p>
+          <h2>Kết nối Odoo</h2>
+        </div>
+        <button type="button" class="button button--secondary" (click)="showConnectionForm = !showConnectionForm">
+          {{ showConnectionForm ? 'Đóng biểu mẫu' : 'Kết nối Odoo' }}
+        </button>
+      </div>
+
+      <form *ngIf="showConnectionForm" class="connection-form" (ngSubmit)="createConnection()">
+        <div class="form-note"><strong>Thông tin xác thực được mã hóa.</strong> SupplyForge không hiển thị lại API key sau khi lưu.</div>
+        <label>Tên kết nối<input [(ngModel)]="connectionForm.display_name" name="displayName" required maxlength="128" placeholder="Ví dụ: Odoo Việt Nam"></label>
+        <label>URL Odoo<input [(ngModel)]="connectionForm.base_url" name="baseUrl" required type="url" placeholder="https://erp.example.com"></label>
+        <label>Cơ sở dữ liệu<input [(ngModel)]="connectionForm.database" name="database" required placeholder="production"></label>
+        <label>Tài khoản dịch vụ<input [(ngModel)]="connectionForm.username" name="username" required autocomplete="username" placeholder="integration@example.com"></label>
+        <label>API key<input [(ngModel)]="connectionForm.api_key" name="apiKey" required type="password" autocomplete="new-password" placeholder="API key của tài khoản chỉ đọc"></label>
+        <div class="form-actions"><button class="button button--primary" [disabled]="isSaving" type="submit">{{ isSaving ? 'Đang lưu...' : 'Lưu kết nối an toàn' }}</button></div>
+      </form>
+
+      <div *ngIf="connections.length === 0 && !showConnectionForm" class="empty-connections">
+        <strong>Chưa có nguồn ERP nào</strong>
+        <p>Kết nối Odoo bằng tài khoản dịch vụ chỉ có quyền đọc để bắt đầu.</p>
+      </div>
+
+      <div *ngIf="connections.length" class="connection-list" role="tablist" aria-label="Danh sách kết nối ERP">
+        <button *ngFor="let connection of connections" type="button" class="connection-row" [class.is-active]="connection.id === activeConnection?.id" (click)="selectConnection(connection.id)" role="tab">
+          <span class="connection-mark">O</span>
+          <span class="connection-copy"><strong>{{ connection.display_name }}</strong><small>{{ connection.base_url }}</small></span>
+          <span class="status" [class.status--active]="connection.status === 'ACTIVE'" [class.status--error]="connection.status === 'ERROR'">{{ connection.status === 'ACTIVE' ? 'Đang hoạt động' : connection.status === 'ERROR' ? 'Cần xử lý' : connection.status === 'VALIDATING' ? 'Đang xác thực' : connection.discovery ? 'Chọn phạm vi' : 'Chưa xác thực' }}</span>
+        </button>
+      </div>
+    </section>
+
+    <section *ngIf="activeConnection as connection" data-motion="panel" class="workspace-grid">
+      <article class="connection-detail">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">ODOO / {{ connection.status }}</p>
+            <h2>{{ connection.display_name }}</h2>
+          </div>
+          <button type="button" class="text-button" (click)="loadConnections(false)">Làm mới trạng thái</button>
+        </div>
+
+        <dl class="detail-list">
+          <div><dt>Công ty</dt><dd>{{ connection.company?.name || 'Chưa chọn' }}</dd></div>
+          <div><dt>Kho được theo dõi</dt><dd class="numeric-value">{{ connection.warehouses?.length ? connection.warehouses.length + ' kho' : 'Chưa chọn' }}</dd></div>
+          <div><dt>Lần đồng bộ gần nhất</dt><dd class="numeric-value">{{ connection.last_successful_sync_at ? (connection.last_successful_sync_at | date:'dd/MM/yyyy HH:mm') : 'Chưa có' }}</dd></div>
+          <div><dt>SKU cần mapping</dt><dd class="numeric-value">{{ connection.unmapped_sku_count || 0 }}</dd></div>
+        </dl>
+        <p *ngIf="connection.last_error" class="inline-error"><strong>{{ connection.last_error.code }}</strong> {{ connection.last_error.message }}</p>
+
+        <div class="run-actions">
+          <button type="button" class="button button--secondary" [disabled]="isRunning" (click)="run('validate')">Xác thực kết nối</button>
+          <button type="button" class="button button--primary" [disabled]="isRunning || !connection.company?.id || !connection.warehouses?.length" (click)="run('initial-sync')">Nạp dữ liệu lịch sử</button>
+          <button type="button" class="button button--quiet" [disabled]="isRunning || !connection.company?.id || !connection.warehouses?.length" (click)="run('sync')">Đồng bộ dữ liệu mới</button>
+        </div>
+        <p class="helper">{{ isRunning ? 'Yêu cầu đang được xử lý. Trạng thái sẽ tự cập nhật.' : 'Các lượt đồng bộ chỉ đọc dữ liệu Odoo; không tạo hay sửa chứng từ ERP.' }}</p>
+
+        <div class="scope-header">
+          <div><h3>Phạm vi đồng bộ</h3><p>Chọn công ty và các kho cần theo dõi.</p></div>
+          <button type="button" class="text-button" [disabled]="companies.length === 0" (click)="showScopeEditor = !showScopeEditor">{{ showScopeEditor ? 'Đóng' : 'Chỉnh sửa' }}</button>
+        </div>
+        <div *ngIf="companies.length === 0" class="scope-empty">Chạy “Xác thực &amp; đọc phạm vi” để tải company và kho có thể truy cập.</div>
+        <div *ngIf="showScopeEditor && companies.length" class="scope-editor">
+          <label>Công ty
+            <select [(ngModel)]="selectedCompanyId" (ngModelChange)="onCompanyChange()">
+              <option value="">Chọn công ty</option>
+              <option *ngFor="let company of companies" [value]="company.id">{{ company.name }}</option>
+            </select>
+          </label>
+          <div class="warehouse-options">
+            <label *ngFor="let warehouse of eligibleWarehouses" class="check-option">
+              <input type="checkbox" [checked]="selectedWarehouseIds.has('' + warehouse.id)" (change)="toggleWarehouse($event, '' + warehouse.id)">
+              <span>{{ warehouse.name || ('Kho ' + warehouse.id) }}</span>
+            </label>
+            <p *ngIf="selectedCompanyId && eligibleWarehouses.length === 0">Không có kho nào có thể truy cập trong công ty này.</p>
+          </div>
+          <button type="button" class="button button--primary" [disabled]="isSaving" (click)="saveScope()">Lưu phạm vi</button>
+        </div>
+      </article>
+
+      <aside class="run-panel">
+        <p class="eyebrow">TÌNH TRẠNG ĐỒNG BỘ</p>
+        <h3>{{ connection.latest_run?.status === 'RUNNING' || isRunning ? 'Đang xử lý' : connection.latest_run?.status === 'FAILED' ? 'Cần xem lại' : 'Sẵn sàng vận hành' }}</h3>
+        <p>{{ connection.latest_run?.status === 'FAILED' ? (connection.latest_run?.error_message || 'Lượt đồng bộ gần nhất không hoàn tất.') : 'Dữ liệu Odoo được lưu riêng để có thể kiểm tra và đối soát.' }}</p>
+        <dl *ngIf="connection.latest_run?.summary as summary" class="run-summary">
+          <div><dt>Loại lượt chạy</dt><dd>{{ connection.latest_run.type }}</dd></div>
+          <div *ngIf="summary.daily_metrics_written !== undefined"><dt>Bản ghi đã cập nhật</dt><dd>{{ formatNumber(summary.daily_metrics_written) }}</dd></div>
+          <div *ngIf="summary.sales_source"><dt>Nguồn bán hàng</dt><dd>{{ summary.sales_source === 'POS' ? 'Point of Sale' : 'Sales Orders' }}</dd></div>
+          <div *ngIf="summary.reconciliation"><dt>Chênh lệch tồn</dt><dd>{{ formatNumber(summary.reconciliation.quantity_variance) }}</dd></div>
+          <div *ngIf="summary.operational_analytics"><dt>SKU đã đưa vào dashboard</dt><dd>{{ formatNumber(summary.operational_analytics.scored_skus || 0) }}</dd></div>
+        </dl>
+        <button type="button" class="button button--quiet button--full" [disabled]="isRunning || !connection.company?.id || !connection.warehouses?.length" (click)="run('reconcile')">Đối soát tồn khả dụng</button>
+      </aside>
+    </section>
+
+    <section *ngIf="activeConnection && overview" data-motion="priority" class="metric-grid">
+      <article><span>Doanh số 28 ngày</span><strong class="metric-value">{{ formatNumber(overview.sales_28d) }}</strong><small>Đơn vị sản phẩm đã bán</small></article>
+      <article><span>Doanh thu 28 ngày</span><strong class="metric-value">{{ formatNumber(overview.revenue_28d) }}</strong><small>Theo tiền tệ cấu hình trong Odoo</small></article>
+      <article><span>Tồn khả dụng</span><strong class="metric-value">{{ formatNumber(overview.on_hand_quantity) }}</strong><small>Gộp từ các kho đã chọn</small></article>
+      <article><span>Ngày dữ liệu gần nhất</span><strong class="metric-value">{{ overview.latest_metric_date ? (overview.latest_metric_date | date:'dd/MM/yyyy') : 'Chưa có' }}</strong><small>{{ overview.freshness ? 'Đồng bộ ' + (overview.freshness | date:'dd/MM HH:mm') : 'Chưa đồng bộ' }}</small></article>
+      <article><span>Đã sẵn sàng cho dashboard</span><strong class="metric-value">{{ formatNumber(overview.operational_source?.coverage?.scored_skus || 0) }}</strong><small>{{ overview.operational_source?.status === 'READY' ? 'SKU đã map và còn tồn khả dụng' : 'Cần đồng bộ và xác nhận mapping' }}</small></article>
+    </section>
+
+    <section *ngIf="activeConnection" data-motion="panel" class="below-grid">
+      <article class="warehouse-card">
+        <div class="panel-heading"><div><p class="eyebrow">THEO KHO</p><h2>Tồn khả dụng đã nạp</h2></div></div>
+        <div *ngIf="overview?.warehouse_inventory?.length; else noWarehouseData" class="warehouse-table">
+          <div *ngFor="let warehouse of overview.warehouse_inventory"><span>{{ warehouse.warehouse_name }}</span><strong>{{ formatNumber(warehouse.on_hand_quantity) }}</strong></div>
+        </div>
+        <ng-template #noWarehouseData><p class="empty-copy">Dữ liệu tồn theo kho sẽ xuất hiện sau lượt nạp lịch sử thành công.</p></ng-template>
+      </article>
+
+      <article class="mapping-card">
+        <div class="panel-heading mapping-heading">
+          <div>
+            <p class="eyebrow">LIÊN KẾT SKU</p>
+            <h2>Đối chiếu mã sản phẩm</h2>
+            <p>Liên kết chỉ áp dụng cho nguồn Odoo này; không tạo hoặc sửa chứng từ trên Odoo.</p>
+          </div>
+          <span class="mapping-count">{{ mappingSummary.NEEDS_REVIEW || 0 }}</span>
+        </div>
+        <div class="mapping-filters" role="tablist" aria-label="Trạng thái liên kết SKU">
+          <button type="button" [class.is-active]="mappingFilter === 'NEEDS_REVIEW'" (click)="selectMappingFilter('NEEDS_REVIEW')" role="tab">
+            Cần xử lý <strong>{{ mappingSummary.NEEDS_REVIEW || 0 }}</strong>
+          </button>
+          <button type="button" [class.is-active]="mappingFilter === 'LINKED'" (click)="selectMappingFilter('LINKED')" role="tab">
+            Đã liên kết <strong>{{ mappingSummary.LINKED || 0 }}</strong>
+          </button>
+          <button type="button" [class.is-active]="mappingFilter === 'IGNORED'" (click)="selectMappingFilter('IGNORED')" role="tab">
+            Đã bỏ qua <strong>{{ mappingSummary.IGNORED || 0 }}</strong>
+          </button>
+        </div>
+        <div *ngIf="mappings.length; else noMappings" class="mapping-list">
+          <div *ngFor="let mapping of mappings" class="mapping-row" [class.mapping-row--editing]="mapping.status === 'NEEDS_REVIEW' || mapping.is_editing">
+            <div class="mapping-source">
+              <strong>{{ mapping.external_sku }}</strong>
+              <small>{{ mapping.external_name || 'Không có mô tả từ Odoo' }}</small>
+            </div>
+
+            <div class="mapping-target" *ngIf="mapping.status === 'NEEDS_REVIEW' || mapping.is_editing; else resolvedTarget">
+              <label [for]="'candidate-' + mapping.id">SKU chuẩn nội bộ</label>
+              <input
+                [id]="'candidate-' + mapping.id"
+                [(ngModel)]="mapping.candidate_query"
+                [name]="'candidate-' + mapping.id"
+                (ngModelChange)="onCandidateQuery(mapping, $event)"
+                autocomplete="off"
+                placeholder="Tìm theo mã hoặc tên SKU"
+              >
+              <small *ngIf="mapping.selected_product" class="selected-product">Đã chọn: {{ mapping.selected_product.item_sku }}</small>
+              <small *ngIf="mapping.candidate_loading" class="picker-status">Đang tìm danh mục nội bộ...</small>
+              <div *ngIf="mapping.candidate_results?.length" class="candidate-menu" role="listbox">
+                <button *ngFor="let product of mapping.candidate_results" type="button" role="option" (click)="selectCanonicalProduct(mapping, product)">
+                  <strong>{{ product.item_sku }}</strong>
+                  <span>{{ product.product_name || 'Không có mô tả' }}</span>
+                </button>
+              </div>
+              <small *ngIf="!mapping.candidate_loading && mapping.candidate_query && mapping.candidate_query.length >= 2 && !mapping.candidate_results?.length && !mapping.selected_product" class="picker-status">Không tìm thấy SKU phù hợp trong danh mục nội bộ.</small>
+            </div>
+            <ng-template #resolvedTarget>
+              <div class="mapping-target mapping-target--resolved">
+                <strong>{{ mapping.canonical_product?.item_sku || mapping.canonical_sku || 'Chưa liên kết' }}</strong>
+                <small>{{ mapping.canonical_product?.product_name || mappingStatusLabel(mapping.status) }}</small>
+                <span class="mapping-status" [class.mapping-status--auto]="mapping.status === 'AUTO_MAPPED'">{{ mappingStatusLabel(mapping.status) }}</span>
+              </div>
+            </ng-template>
+
+            <div class="mapping-actions" *ngIf="mapping.status === 'NEEDS_REVIEW' || mapping.is_editing; else resolvedActions">
+              <button type="button" class="button button--primary" [disabled]="!mapping.selected_product" (click)="openMappingDialog('CONFIRM', mapping)">
+                {{ mapping.is_editing ? 'Xác nhận thay đổi' : 'Xác nhận liên kết' }}
+              </button>
+              <button *ngIf="mapping.is_editing" type="button" class="text-button" (click)="cancelMappingEdit(mapping)">Hủy</button>
+              <button *ngIf="!mapping.is_editing" type="button" class="text-button text-button--danger" (click)="openMappingDialog('IGNORE', mapping)">Bỏ qua</button>
+            </div>
+            <ng-template #resolvedActions>
+              <div class="mapping-actions" *ngIf="mapping.status !== 'IGNORED'; else ignoredActions">
+                <button type="button" class="text-button" (click)="startMappingEdit(mapping)">Thay đổi</button>
+                <button type="button" class="text-button text-button--danger" (click)="openMappingDialog('UNLINK', mapping)">Gỡ liên kết</button>
+              </div>
+              <ng-template #ignoredActions>
+                <div class="mapping-actions">
+                  <button type="button" class="text-button" (click)="openMappingDialog('REOPEN', mapping)">Đưa lại hàng chờ</button>
+                </div>
+              </ng-template>
+            </ng-template>
+          </div>
+        </div>
+        <ng-template #noMappings><p class="empty-copy">Không có SKU ở trạng thái này. SKU mới chỉ xuất hiện sau khi nạp danh mục từ ERP.</p></ng-template>
+        <div *ngIf="mappingPagination.totalPages > 1" class="pagination">
+          <button type="button" [disabled]="mappingPagination.page <= 1" (click)="loadMappings(mappingPagination.page - 1)">Trước</button>
+          <span>Trang {{ mappingPagination.page }} / {{ mappingPagination.totalPages }}</span>
+          <button type="button" [disabled]="mappingPagination.page >= mappingPagination.totalPages" (click)="loadMappings(mappingPagination.page + 1)">Sau</button>
+        </div>
+      </article>
+    </section>
+
+    <section *ngIf="webhookSecret" data-motion="panel" class="webhook-panel">
+      <div><p class="eyebrow">WEBHOOK TÙY CHỌN</p><h2>Thông tin webhook chỉ hiển thị một lần</h2><p>Dùng để kích hoạt pull gia tăng sớm hơn chu kỳ 15 phút. Payload webhook không được dùng làm nguồn dữ liệu giao dịch.</p></div>
+      <label>Secret ký HMAC<input [value]="webhookSecret" readonly></label>
+      <button type="button" class="text-button" (click)="webhookSecret = ''">Tôi đã lưu secret</button>
+    </section>
+
+    <div *ngIf="mappingDialog as dialog" class="mapping-dialog-backdrop" (click)="$event.target === $event.currentTarget && closeMappingDialog()">
+      <section class="mapping-dialog" role="dialog" aria-modal="true" aria-labelledby="mapping-dialog-title">
+        <p class="eyebrow">XÁC NHẬN QUẢN TRỊ SKU</p>
+        <h2 id="mapping-dialog-title">
+          {{ dialog.action === 'CONFIRM' ? 'Xác nhận liên kết SKU' : dialog.action === 'IGNORE' ? 'Bỏ qua SKU ERP' : dialog.action === 'REOPEN' ? 'Đưa SKU trở lại hàng chờ' : 'Gỡ liên kết SKU' }}
+        </h2>
+        <p *ngIf="dialog.action === 'CONFIRM'">Liên kết này áp dụng cho nguồn Odoo hiện tại. Dữ liệu ERP và kết quả mô hình rủi ro không bị ghi đè.</p>
+        <p *ngIf="dialog.action === 'IGNORE'">SKU sẽ không còn xuất hiện trong hàng chờ. Bạn có thể đưa SKU trở lại để xử lý sau.</p>
+        <p *ngIf="dialog.action === 'REOPEN' || dialog.action === 'UNLINK'">SKU sẽ trở lại trạng thái cần xử lý và không còn được dùng như một liên kết đã xác nhận.</p>
+        <dl class="mapping-dialog-detail">
+          <div><dt>SKU Odoo</dt><dd>{{ dialog.mapping.external_sku }}</dd></div>
+          <div><dt>SKU SupplyForge</dt><dd>{{ dialog.action === 'CONFIRM' ? dialog.mapping.selected_product?.item_sku : (dialog.mapping.canonical_product?.item_sku || dialog.mapping.canonical_sku || 'Chưa liên kết') }}</dd></div>
+        </dl>
+        <label class="mapping-note">Ghi chú <span>(tùy chọn)</span>
+          <textarea [(ngModel)]="mappingNote" name="mapping-resolution-note" maxlength="500" placeholder="Ví dụ: Đã đối chiếu mã hàng với catalog nội bộ"></textarea>
+        </label>
+        <div class="mapping-dialog-actions">
+          <button type="button" class="button button--secondary" [disabled]="isResolvingMapping" (click)="closeMappingDialog()">Hủy</button>
+          <button type="button" class="button button--primary" [disabled]="isResolvingMapping" (click)="resolveMapping()">
+            {{ isResolvingMapping ? 'Đang lưu...' : dialog.action === 'CONFIRM' ? 'Xác nhận liên kết' : dialog.action === 'IGNORE' ? 'Bỏ qua SKU' : dialog.action === 'REOPEN' ? 'Đưa lại hàng chờ' : 'Gỡ liên kết' }}
+          </button>
+        </div>
+      </section>
+    </div>
+  </ng-container>
+</section>

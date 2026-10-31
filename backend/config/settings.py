@@ -341,6 +341,33 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+# Keep long-running imports and provider pulls fair when workers are scaled.
+# Individual tasks opt into late acknowledgement only after they are designed
+# to be idempotent, so a worker crash cannot silently duplicate older tasks.
+CELERY_WORKER_PREFETCH_MULTIPLIER = int(
+    os.getenv('CELERY_WORKER_PREFETCH_MULTIPLIER', '1' if IS_DEPLOYED else '4')
+)
+if CELERY_WORKER_PREFETCH_MULTIPLIER < 1:
+    raise ImproperlyConfigured('CELERY_WORKER_PREFETCH_MULTIPLIER must be positive.')
+
+from kombu import Queue
+
+CELERY_TASK_DEFAULT_QUEUE = 'celery'
+CELERY_TASK_QUEUES = (
+    Queue('celery'),
+    Queue('data_worker'),
+    Queue('ml_worker'),
+    Queue('decision_worker'),
+    Queue('integration_worker'),
+)
+# Requires a Celery Beat process in deployed environments. The scheduled task
+# itself excludes any connection that already has a pending/running sync.
+CELERY_BEAT_SCHEDULE = {
+    'supplyforge-erp-incremental-pull': {
+        'task': 'supplyforge.tasks.enqueue_due_integration_syncs',
+        'schedule': 900.0,
+    },
+}
 
 REDIS_CACHE_URL = os.getenv('REDIS_CACHE_URL', f'redis://{REDIS_HOST}:{REDIS_PORT}/1')
 # A local UI should remain usable without separately starting Redis. Production

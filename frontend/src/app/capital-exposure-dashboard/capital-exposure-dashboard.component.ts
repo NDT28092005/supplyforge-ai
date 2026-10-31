@@ -1,7 +1,7 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../api.service';
 import { PageMotionDirective } from '../core/motion/page-motion.directive';
 import { forkJoin } from 'rxjs';
@@ -51,6 +51,10 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
 
   selectedRiskFilter: string = '';
   searchTerm: string = '';
+  sourceMode: 'CSV' | 'ODOO' = 'CSV';
+  odooConnections: any[] = [];
+  selectedOdooConnectionId = '';
+  sourceMetadata: any = null;
   capitalFilter: string = '';
   agingFilter: string = '';
   sortField: string = 'capitalExposureVal';
@@ -91,7 +95,8 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
 
   constructor(
     private apiService: ApiService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute,
   ) {}
 
   formatCurrencyShort(val: number | null | undefined): string {
@@ -103,6 +108,11 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    if (this.route.snapshot.queryParamMap.get('source') === 'odoo') {
+      this.sourceMode = 'ODOO';
+      this.selectedOdooConnectionId = this.route.snapshot.queryParamMap.get('connection') || '';
+    }
+    this.loadOdooSources();
     this.loadRealCapitalExposureData();
   }
 
@@ -114,6 +124,32 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
     this.loadError = '';
     this.analysisId = '';
     this.skuItems = [];
+    this.sourceMetadata = null;
+    if (this.sourceMode === 'ODOO') {
+      if (!this.selectedOdooConnectionId) {
+        this.setEmptyDataState();
+        return;
+      }
+      this.apiService.getOperationalCapitalAnalysis(this.selectedOdooConnectionId).subscribe({
+        next: (res: any) => {
+          this.sourceMetadata = res?.source || null;
+          this.analysisId = res.analysis_id;
+          this.page = 1;
+          this.loadSummaryAndPage();
+        },
+        error: (err: any) => {
+          const payload = err?.error || {};
+          this.sourceMetadata = payload?.source || null;
+          if (payload?.code === 'ODOO_OPERATIONAL_ANALYSIS_PENDING') {
+            this.dataState = 'pending';
+            this.pendingDescription = payload?.detail || 'Đang chờ đồng bộ Odoo hoặc xác nhận liên kết SKU.';
+            return;
+          }
+          this.setErrorDataState(payload?.detail || payload?.error || 'Không thể tải bản phân tích Odoo.');
+        },
+      });
+      return;
+    }
     this.apiService.getLatestCapitalExposureAnalysis().subscribe({
       next: (res: any) => {
         if (res && res.analysis_id) {
@@ -134,6 +170,28 @@ export class CapitalExposureDashboardComponent implements OnInit, OnDestroy {
         this.setErrorDataState(err?.error?.detail || err?.error?.error || 'Không thể tải dữ liệu đánh giá vốn đọng. Vui lòng thử lại.');
       }
     });
+  }
+
+  private loadOdooSources(): void {
+    this.apiService.listIntegrationConnections().subscribe({
+      next: (response: any) => {
+        this.odooConnections = (response?.connections || []).filter((connection: any) => connection.status === 'ACTIVE');
+      },
+      error: () => { this.odooConnections = []; },
+    });
+  }
+
+  onSourceChanged(): void {
+    if (this.sourceMode === 'ODOO' && !this.selectedOdooConnectionId) {
+      this.selectedOdooConnectionId = this.odooConnections[0]?.id || '';
+    }
+    this.selectedRiskFilter = '';
+    this.searchTerm = '';
+    this.loadRealCapitalExposureData();
+  }
+
+  get selectedOdooConnectionName(): string {
+    return this.odooConnections.find(connection => connection.id === this.selectedOdooConnectionId)?.display_name || 'Odoo';
   }
 
   private requestCapitalAnalysis(): void {

@@ -7,12 +7,15 @@
 <div class="app-shell min-h-[calc(100vh-61px)] flex text-primary">
 
   <!-- Fixed Left Sidebar (Active in App Dashboards) -->
-  <app-sidebar *ngIf="showSidebar" (importIncremental)="startIncrementalImport()"
-    (importNew)="clearAllDataAndRestart()">
+  <app-sidebar *ngIf="showSidebar" [collapsed]="isSidebarCollapsed" (toggleCollapsed)="toggleSidebar()"
+    (importIncremental)="startIncrementalImport()" (importNew)="clearAllDataAndRestart()">
   </app-sidebar>
 
   <!-- Main Content Stage -->
-  <main class="app-main flex-1 transition-all" [ngClass]="{'pl-64': showSidebar}">
+  <main class="app-main flex-1" [ngClass]="{
+    'app-main--sidebar-open': showSidebar && !isSidebarCollapsed,
+    'app-main--sidebar-collapsed': showSidebar && isSidebarCollapsed
+  }">
     <div class="app-stage max-w-[1440px] mx-auto w-full">
 
       <!-- Ingestion Pipeline Stepper Bar (Active during Data Ingestion & Profiling) -->

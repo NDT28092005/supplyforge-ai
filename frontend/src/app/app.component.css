@@ -10,6 +10,15 @@
 .app-main {
   min-width: 0;
   position: relative;
+  transition: padding-left 200ms ease;
+}
+
+.app-main--sidebar-open {
+  padding-left: 15.5rem;
+}
+
+.app-main--sidebar-collapsed {
+  padding-left: 4.75rem;
 }
 
 .app-stage {
@@ -19,6 +28,11 @@
 }
 
 @media (max-width: 768px) {
+  .app-main--sidebar-open,
+  .app-main--sidebar-collapsed {
+    padding-left: 4.75rem;
+  }
+
   .app-stage {
     padding: 1rem;
   }

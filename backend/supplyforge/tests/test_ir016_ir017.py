@@ -3,9 +3,10 @@ import io
 import json
 from unittest.mock import patch
 from django.test import TestCase, Client
-from supplyforge.models import IngestionSession, Product, Order, Workspace
+from supplyforge.models import IngestionSession, Product, Order, User, Workspace, WorkspaceMember
 from supplyforge.services.csv_profiler import StreamingCSVProfiler
 from supplyforge.services.ingestion import DynamicFileImportService
+from supplyforge.views.auth import generate_access_token
 
 
 class RawProcessedSeparationAndLineageTestCase(TestCase):
@@ -18,8 +19,16 @@ class RawProcessedSeparationAndLineageTestCase(TestCase):
 
     def setUp(self):
         self.client = Client()
-        self.user_id = 'test_merchant_ir016_ir017'
-        self.workspace, _ = Workspace.objects.get_or_create(id=1, defaults={'name': 'Test Workspace'})
+        self.user = User.objects.create(
+            email='ir016-owner@example.test', display_name='IR016 Owner',
+            status=User.STATUS_ACTIVE, is_email_verified=True, role=User.ROLE_OWNER,
+        )
+        self.user_id = str(self.user.id)
+        self.workspace = Workspace.objects.create(name='Test Workspace', slug='ir016-workspace', owner=self.user)
+        WorkspaceMember.objects.create(workspace=self.workspace, user=self.user, role=User.ROLE_OWNER)
+        self.client.defaults['HTTP_AUTHORIZATION'] = (
+            f'Bearer {generate_access_token(self.user, self.workspace.id)}'
+        )
 
     def test_ir016_raw_processed_data_separation(self):
         """Verify files are saved under /raw and processed output exported under /processed without raw overwrite."""

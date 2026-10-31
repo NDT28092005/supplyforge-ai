@@ -91,8 +91,12 @@ def health_ready(request):
     overall_status = "ready" if is_ready else "not_ready"
     http_code = 200 if is_ready else 503
 
+    # These are intentionally coarse statuses: health probes must aid
+    # operations without exposing host names, URLs, credentials or topology.
     return Response({
-        "status": overall_status
+        "status": overall_status,
+        "database": "ok" if mysql_status == "healthy" else "unavailable",
+        "redis": "ok" if redis_status == "healthy" else "unavailable",
     }, status=http_code)
 
 
@@ -135,9 +139,23 @@ def health_celery(request):
     GET/POST /api/v1/health/celery (Legacy Celery Worker Dispatch Check)
     """
     worker_type = request.GET.get('worker_type') or 'data_worker'
+    allowed_worker_types = {
+        'data_worker',
+        'ml_worker',
+        'decision_worker',
+        'integration_worker',
+    }
+    if worker_type not in allowed_worker_types:
+        return Response({
+            "status": "error",
+            "error": "worker_type không hợp lệ.",
+            "allowed_worker_types": sorted(allowed_worker_types),
+        }, status=400)
     try:
         from supplyforge.tasks import health_check_task
-        task_res = health_check_task.apply_async(args=[worker_type])
+        # Route the probe to the worker class being checked. Merely queuing a
+        # task on the default queue would prove only that some worker exists.
+        task_res = health_check_task.apply_async(args=[worker_type], queue=worker_type)
         return Response({
             "status": "ok",
             "celery_broker": "connected",
@@ -145,7 +163,7 @@ def health_celery(request):
             "worker_type": worker_type,
             "architecture": {
                 "flow": "API -> Redis -> Celery",
-                "workers": ["Data Worker", "ML Worker", "Decision Worker"]
+                "workers": ["Data Worker", "ML Worker", "Decision Worker", "Integration Worker"]
             }
         }, status=200)
     except Exception as e:
@@ -155,7 +173,7 @@ def health_celery(request):
             "celery_broker": "disconnected",
             "architecture": {
                 "flow": "API -> Redis -> Celery",
-                "workers": ["Data Worker", "ML Worker", "Decision Worker"]
+                "workers": ["Data Worker", "ML Worker", "Decision Worker", "Integration Worker"]
             }
         }, status=503)
 

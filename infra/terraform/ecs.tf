@@ -78,10 +78,13 @@ resource "aws_ecs_task_definition" "worker" {
 
   container_definitions = jsonencode([
     {
-      name        = "celery"
-      image       = "${aws_ecr_repository.backend.repository_url}:${var.backend_image_tag}"
-      essential   = true
-      command     = ["celery", "-A", "config", "worker", "--loglevel=info"]
+      name      = "celery"
+      image     = "${aws_ecr_repository.backend.repository_url}:${var.backend_image_tag}"
+      essential = true
+      # A staging task currently runs all queues. Queue names still isolate
+      # backlog and let the production service be split by worker class
+      # without changing task routing.
+      command     = ["celery", "-A", "config", "worker", "--loglevel=info", "--queues=data_worker,ml_worker,decision_worker,integration_worker,celery"]
       environment = local.common_environment
       secrets     = local.runtime_secrets
       logConfiguration = {

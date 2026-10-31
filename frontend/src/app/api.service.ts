@@ -753,4 +753,74 @@ export class ApiService {
   getActionPlanHistory(planId: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/api/v1/action-plans/${planId}/history/`);
   }
+
+  // ── ERP Integrations (paid workspace entitlement) ──────────────────
+  listIntegrationConnections(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/integrations/connections/`);
+  }
+
+  createIntegrationConnection(payload: {
+    provider: 'ODOO'; display_name: string; base_url: string; database: string;
+    username: string; api_key: string;
+  }): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/integrations/connections/`, payload);
+  }
+
+  updateIntegrationConnection(connectionId: string, payload: any): Observable<any> {
+    return this.http.patch(`${this.apiUrl}/api/v1/integrations/connections/${connectionId}/`, payload);
+  }
+
+  runIntegration(connectionId: string, runType: 'validate' | 'initial-sync' | 'sync' | 'reconcile'): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/integrations/connections/${connectionId}/runs/${runType}/`, {});
+  }
+
+  getIntegrationOverview(connectionId: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/integrations/connections/${connectionId}/overview/`);
+  }
+
+  getOperationalRiskAssessments(connectionId: string, params: any = {}): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/integrations/connections/${connectionId}/operational-risk/`, { params });
+  }
+
+  getOperationalRiskSummary(connectionId: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/integrations/connections/${connectionId}/operational-risk/summary/`);
+  }
+
+  getOperationalCapitalAnalysis(connectionId: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/integrations/connections/${connectionId}/operational-capital/latest/`);
+  }
+
+  getOperationalExecutiveDashboardSummary(connectionId: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/integrations/connections/${connectionId}/operational-dashboard/summary/`);
+  }
+
+  listIntegrationSkuMappings(
+    connectionId: string,
+    page: number = 1,
+    pageSize: number = 25,
+    status: 'NEEDS_REVIEW' | 'LINKED' | 'IGNORED' | 'ALL' = 'NEEDS_REVIEW',
+  ): Observable<any> {
+    const params = new HttpParams()
+      .set('page', String(page))
+      .set('pageSize', String(pageSize))
+      .set('status', status);
+    return this.http.get(`${this.apiUrl}/api/v1/integrations/connections/${connectionId}/sku-mappings/`, { params });
+  }
+
+  listIntegrationSkuCandidates(connectionId: string, query: string): Observable<any> {
+    const params = new HttpParams().set('q', query).set('limit', '20');
+    return this.http.get(`${this.apiUrl}/api/v1/integrations/connections/${connectionId}/sku-candidates/`, { params });
+  }
+
+  resolveIntegrationSkuMapping(connectionId: string, mappingId: number, payload: {
+    action: 'CONFIRM' | 'IGNORE' | 'REOPEN' | 'UNLINK';
+    canonical_product_id?: string;
+    expected_updated_at: string;
+    note?: string;
+  }): Observable<any> {
+    return this.http.patch(
+      `${this.apiUrl}/api/v1/integrations/connections/${connectionId}/sku-mappings/${mappingId}/`,
+      payload,
+    );
+  }
 }

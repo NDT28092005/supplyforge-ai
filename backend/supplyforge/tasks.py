@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 from celery import shared_task
 from django.conf import settings
+from django.core.cache import cache
 from django.utils import timezone
 
 from supplyforge.models import BackgroundJob, IngestionSession, NotificationRecord
@@ -25,6 +26,234 @@ logger = logging.getLogger(__name__)
 
 LOCK_TTL_SECONDS = 30 * 60  # 30 minutes
 MAX_REPORTED_PARTITIONS = 200
+
+
+@shared_task(
+    bind=True,
+    queue='integration_worker',
+    max_retries=2,
+    default_retry_delay=60,
+    acks_late=True,
+)
+def run_integration_sync(self, run_id: str) -> dict:
+    """Execute a bounded provider validation/sync run outside the HTTP request."""
+    from supplyforge.models import BackgroundJob, IntegrationConnection, IntegrationSyncRun
+    from supplyforge.services.integration_security import decrypt_credentials
+    from supplyforge.services.integration_sync import OdooMetricProjectionService
+    from supplyforge.services.odoo_connector import OdooConnector, OdooConnectorError
+
+    started_monotonic = time.monotonic()
+    run = IntegrationSyncRun.objects.select_related('connection', 'connection__workspace', 'background_job').get(id=run_id)
+    connection = run.connection
+    job = run.background_job
+    lock_key = f'integration-sync:{connection.id}'
+    if not cache.add(lock_key, 'locked', timeout=LOCK_TTL_SECONDS):
+        # A duplicate trigger must not remain PENDING forever. The caller can
+        # inspect this terminal run and the connection keeps its current data.
+        IntegrationSyncRun.objects.filter(id=run.id).update(
+            status='FAILED',
+            finished_at=timezone.now(),
+            error_code='SYNC_ALREADY_RUNNING',
+            error_message='Một lượt đồng bộ khác của kết nối này đang chạy.',
+        )
+        if job:
+            BackgroundJob.objects.filter(id=job.id).update(
+                status='FAILED',
+                error_message='Một lượt đồng bộ khác đang chạy.',
+                completed_at=timezone.now(),
+            )
+        return {'status': 'SKIPPED', 'reason': 'connection_lock_held'}
+    started = timezone.now()
+    try:
+        run.status, run.started_at = 'RUNNING', started
+        run.save(update_fields=['status', 'started_at'])
+        connection.status = 'VALIDATING'
+        connection.save(update_fields=['status', 'updated_at'])
+        if job:
+            BackgroundJob.objects.filter(id=job.id).update(status='RUNNING', progress_pct=20, current_stage='INTEGRATION_SYNC')
+        credentials = decrypt_credentials(connection.credential_encrypted)
+        if connection.provider != 'ODOO':
+            raise OdooConnectorError('Provider chưa có worker đồng bộ.')
+        connector = OdooConnector(connection.base_url, credentials['database'], credentials['username'], credentials['api_key'])
+        projection = OdooMetricProjectionService(connection, connector)
+        if run.run_type == 'VALIDATE':
+            summary = projection.validate_and_discover()
+        else:
+            summary = projection.sync(run.run_type)
+        summary['refresh'] = '15_MINUTES_PULL'
+        summary['provider'] = connection.provider
+        summary['run_type'] = run.run_type
+        # Validation alone only proves that the service account is valid. A
+        # connection becomes active after the merchant has selected a company
+        # and at least one warehouse, preventing empty scheduled pulls.
+        connection.status = 'ACTIVE' if connection.external_company_id and connection.warehouse_ids else 'DRAFT'
+        connection.last_successful_sync_at = timezone.now()
+        connection.last_error_code = ''
+        connection.last_error_message = ''
+        connection.cursor_json = {
+            **(connection.cursor_json or {}),
+            'last_successful_run_type': run.run_type,
+            'last_successful_sync_at': connection.last_successful_sync_at.isoformat(),
+            'history_start': summary.get('history_start') or (connection.cursor_json or {}).get('history_start'),
+        }
+        if summary.get('discovery'):
+            connection.cursor_json['discovery'] = summary['discovery']
+        connection.save(update_fields=['status', 'last_successful_sync_at', 'last_error_code', 'last_error_message', 'cursor_json', 'updated_at'])
+        # A sync worker is the only place that materialises the operational
+        # dashboard source. CSV/LightGBM assessments remain untouched.
+        if run.run_type in {'INITIAL', 'INCREMENTAL'}:
+            try:
+                from supplyforge.services.operational_analytics import OdooOperationalAnalyticsService
+                summary['operational_analytics'] = OdooOperationalAnalyticsService.refresh(connection)
+            except Exception:
+                # Raw ERP projection has already completed successfully. Keep
+                # it available for reconciliation and retry dashboard
+                # materialisation separately rather than reporting a false
+                # source-sync failure to the merchant.
+                logger.exception('Operational Odoo analytics refresh failed for connection=%s', connection.id)
+                summary['operational_analytics'] = {
+                    'status': 'FAILED',
+                    'reason': 'ANALYTICS_REFRESH_FAILED',
+                }
+        run.status, run.finished_at, run.summary, run.cursor_after = 'COMPLETED', timezone.now(), summary, connection.cursor_json
+        run.save(update_fields=['status', 'finished_at', 'summary', 'cursor_after'])
+        if job:
+            BackgroundJob.objects.filter(id=job.id).update(status='COMPLETED', progress_pct=100, completed_at=timezone.now(), result_summary_json=summary)
+        from supplyforge.metrics import record_erp_sync
+        record_erp_sync(
+            provider=connection.provider,
+            run_type=run.run_type,
+            status='success',
+            duration=time.monotonic() - started_monotonic,
+            summary=summary,
+        )
+        return summary
+    except Exception as exc:
+        logger.exception('Integration sync failed for run=%s', run_id)
+        code = 'ODOO_SYNC_FAILED' if run.run_type != 'VALIDATE' else 'CONNECTION_VALIDATION_FAILED'
+        public_message = str(exc)[:512] if isinstance(exc, OdooConnectorError) else 'Không thể xác thực hoặc đọc dữ liệu Odoo.'
+        IntegrationConnection.objects.filter(id=connection.id).update(status='ERROR', last_error_code=code, last_error_message=public_message)
+        IntegrationSyncRun.objects.filter(id=run.id).update(status='FAILED', finished_at=timezone.now(), error_code=code, error_message=public_message)
+        if job:
+            BackgroundJob.objects.filter(id=job.id).update(status='FAILED', error_message='Đồng bộ Odoo thất bại.', completed_at=timezone.now())
+        from supplyforge.metrics import record_erp_sync
+        record_erp_sync(
+            provider=connection.provider,
+            run_type=run.run_type,
+            status='failed',
+            duration=time.monotonic() - started_monotonic,
+        )
+        raise
+    finally:
+        cache.delete(lock_key)
+
+
+@shared_task(
+    bind=True,
+    queue='integration_worker',
+    max_retries=1,
+    default_retry_delay=15,
+    acks_late=True,
+)
+def refresh_integration_operational_analytics(self, connection_id: str) -> dict:
+    """Refresh the ERP dashboard source after SKU mapping governance changes."""
+    from supplyforge.models import IntegrationConnection
+    from supplyforge.services.operational_analytics import OdooOperationalAnalyticsService
+
+    connection = IntegrationConnection.objects.get(id=connection_id)
+    return OdooOperationalAnalyticsService.refresh(connection)
+
+
+@shared_task(
+    bind=True,
+    queue='integration_worker',
+    max_retries=2,
+    default_retry_delay=30,
+    acks_late=True,
+)
+def process_integration_event(self, event_id: str) -> dict:
+    """Idempotently classify webhook events and surface unmapped external SKUs."""
+    from supplyforge.models import BackgroundJob, IntegrationEvent, IntegrationSkuMapping, IntegrationSyncRun
+
+    event = IntegrationEvent.objects.select_related('connection').get(id=event_id)
+    if event.status in {'PROCESSED', 'NEEDS_MAPPING'}:
+        return {'status': event.status, 'idempotent': True}
+    event.status = 'PROCESSING'
+    event.save(update_fields=['status'])
+    payload = event.payload or {}
+    sku = str(payload.get('sku') or payload.get('default_code') or '').strip()
+    if sku:
+        mapping, _ = IntegrationSkuMapping.objects.get_or_create(
+            connection=event.connection, external_sku=sku,
+            defaults={'external_name': str(payload.get('name') or '')[:512], 'status': 'NEEDS_REVIEW'},
+        )
+        event.status = 'PROCESSED' if mapping.status in {'AUTO_MAPPED', 'CONFIRMED'} else 'NEEDS_MAPPING'
+    else:
+        event.status = 'PROCESSED'
+    event.processed_at = timezone.now()
+    event.save(update_fields=['status', 'processed_at'])
+    # Odoo webhooks are treated only as a signed acceleration signal. The
+    # worker re-reads Odoo, which preserves the source-of-truth and avoids
+    # accepting customer or order detail in the webhook body.
+    queued = False
+    connection = event.connection
+    if connection.status == 'ACTIVE' and not connection.sync_runs.filter(status__in=['PENDING', 'RUNNING']).exists():
+        run = IntegrationSyncRun.objects.create(
+            connection=connection,
+            run_type='INCREMENTAL',
+            cursor_before=connection.cursor_json,
+        )
+        job = BackgroundJob.objects.create(
+            workspace=connection.workspace,
+            job_type='INTEGRATION_SYNC',
+            status='PENDING',
+            current_stage='INTEGRATION_SYNC',
+            stages_json={'INTEGRATION_SYNC': {'status': 'PENDING', 'progress': 0, 'provider': connection.provider, 'runType': 'INCREMENTAL', 'trigger': 'WEBHOOK'}},
+            idempotency_key=f'integration:{connection.id}:webhook:{run.id}',
+        )
+        run.background_job = job
+        run.save(update_fields=['background_job'])
+        task = run_integration_sync.delay(str(run.id))
+        job.celery_task_id = str(task.id)
+        job.save(update_fields=['celery_task_id', 'updated_at'])
+        queued = True
+    return {'status': event.status, 'event_type': event.event_type, 'follow_up_sync_queued': queued}
+
+
+@shared_task(
+    name='supplyforge.tasks.enqueue_due_integration_syncs',
+    queue='integration_worker',
+)
+def enqueue_due_integration_syncs() -> dict:
+    """Schedule 15-minute incremental pulls without overlapping a connection."""
+    from supplyforge.models import IntegrationConnection, IntegrationSyncRun
+
+    due_before = timezone.now() - timedelta(minutes=15)
+    connections = IntegrationConnection.objects.filter(status='ACTIVE').exclude(external_company_id='').filter(
+        last_successful_sync_at__lt=due_before,
+    ).exclude(sync_runs__status__in=['PENDING', 'RUNNING']).distinct()
+    queued = 0
+    for connection in connections.iterator():
+        run = IntegrationSyncRun.objects.create(
+            connection=connection,
+            run_type='INCREMENTAL',
+            cursor_before=connection.cursor_json,
+        )
+        job = BackgroundJob.objects.create(
+            workspace=connection.workspace,
+            job_type='INTEGRATION_SYNC',
+            status='PENDING',
+            current_stage='INTEGRATION_SYNC',
+            stages_json={'INTEGRATION_SYNC': {'status': 'PENDING', 'progress': 0, 'provider': connection.provider, 'runType': 'INCREMENTAL', 'trigger': 'SCHEDULE'}},
+            idempotency_key=f'integration:{connection.id}:schedule:{run.id}',
+        )
+        run.background_job = job
+        run.save(update_fields=['background_job'])
+        task = run_integration_sync.delay(str(run.id))
+        job.celery_task_id = str(task.id)
+        job.save(update_fields=['celery_task_id', 'updated_at'])
+        queued += 1
+    return {'queued': queued, 'evaluated_at': timezone.now().isoformat()}
 
 
 class ImportCancelled(RuntimeError):
@@ -553,7 +782,7 @@ def run_import_pipeline(self, job_id: str):
     return context
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, queue='data_worker')
 def process_file_import_async(self, file_path, mapping_rule, user_id):
     """
     Legacy helper task for asynchronous imports.
@@ -584,6 +813,7 @@ def process_file_import_async(self, file_path, mapping_rule, user_id):
 
 @shared_task(
     bind=True,
+    queue='integration_worker',
     max_retries=2,
     default_retry_delay=60,
     acks_late=True,
@@ -650,6 +880,7 @@ def sync_shopee_products_task(self, connection_id: int) -> dict | None:
 
 @shared_task(
     bind=True,
+    queue='integration_worker',
     max_retries=2,
     default_retry_delay=60,
     acks_late=True,

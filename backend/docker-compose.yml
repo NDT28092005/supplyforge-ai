@@ -60,6 +60,8 @@ services:
       REDIS_PORT: 6379
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      INTEGRATION_CREDENTIAL_ENCRYPTION_KEY: ${INTEGRATION_CREDENTIAL_ENCRYPTION_KEY:-}
+      INTEGRATION_ALLOWED_HOSTS: ${INTEGRATION_ALLOWED_HOSTS:-}
     depends_on:
       db:
         condition: service_healthy
@@ -93,6 +95,20 @@ services:
     restart: unless-stopped
     stop_grace_period: 45s
     command: ["celery", "-A", "config", "worker", "--loglevel=info"]
+    environment: *backend-environment
+    depends_on:
+      backend:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  celery_beat:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 20s
+    command: ["celery", "-A", "config", "beat", "--loglevel=info"]
     environment: *backend-environment
     depends_on:
       backend:

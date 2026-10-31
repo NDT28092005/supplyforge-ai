@@ -66,6 +66,19 @@ class BusinessSnapshotCollector:
             'Unread business notifications by severity.',
             labels=['severity'],
         )
+        yield GaugeMetricFamily(
+            'supplyforge_business_erp_connections_total',
+            'ERP integration connections by lifecycle status.',
+            labels=['status'],
+        )
+        yield GaugeMetricFamily(
+            'supplyforge_business_erp_sync_age_seconds',
+            'Maximum age in seconds of the last successful active ERP sync.',
+        )
+        yield GaugeMetricFamily(
+            'supplyforge_business_erp_unmapped_skus_total',
+            'Total ERP SKUs awaiting a canonical mapping.',
+        )
 
     def collect(self):
         snapshot_up = GaugeMetricFamily(
@@ -105,6 +118,19 @@ class BusinessSnapshotCollector:
             'Unread business notifications by severity.',
             labels=['severity'],
         )
+        erp_connections = GaugeMetricFamily(
+            'supplyforge_business_erp_connections_total',
+            'ERP integration connections by lifecycle status.',
+            labels=['status'],
+        )
+        erp_sync_age = GaugeMetricFamily(
+            'supplyforge_business_erp_sync_age_seconds',
+            'Maximum age in seconds of the last successful active ERP sync.',
+        )
+        erp_unmapped_skus = GaugeMetricFamily(
+            'supplyforge_business_erp_unmapped_skus_total',
+            'Total ERP SKUs awaiting a canonical mapping.',
+        )
 
         try:
             # Imports are deferred so Django can build its app registry before
@@ -115,6 +141,8 @@ class BusinessSnapshotCollector:
                 DecisionRecord,
                 NotificationRecord,
                 SlowMovingRiskAssessment,
+                IntegrationConnection,
+                IntegrationSkuMapping,
             )
 
             versions = list(
@@ -239,6 +267,23 @@ class BusinessSnapshotCollector:
             for severity in NOTIFICATION_SEVERITIES:
                 unread_notifications.add_metric([severity], notification_counts.get(severity, 0))
 
+            erp_statuses = ('DRAFT', 'VALIDATING', 'ACTIVE', 'PAUSED', 'ERROR', 'DISCONNECTED')
+            erp_counts = {
+                row['status']: row['total']
+                for row in IntegrationConnection.objects.values('status').annotate(total=Count('id'))
+            }
+            for integration_status in erp_statuses:
+                erp_connections.add_metric([integration_status], erp_counts.get(integration_status, 0))
+            last_syncs = list(IntegrationConnection.objects.filter(
+                status='ACTIVE',
+                last_successful_sync_at__isnull=False,
+            ).values_list('last_successful_sync_at', flat=True))
+            erp_sync_age.add_metric([], max(
+                (max(0.0, (now - value).total_seconds()) for value in last_syncs),
+                default=0.0,
+            ))
+            erp_unmapped_skus.add_metric([], IntegrationSkuMapping.objects.filter(status='NEEDS_REVIEW').count())
+
             snapshot_up.add_metric([], 1)
         except Exception:
             # A metrics scrape must not make the Django endpoint unavailable.
@@ -261,6 +306,10 @@ class BusinessSnapshotCollector:
                 action_backlog.add_metric([priority_tier], 0)
             for severity in NOTIFICATION_SEVERITIES:
                 unread_notifications.add_metric([severity], 0)
+            for integration_status in ('DRAFT', 'VALIDATING', 'ACTIVE', 'PAUSED', 'ERROR', 'DISCONNECTED'):
+                erp_connections.add_metric([integration_status], 0)
+            erp_sync_age.add_metric([], 0)
+            erp_unmapped_skus.add_metric([], 0)
 
         yield snapshot_up
         yield active_datasets
@@ -270,6 +319,9 @@ class BusinessSnapshotCollector:
         yield capital_exposure
         yield action_backlog
         yield unread_notifications
+        yield erp_connections
+        yield erp_sync_age
+        yield erp_unmapped_skus
 
 
 _REGISTERED = False

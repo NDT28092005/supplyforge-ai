@@ -47,6 +47,9 @@ frontend/dist/
 .gemini/
 notebooks/env/
 /docs/
+!/docs/
+/docs/*
+!/docs/erp-odoo-integration.md
 /data/
 /backend/data/
 /scripts/

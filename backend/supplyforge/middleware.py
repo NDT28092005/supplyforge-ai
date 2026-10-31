@@ -97,6 +97,7 @@ class TenantIsolationMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        path = request.path_info
         auth_header = (request.headers.get('Authorization') or '').strip()
         user_id = None
         email = None
@@ -110,7 +111,11 @@ class TenantIsolationMiddleware:
         def auth_error(code, message):
             return JsonResponse({"error": message, "code": code}, status=401)
 
-        if auth_header:
+        # Provider webhooks use Authorization for their HMAC signature rather
+        # than an end-user JWT. Let the provider-specific verifier produce the
+        # correct signature error; parsing it as a bearer token here would
+        # reject every legitimate webhook before signature verification.
+        if auth_header and not self._is_external_webhook(path):
             # Any supplied Authorization value must be a complete Bearer token.
             # In particular, do not silently treat an invalid token as anonymous.
             if not re.fullmatch(r'Bearer\s+\S+', auth_header, flags=re.IGNORECASE):
@@ -163,7 +168,6 @@ class TenantIsolationMiddleware:
             request.jwt_payload = payload
             request.tenant_context_validated = True
 
-        path = request.path_info
         public_path = self._is_public_path(path)
         is_options = request.method == 'OPTIONS'
 
@@ -310,8 +314,19 @@ class TenantIsolationMiddleware:
             '/api/v1/blog',
             '/api/v1/shopee/oauth/',
             '/api/v1/shopee/webhook',
+            # ERP webhooks are authenticated by their connection-specific
+            # HMAC signature in the view, not by an end-user JWT.
+            '/api/v1/integrations/webhooks/',
         )
         return path == '/' or path.startswith(public_prefixes)
+
+    @staticmethod
+    def _is_external_webhook(path):
+        """Return paths authenticated by a provider signature, not JWT."""
+        return path.startswith((
+            '/api/v1/shopee/webhook',
+            '/api/v1/integrations/webhooks/',
+        ))
 
 
 class TenantManager(models.Manager):

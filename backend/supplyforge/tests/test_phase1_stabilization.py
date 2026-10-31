@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 from django.test import TestCase, Client
 from supplyforge.tasks import health_check_task
 
@@ -52,3 +53,21 @@ class Phase1StabilizationTests(TestCase):
         self.assertEqual(data.get('celery_broker'), 'connected')
         self.assertIn('architecture', data)
         self.assertEqual(data.get('architecture', {}).get('flow'), 'API -> Redis -> Celery')
+
+    @patch('supplyforge.tasks.health_check_task.apply_async')
+    def test_celery_health_endpoint_routes_to_requested_worker_queue(self, mocked_apply_async):
+        """The probe must test the requested worker pool, not the default queue."""
+        mocked_apply_async.return_value.id = 'probe-task-id'
+
+        response = self.client.get('/api/v1/health/celery?worker_type=integration_worker')
+
+        self.assertEqual(response.status_code, 200)
+        mocked_apply_async.assert_called_once_with(
+            args=['integration_worker'], queue='integration_worker'
+        )
+
+    def test_celery_health_endpoint_rejects_unknown_worker_queue(self):
+        response = self.client.get('/api/v1/health/celery?worker_type=any_queue')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['status'], 'error')

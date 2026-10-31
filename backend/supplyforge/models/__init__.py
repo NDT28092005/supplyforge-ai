@@ -30,6 +30,12 @@ from .archived_dataset import ArchivedDataSet
 from .notification import NotificationRecord
 from .background_job import BackgroundJob
 from .mlops import TenantFeatureSnapshot, TrainingDatasetManifest, ModelVersion
+from .integration import (
+    WorkspaceEntitlement, IntegrationConnection, IntegrationSyncRun,
+    IntegrationEvent, IntegrationSkuMapping, IntegrationSkuMappingAudit,
+    IntegrationSkuDailyMetric, IntegrationOperationalRiskSnapshot,
+    IntegrationOperationalRiskAssessment,
+)
 
 __all__ = [
     'User', 'RefreshToken', 'Workspace', 'WorkspaceMember',
@@ -56,4 +62,8 @@ __all__ = [
     'TenantFeatureSnapshot',
     'TrainingDatasetManifest',
     'ModelVersion',
+    'WorkspaceEntitlement', 'IntegrationConnection', 'IntegrationSyncRun',
+    'IntegrationEvent', 'IntegrationSkuMapping', 'IntegrationSkuMappingAudit',
+    'IntegrationSkuDailyMetric', 'IntegrationOperationalRiskSnapshot',
+    'IntegrationOperationalRiskAssessment',
 ]

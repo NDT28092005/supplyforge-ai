@@ -1,7 +1,8 @@
 import os
+import tempfile
 from django.test import TestCase
 from supplyforge.models import IngestionSession, Workspace
-from supplyforge.services.csv_profiler import StreamingCSVProfiler
+from supplyforge.tests.fixture_builders import create_large_shopee_orders_fixture
 from src.ingestion.dataset_profiler import DatasetProfiler
 import pandas as pd
 
@@ -11,10 +12,9 @@ class DatasetProfilerTestCase(TestCase):
 
     def setUp(self):
         self.workspace = Workspace.objects.create(name="Test WS", slug="test-ws-profiler")
-        self.test_csv_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-            "test-data", "large_shopee_orders_50k.csv"
-        )
+        self.fixture_dir = tempfile.TemporaryDirectory(prefix='supplyforge-profiler-')
+        self.addCleanup(self.fixture_dir.cleanup)
+        self.test_csv_path = create_large_shopee_orders_fixture(self.fixture_dir.name)
         self.session = IngestionSession.objects.create(
             workspace=self.workspace,
             original_filename="large_shopee_orders_50k.csv",
@@ -49,10 +49,7 @@ class DatasetProfilerTestCase(TestCase):
         profiler = DatasetProfiler(df=df, session_id=str(self.session.id))
         profiler.run_full_profile()
 
-        reports_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-            "reports"
-        )
+        reports_dir = os.path.join(self.fixture_dir.name, 'reports')
         files = profiler.export_reports(output_dir=reports_dir)
 
         self.assertTrue(os.path.exists(files['dataset_profile']))

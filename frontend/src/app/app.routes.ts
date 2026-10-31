@@ -13,6 +13,7 @@ import { SlowMovingRiskDashboardComponent } from './slow-moving-risk-dashboard/s
 import { CapitalExposureDashboardComponent } from './capital-exposure-dashboard/capital-exposure-dashboard.component';
 import { DecisionSupportDashboardComponent } from './decision-support-dashboard/decision-support-dashboard.component';
 import { JobQueueComponent } from './job-queue/job-queue.component';
+import { IntegrationSettingsComponent } from './integration-settings/integration-settings.component';
 import { NotFoundPageComponent } from './not-found-page/not-found-page.component';
 import { dataReadyGuard } from './core/guards/data-ready.guard';
 
@@ -36,6 +37,7 @@ export const routes: Routes = [
   { path: 'app/risk', component: SlowMovingRiskDashboardComponent, canActivate: [dataReadyGuard], title: 'Phân tích Rủi ro — SupplyForge AI' },
   { path: 'app/capital', component: CapitalExposureDashboardComponent, canActivate: [dataReadyGuard], title: 'Phơi nhiễm Vốn — SupplyForge AI' },
   { path: 'app/decisions', component: DecisionSupportDashboardComponent, canActivate: [dataReadyGuard], title: 'Hỗ trợ Quyết định — SupplyForge AI' },
+  { path: 'app/integrations', component: IntegrationSettingsComponent, title: 'Nguồn dữ liệu ERP — SupplyForge AI' },
 
   // ── Fallback ──
   { path: '**', component: NotFoundPageComponent, title: 'Không tìm thấy trang — SupplyForge AI' }

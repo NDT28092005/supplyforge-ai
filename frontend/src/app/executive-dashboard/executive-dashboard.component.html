@@ -14,21 +14,15 @@
     </div>
 
     <!-- Header Controls -->
-    <div class="flex items-center gap-3 shrink-0 flex-wrap">
-      <button (click)="refreshData()" [disabled]="isRefreshing || viewState === 'loading'"
-        class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-xs px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-xs whitespace-nowrap active:scale-95">
-        <svg class="w-3.5 h-3.5 text-indigo-600 transition-transform" [ngClass]="{'animate-spin': isRefreshing}"
-          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M23 4v6h-6"></path>
-          <path d="M1 20v-6h6"></path>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-        </svg>
-        <span>Cập nhật dữ liệu</span>
-      </button>
-
-      <span class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold text-slate-600 shadow-xs">
-        Theo bộ dữ liệu hiện hành
-      </span>
+    <div class="flex w-full sm:w-auto items-center gap-3 shrink-0 flex-wrap">
+      <select [(ngModel)]="sourceMode" (ngModelChange)="onSourceChanged()" class="min-w-0 flex-1 sm:flex-none bg-white border border-slate-200 text-slate-700 font-semibold text-xs px-3 py-2.5 rounded-xl outline-none">
+        <option value="CSV">CSV</option>
+        <option value="ODOO" [disabled]="odooConnections.length === 0">Odoo</option>
+      </select>
+      <select *ngIf="sourceMode === 'ODOO'" [(ngModel)]="selectedOdooConnectionId" (ngModelChange)="onSourceChanged()" class="min-w-0 flex-1 sm:flex-none bg-white border border-slate-200 text-slate-700 font-semibold text-xs px-3 py-2.5 rounded-xl outline-none sm:max-w-[15rem]">
+        <option value="">Chọn kết nối Odoo</option>
+        <option *ngFor="let connection of odooConnections" [value]="connection.id">{{ connection.display_name }}</option>
+      </select>
     </div>
   </div>
 
@@ -49,15 +43,23 @@
     <div class="space-y-1">
       <h3 class="text-base font-bold text-slate-900">Chưa có dữ liệu sản phẩm trong hệ thống</h3>
       <p class="text-xs text-slate-500 font-medium max-w-lg mx-auto">
-        Tải tệp dữ liệu bán hàng để khởi tạo báo cáo điều hành và đánh giá rủi ro.
+        {{ sourceMode === 'ODOO'
+          ? 'Đồng bộ Odoo, xác nhận liên kết SKU và bảo đảm SKU còn tồn khả dụng để khởi tạo báo cáo vận hành.'
+          : 'Tải tệp dữ liệu bán hàng để khởi tạo báo cáo điều hành và đánh giá rủi ro.' }}
       </p>
     </div>
-    <button (click)="goToImport()" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-all cursor-pointer shadow-xs inline-flex items-center gap-2">
+    <button *ngIf="sourceMode === 'CSV'" (click)="goToImport()" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-all cursor-pointer shadow-xs inline-flex items-center gap-2">
       <span>Nạp tệp CSV</span>
     </button>
   </div>
 
   <ng-container *ngIf="viewState === 'ready'">
+
+  <div *ngIf="sourceMode === 'ODOO' && sourceMetadata" class="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-sky-800">
+    <strong class="shrink-0 text-sky-950">Odoo</strong>
+    <span class="min-w-0 flex-1 truncate">{{ selectedOdooConnectionName }} · Dữ liệu đến {{ sourceMetadata.data_as_of || 'chưa xác định' }} · {{ sourceMetadata.coverage?.scored_skus || 0 }}/{{ sourceMetadata.coverage?.total_source_skus || 0 }} SKU được đưa vào chỉ số điều hành.</span>
+    <span *ngIf="sourceMetadata.is_stale" class="ml-auto shrink-0 font-semibold text-amber-800">Cần đồng bộ</span>
+  </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 2. LUỒNG PHÂN TÍCH TỪNG BƯỚC (DRILL DOWN STEPPER BANNER)           -->
