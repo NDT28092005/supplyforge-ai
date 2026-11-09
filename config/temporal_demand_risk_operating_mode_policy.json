@@ -1,0 +1,44 @@
+{
+  "schema_version": "temporal-demand-operating-mode-v1",
+  "selection_split": "validation_only",
+  "purpose": "Choose an already-trained candidate for a declared decision posture. Held-out test metrics are report-only and must not change this selection.",
+  "modes": {
+    "balanced": {
+      "description": "Balance four-class quality with a minimum ability to recover CRITICAL and HIGH_RISK demand outcomes.",
+      "eligibility_constraints": {
+        "min_high_risk_recall": 0.8
+      },
+      "ranking": [
+        "macro_f1",
+        "balanced_accuracy",
+        "high_risk_recall",
+        "high_risk_pr_auc"
+      ],
+      "fallback_ranking": [
+        "high_risk_recall",
+        "macro_f1",
+        "balanced_accuracy",
+        "high_risk_pr_auc"
+      ]
+    },
+    "risk_averse": {
+      "description": "Prioritize finding CRITICAL and HIGH_RISK demand outcomes, while requiring a predeclared minimum alert precision.",
+      "eligibility_constraints": {
+        "min_high_risk_recall": 0.85,
+        "min_high_risk_precision": 0.85
+      },
+      "ranking": [
+        "high_risk_recall",
+        "high_risk_precision",
+        "high_risk_pr_auc",
+        "macro_f1"
+      ],
+      "fallback_ranking": [
+        "high_risk_recall",
+        "high_risk_precision",
+        "high_risk_pr_auc",
+        "macro_f1"
+      ]
+    }
+  }
+}

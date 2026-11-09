@@ -53,10 +53,10 @@ class TestSimulationEngineSIM001SIM002(TestCase):
             }
         )
 
-        # Attach explicit demand_context with sales_velocity_30d = 30.0 (1 unit/day)
+        # Sales velocity is always expressed directly in products per day.
         self.ctx["demand_context"] = {
-            "sales_velocity_30d": 30.0,
-            "sales_velocity_7d": 7.0
+            "sales_velocity_30d": 1.0,
+            "sales_velocity_7d": 1.0
         }
 
     def test_sim_001_single_scenario_calculation(self):
@@ -79,7 +79,7 @@ class TestSimulationEngineSIM001SIM002(TestCase):
         self.assertIn("remaining_exposure", sim)
 
         # Math check:
-        # baseline daily vel = 30 / 30 = 1.0 unit/day
+        # baseline daily velocity = 1.0 unit/day
         # policy elasticity for 15% discount = 1.18
         # expected daily sales = 1.18
         # expected units sold for 14 days = 1.18 * 14 = 16.52 units

@@ -156,6 +156,103 @@ gian mỗi stage, throughput, peak RSS và reconciliation giữa profile, silver
 operational import và gold. Thêm `--trace-python-memory` khi cần peak Python
 allocation; tùy chọn này làm benchmark chậm hơn.
 
+### Temporal Demand-Risk Benchmark
+
+Pipeline phục vụ hệ thống chỉ dùng `orders_full.zip`, không dùng Online Retail
+và không đưa PII người mua vào feature vector. Lệnh dưới đây tạo artifact đánh
+giá bất biến gồm baseline `Recent60Rule`, metrics theo cutoff, paired bootstrap,
+calibration và manifest checksum. Artifact có trạng thái `EVALUATION_CANDIDATE_ONLY`;
+không được dashboard sử dụng tự động.
+
+Ground Truth được version riêng tại
+`config/temporal_demand_risk_ground_truth_contract.json`, do đó thay đổi hoặc
+kiểm chứng nhãn không làm thay đổi runtime feature contract. Mỗi lần benchmark
+tạo thêm `ground_truth_strategy_comparison.csv`,
+`ground_truth_threshold_sensitivity.csv`, `ground_truth_per_cutoff_stability.csv`,
+`ground_truth_temporal_transitions.csv`, `ground_truth_horizon_sensitivity.csv`
+và `ground_truth_discriminability.csv`.
+Các tệp này so sánh Absolute Future Demand với DRR theo rolling cutoff; chúng
+không dùng metric mô hình hoặc test để tự chọn lại ngưỡng `0/5/25`.
+Contract mặc định giữ trạng thái `CANDIDATE_PENDING_REVALIDATION`; một candidate
+chỉ được stage `ACTIVE` sau khi Ground Truth Contract được version lại với
+`FROZEN_APPROVED` và có phê duyệt governance rõ ràng. `SHADOW` và `CANARY`
+vẫn dùng được để kiểm thử có kiểm soát.
+
+Chính sách chọn model theo tư thế vận hành nằm riêng tại
+`config/temporal_demand_risk_operating_mode_policy.json`. `balanced` xếp hạng
+Macro-F1 sau khi đạt recall rủi ro cao tối thiểu; `risk_averse` ưu tiên recall
+CRITICAL/HIGH_RISK nhưng vẫn có rào precision. Cả hai chỉ nhận
+`validation_benchmark.csv` làm đầu vào. Kết quả test luôn là report-only và
+policy checksum, constraints, ranking, model được chọn đều được ghi vào
+`model_manifest.json`.
+
+```bash
+PYTHONPATH=backend backend/.venv/bin/python backend/manage.py freeze_temporal_ground_truth \
+  /tmp/temporal-demand-risk-YYYYMMDDTHHMMSSZ \
+  --output-contract config/temporal_demand_risk_ground_truth_v3.json \
+  --approved-by 'ML Governance' --approval-reference 'EXP-02-v3' --approve
+```
+
+Lệnh freeze chỉ tạo một contract mới kèm checksum evidence; nó không kích hoạt
+model. Chạy lại benchmark với `--ground-truth-contract` trỏ tới contract mới,
+rồi mới có thể stage `ACTIVE`.
+
+```bash
+PYTHONPATH=backend backend/.venv/bin/python backend/manage.py benchmark_temporal_demand_risk \
+  --source 'test-data/Database - NCKH/orders_full.zip' \
+  --output-dir /tmp/temporal-demand-risk-$(date +%Y%m%dT%H%M%SZ) \
+  --operating-mode balanced
+```
+
+Để đánh giá tư thế ưu tiên không bỏ sót tín hiệu nhu cầu thấp, chạy lại cùng
+nguồn và policy với `--operating-mode risk_averse`; không so sánh hoặc chọn lại
+mode dựa trên tập test.
+
+Sau khi kiểm tra feature parity offline/runtime cho đúng source và đúng contract,
+stage một bản `SHADOW` có kiểm soát. Chỉ `ACTIVE` khi đã qua governance review;
+cả hai lệnh đều không sửa hạ tầng cloud.
+
+```bash
+PYTHONPATH=backend backend/.venv/bin/python backend/manage.py stage_temporal_demand_candidate \
+  /tmp/temporal-demand-risk-YYYYMMDDTHHMMSSZ \
+  --model-version temporal-demand-v1 --state SHADOW \
+  --runtime-feature-parity-verified
+```
+
+Runtime chỉ đưa candidate vào quyết định ở trạng thái `ACTIVE`; nếu dữ liệu chưa
+có status/return/accounting được xác thực hoặc thiếu snapshot tồn kho as-of, hệ
+thống giữ trạng thái `candidate unavailable` hoặc `inventory incomplete`, không
+phát sinh kết luận vốn giả định.
+
+### Temporal SHADOW Monitoring
+
+Candidate ở trạng thái `SHADOW` hoặc `CANARY` tự lưu prediction cohort bất biến
+theo SKU và decision cutoff. Hệ thống chỉ gán outcome sau cửa sổ 60 ngày đã đóng,
+rồi báo cáo precision/recall nhóm rủi ro cao, Brier, ECE, drift PSI của điểm
+rủi ro, Precision@5% và Recall@5% theo cutoff. Các cohort chưa mature không
+được đưa vào mẫu số.
+
+```bash
+PYTHONPATH=backend backend/.venv/bin/python backend/manage.py monitor_temporal_shadow_predictions \
+  --workspace-id <WORKSPACE_ID> \
+  --output /tmp/temporal-shadow-monitoring.json
+```
+
+Lệnh này đo proxy future fulfilled-demand của candidate, không chứng minh tác
+động tồn kho, vốn hay quan hệ nhân quả của hành động merchant. Các kết luận đó
+chỉ được mở khi có snapshot tồn kho/cost/lifecycle as-of và action outcomes đã
+xác minh.
+
+Để kiểm thử parity runtime với cùng nguồn, nạp bản export vào workspace thử
+nghiệm. Lệnh này chỉ ghi event demand đạt điều kiện và không lưu PII; chỉ dùng
+`--replace-existing-source` khi workspace đó dành riêng cho nguồn này.
+
+```bash
+PYTHONPATH=backend backend/.venv/bin/python backend/manage.py import_temporal_orders_source \
+  --workspace-id <WORKSPACE_ID> \
+  --source 'test-data/Database - NCKH/orders_full.zip'
+```
+
 ---
 
 ## 4. Chạy cục bộ cho phát triển (Local Development)

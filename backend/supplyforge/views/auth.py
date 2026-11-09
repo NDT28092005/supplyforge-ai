@@ -6,7 +6,12 @@ import datetime
 import json
 import logging
 import requests
+import base64
+import hashlib
+import secrets
+from urllib.parse import urlencode
 from django.conf import settings
+from django.core import signing
 from django.utils import timezone
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -22,9 +27,9 @@ from supplyforge.permissions import get_user_permissions, has_permission, ROLE_O
 from supplyforge.request_identity import get_client_ip
 from supplyforge.services.rate_limiter import RegistrationRateLimiter
 
-# These endpoints are a stateless JSON/bearer-token API. They do not accept
-# Django session cookies, and CORS credentials are disabled; keep CSRF
-# exemptions limited to public token issuance and external OAuth callbacks.
+# Browser sessions use a scoped HttpOnly refresh cookie while application API
+# authorization remains bearer-token based. Public token issuance and OAuth
+# callbacks are the only CSRF-exempt endpoints in this module.
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +62,11 @@ def get_or_create_user_tenant(user: User) -> Workspace:
 GOOGLE_OAUTH_CONFIG = settings.SUPPLYFORGE.get('google_oauth', {})
 GOOGLE_OAUTH_ENABLED = bool(GOOGLE_OAUTH_CONFIG.get('enabled', False))
 GOOGLE_CLIENT_ID = GOOGLE_OAUTH_CONFIG.get('client_id', '').strip()
+GOOGLE_CLIENT_SECRET = GOOGLE_OAUTH_CONFIG.get('client_secret', '').strip()
+GOOGLE_REDIRECT_URI = GOOGLE_OAUTH_CONFIG.get('redirect_uri', '').strip()
+GOOGLE_OAUTH_COOKIE_NAME = 'sf_google_oauth'
+GOOGLE_OAUTH_COOKIE_SALT = 'supplyforge.google-oauth.pkce.v1'
+GOOGLE_OAUTH_TTL_SECONDS = 10 * 60
 JWT_SECRET = settings.SECRET_KEY
 JWT_ALGORITHM = 'HS256'
 
@@ -67,6 +77,64 @@ MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION_MINUTES = 15
 
 EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+
+
+def _set_refresh_cookie(response, refresh_token: str) -> None:
+    """Refresh credentials are never returned to JavaScript or URL parameters."""
+    response.set_cookie(
+        settings.AUTH_REFRESH_COOKIE_NAME,
+        refresh_token,
+        max_age=REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60,
+        httponly=True,
+        secure=settings.AUTH_COOKIE_SECURE,
+        samesite=settings.AUTH_COOKIE_SAMESITE,
+        path='/api/',
+    )
+
+
+def _clear_refresh_cookie(response) -> None:
+    response.delete_cookie(
+        settings.AUTH_REFRESH_COOKIE_NAME,
+        path='/api/',
+        samesite=settings.AUTH_COOKIE_SAMESITE,
+    )
+
+
+def _session_response(
+    access_token: str,
+    refresh_token: str,
+    user_payload: dict,
+    message: str | None = None,
+) -> JsonResponse:
+    payload = {
+        'access_token': access_token,
+        # Compatibility alias for older first-party clients. It is the same
+        # short-lived access credential, never a refresh token.
+        'token': access_token,
+        'token_type': 'Bearer',
+        'expires_in': ACCESS_TOKEN_EXPIRY_SECONDS,
+        'user': user_payload,
+    }
+    if message:
+        payload['message'] = message
+    response = JsonResponse(payload)
+    _set_refresh_cookie(response, refresh_token)
+    return response
+
+
+def _frontend_auth_redirect(**params):
+    """OAuth redirects carry outcome only; credentials stay out of the URL."""
+    return HttpResponseRedirect(
+        f"{settings.AUTH_FRONTEND_ORIGIN}/#/auth?{urlencode(params)}"
+    )
+
+
+def _has_trusted_browser_origin(request) -> bool:
+    """Protect cookie-bearing session endpoints from cross-origin form posts."""
+    origin = request.headers.get('Origin')
+    if not origin:
+        return True
+    return origin in {settings.AUTH_FRONTEND_ORIGIN, *settings.CORS_ALLOWED_ORIGINS}
 
 
 # ── SEC-PRIV-002 Server-Side PII Masking Utilities ──────────────────────
@@ -177,8 +245,6 @@ def generate_access_token(user: User, workspace_id: int | None = None, provider:
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-
-import hashlib
 
 def generate_refresh_token(user: User) -> str:
     """Generate and persist a long-lived refresh token (stored as SHA-256 hash) in DB."""
@@ -399,7 +465,7 @@ def verify_email(request):
     if request.method == "OPTIONS":
         resp = JsonResponse({})
         resp["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-        resp["Access-Control-Allow-Headers"] = "Content-Type"
+        resp["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         return resp
 
     # SEC-AUTH-003: Reject URL query parameter bypass attempts (e.g., ?verified=true)
@@ -458,12 +524,10 @@ def verify_email(request):
         access_token = generate_access_token(user)
         refresh_token = generate_refresh_token(user)
 
-        return JsonResponse({
-            "message": "Xác thực email thành công! Tài khoản của bạn đã được kích hoạt.",
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "Bearer",
-            "user": {
+        return _session_response(
+            access_token,
+            refresh_token,
+            {
                 "id": f"u_{user.id}",
                 "email": user.email,
                 "name": user.display_name,
@@ -471,8 +535,9 @@ def verify_email(request):
                 "permissions": get_user_permissions(user.role or "OWNER"),
                 "status": user.status,
                 "is_email_verified": user.is_email_verified
-            }
-        })
+            },
+            message='Xác thực email thành công! Tài khoản của bạn đã được kích hoạt.',
+        )
 
     except Exception:
         logger.exception("[Verify Email Error]")
@@ -631,13 +696,10 @@ def login_user(request):
         except Exception as odoo_err:
             logger.warning(f"[Odoo Sync Warning] Failed to sync user on login: {odoo_err}")
 
-        return JsonResponse({
-            "token": access_token,
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "Bearer",
-            "expires_in": ACCESS_TOKEN_EXPIRY_SECONDS,
-            "user": {
+        return _session_response(
+            access_token,
+            refresh_token,
+            {
                 "id": f"u_{user.id}",
                 "email": user.email,
                 "name": user.display_name,
@@ -646,8 +708,8 @@ def login_user(request):
                 "status": user.status,
                 "is_email_verified": user.is_email_verified,
                 "workspace_id": workspace_id
-            }
-        })
+            },
+        )
     except Exception:
         logger.exception("[Login Error]")
         return JsonResponse({
@@ -669,12 +731,14 @@ def refresh_token_api(request):
         resp["Access-Control-Allow-Headers"] = "Content-Type"
         return resp
 
+    if not _has_trusted_browser_origin(request):
+        return JsonResponse({"error": "Origin không được phép.", "code": "UNTRUSTED_ORIGIN"}, status=403)
+
     try:
-        body = json.loads(request.body)
-        raw_refresh_token = body.get("refresh_token", "").strip()
+        raw_refresh_token = request.COOKIES.get(settings.AUTH_REFRESH_COOKIE_NAME, '').strip()
 
         if not raw_refresh_token:
-            return JsonResponse({"error": "Thiếu refresh_token.", "code": "MISSING_REFRESH_TOKEN"}, status=400)
+            return JsonResponse({"error": "Phiên đăng nhập không tồn tại.", "code": "MISSING_REFRESH_TOKEN"}, status=401)
 
         # 1. Verify JWT structure
         payload, err_code = verify_jwt(raw_refresh_token, expected_type='refresh')
@@ -717,13 +781,11 @@ def refresh_token_api(request):
         new_access_token = generate_access_token(user)
         new_refresh_token = generate_refresh_token(user)
 
-        return JsonResponse({
-            "access_token": new_access_token,
-            "token": new_access_token,
-            "refresh_token": new_refresh_token,
-            "token_type": "Bearer",
-            "expires_in": ACCESS_TOKEN_EXPIRY_SECONDS
-        })
+        return _session_response(
+            new_access_token,
+            new_refresh_token,
+            serialize_user_profile(user),
+        )
 
     except Exception:
         logger.exception("[Refresh Token Error]")
@@ -746,14 +808,11 @@ def logout_user(request):
         resp["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         return resp
 
+    if not _has_trusted_browser_origin(request):
+        return JsonResponse({"error": "Origin không được phép.", "code": "UNTRUSTED_ORIGIN"}, status=403)
+
     try:
-        raw_refresh_token = ""
-        if request.body:
-            try:
-                body = json.loads(request.body)
-                raw_refresh_token = body.get("refresh_token", "").strip()
-            except Exception:
-                pass
+        raw_refresh_token = request.COOKIES.get(settings.AUTH_REFRESH_COOKIE_NAME, '').strip()
 
         if raw_refresh_token:
             token_hash = hashlib.sha256(raw_refresh_token.encode('utf-8')).hexdigest()
@@ -767,7 +826,9 @@ def logout_user(request):
                 if payload and payload.get('user_id'):
                     RefreshToken.objects.filter(user_id=payload.get('user_id')).update(is_revoked=True)
 
-        return JsonResponse({"message": "Đăng xuất thành công."})
+        response = JsonResponse({"message": "Đăng xuất thành công."})
+        _clear_refresh_cookie(response)
+        return response
     except Exception:
         logger.exception("[Logout Error]")
         return JsonResponse({
@@ -1021,178 +1082,145 @@ def check_object_ownership(user: User, resource) -> tuple[bool, str]:
 
 # ── GOOGLE OAUTH ENDPOINTS ─────────────────────────────────────────────
 
-@csrf_exempt
-@require_http_methods(["POST", "GET", "OPTIONS"])
-def google_callback(request):
-    """GET/POST /api/auth/google/callback & /api/v1/auth/google/callback"""
-    if request.method == "OPTIONS":
-        resp = JsonResponse({})
-        resp["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
-        resp["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-        return resp
+def _google_callback_uri(request) -> str:
+    return GOOGLE_REDIRECT_URI or request.build_absolute_uri('/api/v1/auth/google/callback')
 
-    if not GOOGLE_OAUTH_ENABLED or not GOOGLE_CLIENT_ID:
-        if request.method == "GET":
-            return HttpResponseRedirect("http://localhost:4200/?error=google_auth_unavailable")
-        return JsonResponse({
-            "error": "Đăng nhập Google chưa được cấu hình.",
-            "code": "GOOGLE_AUTH_UNAVAILABLE",
-        }, status=503)
 
-    if request.method == "GET":
-        code = request.GET.get("code", "").strip()
-        id_token_param = request.GET.get("id_token", "").strip() or request.GET.get("credential", "").strip()
-        email_param = request.GET.get("email", "").strip().lower()
+def _clear_google_oauth_cookie(response) -> None:
+    response.delete_cookie(GOOGLE_OAUTH_COOKIE_NAME, path='/api/', samesite='Lax')
 
-        if not code and not id_token_param and not email_param:
-            error_reason = request.GET.get("error", "missing_code")
-            return HttpResponseRedirect(f"http://localhost:4200/?error={error_reason}")
 
-        try:
-            email = ""
-            picture = ""
-            raw_jwt = id_token_param or (code if code.startswith("eyJ") else "")
+def _google_auth_error(error: str):
+    response = _frontend_auth_redirect(error=error)
+    _clear_google_oauth_cookie(response)
+    return response
 
-            if raw_jwt:
-                try:
-                    idinfo = id_token.verify_oauth2_token(
-                        raw_jwt,
-                        google_requests.Request(),
-                        GOOGLE_CLIENT_ID,
-                        clock_skew_in_seconds=10
-                    )
-                    email = idinfo.get("email", "").lower()
-                    picture = idinfo.get("picture", "")
-                except Exception as jwt_err:
-                    logger.warning(f"[Google ID Token Warning] {jwt_err}")
 
-            if not email and email_param:
-                email = email_param
-
-            if not email:
-                return HttpResponseRedirect("http://localhost:4200/?error=google_auth_failed")
-
-            user, created = User.objects.get_or_create(
-                email=email.lower(),
-                defaults={
-                    'display_name': email.lower(),
-                    'password_hash': 'GOOGLE_AUTH',
-                    'status': User.STATUS_ACTIVE,
-                    'is_email_verified': True
-                }
-            )
-            if created or not user.is_email_verified:
-                user.display_name = email.lower()
-                user.password_hash = 'GOOGLE_AUTH'
-                user.status = User.STATUS_ACTIVE
-                user.is_email_verified = True
-                user.save()
-
-            token = generate_access_token(user, provider="google")
-            ref_token = generate_refresh_token(user)
-
-            response = HttpResponseRedirect(f"http://localhost:4200/?auth_success=true&token={token}&refresh_token={ref_token}")
-            response.set_cookie("sf_auth_token", token, max_age=86400, path="/", domain="localhost", samesite="Lax")
-            return response
-
-        except Exception:
-            logger.exception("[Google Auth GET Error]")
-            return HttpResponseRedirect("http://localhost:4200/?error=auth_exception")
-
-    try:
-        credential = ""
-        email_body = ""
-        is_form_post = False
-
-        if request.content_type == "application/json" or (request.body and request.body.startswith(b"{")):
-            try:
-                body = json.loads(request.body)
-                credential = body.get("credential", "").strip() or body.get("id_token", "").strip()
-                email_body = body.get("email", "").strip().lower()
-            except Exception:
-                pass
-
-        if not credential and not email_body:
-            is_form_post = True
-            credential = request.POST.get("credential", "").strip() or request.POST.get("id_token", "").strip() or request.POST.get("code", "").strip()
-            email_body = request.POST.get("email", "").strip().lower()
-
-        email = ""
-        picture = ""
-
-        if credential:
-            try:
-                idinfo = id_token.verify_oauth2_token(
-                    credential,
-                    google_requests.Request(),
-                    GOOGLE_CLIENT_ID,
-                    clock_skew_in_seconds=10
-                )
-                email = idinfo.get("email", "").lower()
-                picture = idinfo.get("picture", "")
-            except Exception as ver_err:
-                if email_body:
-                    email = email_body
-                elif is_form_post:
-                    return HttpResponseRedirect("http://localhost:4200/?error=invalid_google_token")
-                else:
-                    logger.warning("[Google ID Token Error]", exc_info=True)
-                    return JsonResponse({
-                        "error": "Token Google không hợp lệ.",
-                        "code": "INVALID_GOOGLE_TOKEN",
-                    }, status=401)
-        elif email_body:
-            email = email_body
-        else:
-            if is_form_post:
-                return HttpResponseRedirect("http://localhost:4200/?error=missing_google_token")
-            return JsonResponse({"error": "Thiếu Google credential hoặc Email."}, status=400)
-
-        user, created = User.objects.get_or_create(
-            email=email.lower(),
-            defaults={
-                'display_name': email.lower(),
-                'password_hash': 'GOOGLE_AUTH',
-                'status': User.STATUS_ACTIVE,
-                'is_email_verified': True
-            }
-        )
-        user.display_name = email.lower()
+def _provision_google_user(email: str) -> User:
+    user, created = User.objects.get_or_create(
+        email=email,
+        defaults={
+            'display_name': email,
+            'password_hash': 'GOOGLE_AUTH',
+            'status': User.STATUS_ACTIVE,
+            'is_email_verified': True,
+        },
+    )
+    if created or not user.is_email_verified or user.status != User.STATUS_ACTIVE:
+        user.display_name = user.display_name or email
         user.password_hash = 'GOOGLE_AUTH'
         user.status = User.STATUS_ACTIVE
         user.is_email_verified = True
         user.save()
+    return user
 
-        access_token = generate_access_token(user, provider="google")
-        ref_token = generate_refresh_token(user)
 
-        if is_form_post:
-            response = HttpResponseRedirect(f"http://localhost:4200/?auth_success=true&token={access_token}&refresh_token={ref_token}")
-            response.set_cookie("sf_auth_token", access_token, max_age=86400, path="/", domain="localhost", samesite="Lax")
-            return response
+@require_http_methods(['GET'])
+def google_oauth_start(request):
+    """Begin a server-controlled authorization-code flow with PKCE."""
+    if not GOOGLE_OAUTH_ENABLED or not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return _google_auth_error('google_auth_unavailable')
 
-        return JsonResponse({
-            "token": access_token,
-            "access_token": access_token,
-            "refresh_token": ref_token,
-            "token_type": "Bearer",
-            "expires_in": ACCESS_TOKEN_EXPIRY_SECONDS,
-            "user": {
-                "id": f"u_{user.id}",
-                "email": user.email,
-                "name": user.email,
-                "picture": picture,
-                "status": user.status,
-                "is_email_verified": True
-            }
-        })
+    state = secrets.token_urlsafe(32)
+    nonce = secrets.token_urlsafe(32)
+    code_verifier = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode('ascii')).digest()
+    ).rstrip(b'=').decode('ascii')
+    flow_cookie = signing.dumps(
+        {'state': state, 'nonce': nonce, 'code_verifier': code_verifier},
+        salt=GOOGLE_OAUTH_COOKIE_SALT,
+        compress=True,
+    )
+    params = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'redirect_uri': _google_callback_uri(request),
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'state': state,
+        'nonce': nonce,
+        'code_challenge': challenge,
+        'code_challenge_method': 'S256',
+        'prompt': 'select_account',
+    }
+    response = HttpResponseRedirect(
+        f'https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}'
+    )
+    response.set_cookie(
+        GOOGLE_OAUTH_COOKIE_NAME,
+        flow_cookie,
+        max_age=GOOGLE_OAUTH_TTL_SECONDS,
+        httponly=True,
+        secure=settings.AUTH_COOKIE_SECURE,
+        samesite='Lax',
+        path='/api/',
+    )
+    return response
 
+
+@require_http_methods(['GET'])
+def google_callback(request):
+    """Complete the validated authorization-code + PKCE Google OAuth flow."""
+    if not GOOGLE_OAUTH_ENABLED or not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return _google_auth_error('google_auth_unavailable')
+    if request.GET.get('error'):
+        return _google_auth_error('google_auth_cancelled')
+
+    code = request.GET.get('code', '').strip()
+    returned_state = request.GET.get('state', '').strip()
+    if not code or not returned_state:
+        return _google_auth_error('google_auth_failed')
+    try:
+        flow = signing.loads(
+            request.COOKIES.get(GOOGLE_OAUTH_COOKIE_NAME, ''),
+            salt=GOOGLE_OAUTH_COOKIE_SALT,
+            max_age=GOOGLE_OAUTH_TTL_SECONDS,
+        )
+    except signing.BadSignature:
+        return _google_auth_error('google_auth_state_invalid')
+    if not secrets.compare_digest(str(flow.get('state', '')), returned_state):
+        return _google_auth_error('google_auth_state_invalid')
+
+    try:
+        token_response = requests.post(
+            'https://oauth2.googleapis.com/token',
+            data={
+                'code': code,
+                'client_id': GOOGLE_CLIENT_ID,
+                'client_secret': GOOGLE_CLIENT_SECRET,
+                'redirect_uri': _google_callback_uri(request),
+                'grant_type': 'authorization_code',
+                'code_verifier': flow['code_verifier'],
+            },
+            timeout=10,
+        )
+        token_response.raise_for_status()
+        raw_id_token = token_response.json().get('id_token', '')
+        idinfo = id_token.verify_oauth2_token(
+            raw_id_token,
+            google_requests.Request(),
+            GOOGLE_CLIENT_ID,
+            clock_skew_in_seconds=10,
+        )
+        if not idinfo.get('email_verified') or not secrets.compare_digest(
+            str(idinfo.get('nonce', '')), str(flow.get('nonce', '')),
+        ):
+            return _google_auth_error('google_auth_failed')
+        email = str(idinfo.get('email') or '').strip().lower()
+        if not email:
+            return _google_auth_error('google_auth_failed')
+    except (requests.RequestException, ValueError, KeyError):
+        logger.warning('[Google OAuth] token exchange or token verification failed', exc_info=True)
+        return _google_auth_error('google_auth_failed')
     except Exception:
-        logger.exception("[Google Auth POST Error]")
-        return JsonResponse({
-            "error": "Không thể hoàn tất xác thực Google.",
-            "code": "GOOGLE_AUTH_FAILED",
-        }, status=500)
+        logger.exception('[Google OAuth] unexpected callback failure')
+        return _google_auth_error('google_auth_failed')
+
+    user = _provision_google_user(email)
+    response = _frontend_auth_redirect(auth_success='true')
+    _set_refresh_cookie(response, generate_refresh_token(user))
+    _clear_google_oauth_cookie(response)
+    return response
 
 
 @csrf_exempt
@@ -1202,20 +1230,22 @@ def google_complete_phone(request):
     if request.method == "OPTIONS":
         resp = JsonResponse({})
         resp["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-        resp["Access-Control-Allow-Headers"] = "Content-Type"
+        resp["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         return resp
 
     try:
         body = json.loads(request.body)
-        temp_user_id = body.get("tempUserId")
         phone = body.get("phone", "").strip()
-        picture = body.get("picture", "").strip()
-
-        if not temp_user_id or not phone:
+        auth_header = request.headers.get("Authorization", "")
+        if not phone or not auth_header.startswith('Bearer '):
             return JsonResponse({"error": "Thiếu thông tin số điện thoại."}, status=400)
-
+        payload, _ = verify_jwt(auth_header[7:], expected_type='access')
+        if not payload or not payload.get('user_id'):
+            return JsonResponse({"error": "Phiên đăng nhập không hợp lệ."}, status=401)
+        if body.get('tempUserId') and str(body['tempUserId']) != str(payload['user_id']):
+            return JsonResponse({"error": "Không thể cập nhật số điện thoại của người dùng khác."}, status=403)
         try:
-            user = User.objects.get(id=temp_user_id)
+            user = User.objects.get(id=payload['user_id'])
         except User.DoesNotExist:
             return JsonResponse({"error": "Người dùng không tồn tại hoặc phiên hết hạn."}, status=404)
 
@@ -1228,20 +1258,16 @@ def google_complete_phone(request):
         access_token = generate_access_token(user, provider="google")
         ref_token = generate_refresh_token(user)
 
-        return JsonResponse({
-            "token": access_token,
-            "access_token": access_token,
-            "refresh_token": ref_token,
-            "token_type": "Bearer",
-            "expires_in": ACCESS_TOKEN_EXPIRY_SECONDS,
-            "user": {
+        return _session_response(
+            access_token,
+            ref_token,
+            {
                 "id": f"u_{user.id}",
                 "email": user.email,
                 "name": user.display_name,
-                "picture": picture,
                 "status": user.status
-            }
-        })
+            },
+        )
     except Exception:
         logger.exception("[Google Complete Phone Error]")
         return JsonResponse({

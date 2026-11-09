@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../environments/environment';
 import { AuthService } from './auth.service';
@@ -89,12 +89,43 @@ export class ApiService {
   }
 
   // ── Module 01 Data Ingestion ─────────────────────────────────────
-  uploadCsvV2(file: File, workspaceId: number = this.getCurrentWorkspaceId(), sessionType: string = 'INITIAL'): Observable<any> {
+  uploadCsvV2(
+    file: File,
+    workspaceId: number = this.getCurrentWorkspaceId(),
+    sessionType: string = 'INITIAL',
+    idempotencyKey = ''
+  ): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('workspaceId', workspaceId.toString());
     formData.append('sessionType', sessionType);
+    if (idempotencyKey) {
+      formData.append('idempotencyKey', idempotencyKey);
+    }
     return this.http.post(`${this.apiUrl}/api/v1/ingestion/upload`, formData);
+  }
+
+  initiateMultipartUpload(
+    file: File,
+    sessionType: 'INITIAL' | 'INCREMENTAL',
+    idempotencyKey: string,
+  ): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v2/jobs/upload/initiate`, {
+      filename: file.name,
+      sizeBytes: file.size,
+      contentType: file.type || 'text/csv',
+      sessionType,
+      idempotencyKey,
+    }, {
+      headers: new HttpHeaders({ 'Idempotency-Key': idempotencyKey }),
+    });
+  }
+
+  completeMultipartUpload(sessionId: string, uploadId: string, parts: Array<{ partNumber: number; eTag: string }>): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v2/jobs/${sessionId}/upload/complete`, {
+      uploadId,
+      parts,
+    });
   }
 
   uploadFile(file: File, workspaceId: string): Observable<any> {
@@ -302,23 +333,14 @@ export class ApiService {
     });
   }
 
-  refreshToken(refreshToken: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}/api/v1/auth/refresh`, {
-      refresh_token: refreshToken
-    });
+  refreshToken(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/auth/refresh`, {});
   }
 
-  logoutUser(refreshToken = ''): Observable<any> {
-    return this.http.post(`${this.apiUrl}/api/v1/auth/logout`, {
-      refresh_token: refreshToken
-    });
+  logoutUser(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/auth/logout`, {});
   }
 
-  completeGoogleLogin(credential: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}/api/v1/auth/google/callback`, {
-      credential
-    });
-  }
 
   // ── Module 01 Task 03 Column Mapping API ─────────────────────────────
   triggerColumnMapping(sessionId: string, userOverrides?: Record<string, string>): Observable<any> {
@@ -592,12 +614,58 @@ export class ApiService {
     return this.http.get(`${this.apiUrl}/api/v1/risk/assessments/list`, { params });
   }
 
+  getSlowMovingQuality(source: string = 'CSV'): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/risk/quality/`, { params: { source } });
+  }
+
+  getSlowMovingAlertHealth(source: string = 'CSV'): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/risk/health/`, { params: { source } });
+  }
+
+  getSlowMovingAlertPassport(alertId: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/risk/alerts/${alertId}/passport`);
+  }
+
+  listSlowMovingCatalogContexts(params: any = {}): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/risk/catalog-contexts/`, { params });
+  }
+
+  createSlowMovingCatalogContext(payload: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/risk/catalog-contexts/`, payload);
+  }
+
+  listSlowMovingRemediations(params: any = {}): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/risk/remediations/`, { params });
+  }
+
+  recordSlowMovingDisposition(payload: {
+    source?: string; canonical_sku: string; event_type: string;
+    occurred_at: string; evidence_reference?: string;
+  }): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/risk/dispositions`, payload);
+  }
+
   getM3RiskAssessmentDetail(id: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/api/v1/risk/assessments/${id}`);
   }
 
   getM3SkuRisk(skuId: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/api/v1/risk/skus/${skuId}`);
+  }
+
+  updateSlowMovingAlert(
+    alertId: string,
+    action: 'ACKNOWLEDGE' | 'SNOOZE' | 'RESOLVE' | 'REOPEN' | 'ASSIGN',
+    note = '',
+    days?: number,
+    feedbackReason?: string,
+    ownerLabel?: string,
+  ): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/risk/alerts/${alertId}/state`, {
+      action, note, ...(days ? { days } : {}),
+      ...(feedbackReason ? { feedback_reason: feedbackReason } : {}),
+      ...(ownerLabel ? { owner_label: ownerLabel } : {}),
+    });
   }
 
   runM3RiskAssessmentAssembly(sessionId: string): Observable<any> {
@@ -687,12 +755,61 @@ export class ApiService {
     return this.http.get(`${this.apiUrl}/api/v1/decisions/`, { params });
   }
 
+  getDecisionSummary(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/decisions/summary/`);
+  }
+
+  getDecisionDataStatus(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/decisions/data-status/`);
+  }
+
+  getDecisionLearningReport(days: number = 7): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/decisions/learning-report/`, {
+      params: new HttpParams().set('days', String(days)),
+    });
+  }
+
+  refreshDecisionRecommendations(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/decisions/refresh/`, {});
+  }
+
+  getDecisionPortfolioQueue(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/decisions/portfolio-queue/`);
+  }
+
+  buildDecisionPortfolioQueue(constraints: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/decisions/portfolio-queue/`, { constraints });
+  }
+
+  getWeeklyActionPlan(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/decisions/weekly-action-plan/`);
+  }
+
+  createWeeklyActionPlan(payload: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/decisions/weekly-action-plan/`, payload);
+  }
+
   getDecisionDetail(decisionId: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/api/v1/decisions/${decisionId}/`);
   }
 
-  updateDecisionStatus(decisionId: string, status: string, actor: string = 'merchant', notes: string = ''): Observable<any> {
-    return this.http.patch(`${this.apiUrl}/api/v1/decisions/${decisionId}/status/`, { status, actor, notes });
+  getDecisionRevalidation(decisionId: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/decisions/${decisionId}/revalidation/`);
+  }
+
+  approveDecisionRevalidation(decisionId: string, note: string = ''): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/decisions/${decisionId}/revalidation/`, { note });
+  }
+
+  updateDecisionStatus(
+    decisionId: string, status: string, actor: string = 'merchant', notes: string = '',
+    feedback?: { reason: string; note?: string },
+  ): Observable<any> {
+    return this.http.patch(`${this.apiUrl}/api/v1/decisions/${decisionId}/status/`, {
+      status, actor, notes,
+      feedback_reason: feedback?.reason || '',
+      feedback_note: feedback?.note || '',
+    });
   }
 
   getDecisionHistory(decisionId: string): Observable<any> {
@@ -746,7 +863,7 @@ export class ApiService {
     return this.http.patch(`${this.apiUrl}/api/v1/action-plans/${planId}/status/`, { status, notes });
   }
 
-  recordActionPlanOutcome(planId: string, outcome: { actual_recovery_value?: number, actual_units_sold?: number, outcome_notes?: string }): Observable<any> {
+  recordActionPlanOutcome(planId: string, outcome: any): Observable<any> {
     return this.http.patch(`${this.apiUrl}/api/v1/action-plans/${planId}/outcome/`, outcome);
   }
 
@@ -754,15 +871,51 @@ export class ApiService {
     return this.http.get(`${this.apiUrl}/api/v1/action-plans/${planId}/history/`);
   }
 
-  // ── ERP Integrations (paid workspace entitlement) ──────────────────
+  getActionPlanTasks(planId: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/action-plans/${planId}/tasks/`);
+  }
+
+  updateActionPlanTask(planId: string, taskId: number, payload: { status: string; note?: string; skipped_reason?: string }): Observable<any> {
+    return this.http.patch(`${this.apiUrl}/api/v1/action-plans/${planId}/tasks/${taskId}/`, payload);
+  }
+
+  addActionPlanEvidence(planId: string, taskId: number, payload: { title: string; reference_url?: string; note?: string }): Observable<any> {
+    return this.http.post(`${this.apiUrl}/api/v1/action-plans/${planId}/tasks/${taskId}/evidence/`, payload);
+  }
+
+  getPricingScenario(sku: string, channel: string, durationDays: number = 14, warehouseCode: string = ''): Observable<any> {
+    let params = new HttpParams().set('channel', channel).set('duration_days', durationDays.toString());
+    if (warehouseCode) params = params.set('warehouse_code', warehouseCode);
+    return this.http.get(`${this.apiUrl}/api/v1/pricing/scenarios/${encodeURIComponent(sku)}/`, { params });
+  }
+
+  getProcurementForecast(sku: string, horizonDays: number = 90, warehouseCode: string = ''): Observable<any> {
+    let params = new HttpParams().set('horizon_days', horizonDays.toString());
+    if (warehouseCode) params = params.set('warehouse_code', warehouseCode);
+    return this.http.get(`${this.apiUrl}/api/v1/procurement/forecast/${encodeURIComponent(sku)}/`, {
+      params,
+    });
+  }
+
+  getProcurementCashFlow(horizonDays: number = 90): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/procurement/cash-flow/`, {
+      params: new HttpParams().set('horizon_days', horizonDays.toString()),
+    });
+  }
+
+  getProcurementPortfolio(horizonDays: number = 90, limit: number = 500): Observable<any> {
+    return this.http.get(`${this.apiUrl}/api/v1/procurement/portfolio/`, {
+      params: new HttpParams().set('horizon_days', horizonDays.toString()).set('limit', limit.toString()),
+    });
+  }
+
+  // ── Odoo operational data source ───────────────────────────────────
+
   listIntegrationConnections(): Observable<any> {
     return this.http.get(`${this.apiUrl}/api/v1/integrations/connections/`);
   }
 
-  createIntegrationConnection(payload: {
-    provider: 'ODOO'; display_name: string; base_url: string; database: string;
-    username: string; api_key: string;
-  }): Observable<any> {
+  createIntegrationConnection(payload: any): Observable<any> {
     return this.http.post(`${this.apiUrl}/api/v1/integrations/connections/`, payload);
   }
 
@@ -770,7 +923,7 @@ export class ApiService {
     return this.http.patch(`${this.apiUrl}/api/v1/integrations/connections/${connectionId}/`, payload);
   }
 
-  runIntegration(connectionId: string, runType: 'validate' | 'initial-sync' | 'sync' | 'reconcile'): Observable<any> {
+  runIntegration(connectionId: string, runType: 'validate' | 'initial-sync' | 'sync'): Observable<any> {
     return this.http.post(`${this.apiUrl}/api/v1/integrations/connections/${connectionId}/runs/${runType}/`, {});
   }
 

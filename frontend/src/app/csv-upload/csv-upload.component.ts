@@ -56,6 +56,8 @@ export interface ProfileResponse {
   styleUrls: ['./csv-upload.component.css']
 })
 export class CsvUploadComponent implements OnInit, OnChanges {
+  private readonly multipartThresholdBytes = 5 * 1024 * 1024;
+  private readonly multipartResumeStorageKey = 'sf.multipart-upload.resume.v1';
   @Input() initialErrorMessage = '';
   @Input() initialFile: File | null = null;
   @Output() continueToMapping = new EventEmitter<{ file: File; profileData: ProfileResponse; sessionType: 'INITIAL' | 'INCREMENTAL' }>();
@@ -76,6 +78,11 @@ export class CsvUploadComponent implements OnInit, OnChanges {
 
   // Format guide and sample download state
   showFormatGuide = false;
+
+  // Each deliberate file selection is a new import action.  The sequence
+  // also prevents a slow response for a previously selected file from
+  // replacing the state of the latest selection.
+  private uploadAttempt = 0;
 
   toggleFormatGuide(): void {
     this.showFormatGuide = !this.showFormatGuide;
@@ -166,6 +173,7 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
   }
 
   handleFileSelected(file: File): void {
+    const attempt = ++this.uploadAttempt;
     if (!file.name.toLowerCase().endsWith('.csv')) {
       this.errorMessage = 'Chỉ hỗ trợ tệp định dạng .csv. Vui lòng kiểm tra lại.';
       this.uploadStatus = 'error';
@@ -173,7 +181,10 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
       return;
     }
 
+    const idempotencyKey = this.createImportRequestKey();
     this.selectedFile = file;
+    this.profileResult = null;
+    this.showIdempotentModal = false;
     // A new initial import replaces the active dataset. Hide cached reports
     // immediately so no previous or example figures are shown during import.
     if (this.sessionType === 'INITIAL') {
@@ -185,6 +196,13 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
     this.uploadProgress = 8;
     this.uploadStage = 'Đang tải tệp lên máy chủ';
 
+    // Large files never transit the API container. The browser uploads parts
+    // directly to object storage and the API only coordinates the job.
+    if (file.size >= this.multipartThresholdBytes) {
+      void this.uploadMultipartToObjectStorage(file, attempt, idempotencyKey);
+      return;
+    }
+
     const progressInterval = setInterval(() => {
       if (this.uploadProgress < 88) {
         this.uploadProgress += 4;
@@ -194,9 +212,15 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
       }
     }, 200);
 
-    this.apiService.uploadCsvV2(file, this.apiService.getCurrentWorkspaceId(), this.sessionType).subscribe({
+    this.apiService.uploadCsvV2(
+      file,
+      this.apiService.getCurrentWorkspaceId(),
+      this.sessionType,
+      idempotencyKey,
+    ).subscribe({
       next: (res: ProfileResponse) => {
         clearInterval(progressInterval);
+        if (attempt !== this.uploadAttempt) return;
         this.uploadProgress = 100;
         if (res?.status === 'REJECT' || res?.profile?.validation?.status === 'REJECT') {
           const message = res?.error || res?.profile?.validation?.errors?.join('; ') || 'Tệp CSV không đạt yêu cầu kiểm tra.';
@@ -233,12 +257,132 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
       },
       error: (err: any) => {
         clearInterval(progressInterval);
+        if (attempt !== this.uploadAttempt) return;
         this.uploadStatus = 'error';
         const msg = err.error?.error || 'Có lỗi xảy ra trong quá trình nạp và phân tích tệp CSV.';
         this.errorMessage = msg;
         this.ingestionState.setErrorMessage(msg);
       }
     });
+  }
+
+  private async uploadMultipartToObjectStorage(file: File, attempt: number, defaultKey: string): Promise<void> {
+    const resume = this.readMultipartResume(file);
+    const idempotencyKey = resume?.idempotencyKey || defaultKey;
+    this.uploadStage = 'Đang khởi tạo tải trực tiếp tới kho dữ liệu an toàn';
+
+    this.apiService.initiateMultipartUpload(file, this.sessionType, idempotencyKey).subscribe({
+      next: async (manifest: any) => {
+        try {
+          if (attempt !== this.uploadAttempt) return;
+          const completedParts = { ...(resume?.completedParts || {}) } as Record<string, string>;
+          this.writeMultipartResume(file, idempotencyKey, manifest.sessionId, manifest.uploadId, completedParts);
+
+          for (const part of manifest.parts || []) {
+            const partNumber = Number(part.partNumber);
+            if (!completedParts[String(partNumber)]) {
+              const start = (partNumber - 1) * Number(manifest.partSizeBytes);
+              const end = Math.min(start + Number(manifest.partSizeBytes), file.size);
+              const result = await fetch(part.url, {
+                method: 'PUT',
+                body: file.slice(start, end),
+              });
+              const eTag = result.headers.get('ETag') || result.headers.get('etag');
+              if (!result.ok || !eTag) {
+                throw new Error('Kho dữ liệu từ chối một phần tệp hoặc không trả về ETag để xác nhận upload.');
+              }
+              completedParts[String(partNumber)] = eTag;
+              this.writeMultipartResume(file, idempotencyKey, manifest.sessionId, manifest.uploadId, completedParts);
+            }
+            const completedCount = Object.keys(completedParts).length;
+            this.uploadProgress = Math.max(8, Math.round((completedCount / manifest.parts.length) * 92));
+            this.uploadStage = `Đã tải ${completedCount}/${manifest.parts.length} phần; có thể tiếp tục nếu kết nối bị gián đoạn`;
+          }
+
+          const parts = Object.entries(completedParts).map(([partNumber, eTag]) => ({
+            partNumber: Number(partNumber),
+            eTag,
+          })).sort((a, b) => a.partNumber - b.partNumber);
+          this.uploadStage = 'Đang xác nhận tệp và đưa vào hàng chờ xử lý';
+          this.apiService.completeMultipartUpload(manifest.sessionId, manifest.uploadId, parts).subscribe({
+            next: (result: any) => {
+              if (attempt !== this.uploadAttempt) return;
+              this.clearMultipartResume();
+              this.uploadProgress = 100;
+              this.ingestionState.setSessionId(result.sessionId || manifest.sessionId);
+              this.ingestionState.setDatasetStatus('uploading', 'Tệp đã được xác nhận và đang xử lý trong hàng chờ.');
+              this.router.navigate(['/app/queue']);
+            },
+            error: (err: any) => this.failMultipartUpload(attempt, err.error?.error || 'Không thể xác nhận cloud upload.'),
+          });
+        } catch (error) {
+          this.failMultipartUpload(attempt, error instanceof Error ? error.message : 'Cloud upload thất bại.');
+        }
+      },
+      error: (err: any) => {
+        // Local development does not require S3. Production never reaches this
+        // fallback because STORAGE_BACKEND=s3 is a deployment invariant.
+        if (err.error?.code === 'S3_MULTIPART_INVALID') {
+          this.enqueueBackgroundJob();
+          return;
+        }
+        this.failMultipartUpload(attempt, err.error?.error || 'Không thể khởi tạo cloud upload.');
+      }
+    });
+  }
+
+  private failMultipartUpload(attempt: number, message: string): void {
+    if (attempt !== this.uploadAttempt) return;
+    this.uploadStatus = 'error';
+    this.errorMessage = message;
+    this.ingestionState.setErrorMessage(message);
+  }
+
+  private readMultipartResume(file: File): any | null {
+    try {
+      const value = JSON.parse(localStorage.getItem(this.multipartResumeStorageKey) || 'null');
+      return value?.fileName === file.name
+        && value?.fileSize === file.size
+        && value?.lastModified === file.lastModified
+        && value?.sessionType === this.sessionType
+        ? value
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private writeMultipartResume(
+    file: File,
+    idempotencyKey: string,
+    sessionId: string,
+    uploadId: string,
+    completedParts: Record<string, string>,
+  ): void {
+    try {
+      // Persist ETags only; presigned URLs are short-lived credentials and are
+      // intentionally regenerated by the initiate endpoint after a reload.
+      localStorage.setItem(this.multipartResumeStorageKey, JSON.stringify({
+        fileName: file.name,
+        fileSize: file.size,
+        lastModified: file.lastModified,
+        sessionType: this.sessionType,
+        idempotencyKey,
+        sessionId,
+        uploadId,
+        completedParts,
+      }));
+    } catch {
+      // Resume is best effort; inability to persist browser state must not stop upload.
+    }
+  }
+
+  private clearMultipartResume(): void {
+    try {
+      localStorage.removeItem(this.multipartResumeStorageKey);
+    } catch {
+      // Browser storage is optional.
+    }
   }
 
   enqueueBackgroundJob(): void {
@@ -270,6 +414,7 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
   }
 
   resetUpload(): void {
+    this.uploadAttempt++;
     this.selectedFile = null;
     this.uploadStatus = 'idle';
     this.profileResult = null;
@@ -278,6 +423,13 @@ ORD-2026-005,WLT-MAN-HM,Ví da Nam Dáng Ngang Handmade,2,350000,180000,80,2026-
     this.showIdempotentModal = false;
     this.ingestionState.reset();
     this.ingestionState.setSessionType(this.sessionType);
+  }
+
+  private createImportRequestKey(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `csv-import-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   }
 
   setSessionType(sessionType: 'INITIAL' | 'INCREMENTAL'): void {

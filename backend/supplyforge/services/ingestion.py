@@ -2,6 +2,7 @@ import os
 import re
 import json
 import uuid
+import hashlib
 import logging
 import requests
 from decimal import Decimal
@@ -10,7 +11,16 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import Min, Max
 from django.utils import timezone
-from supplyforge.models import ArchivedDataSet, IngestionSession, Order, OrderItem, Product
+from supplyforge.models import (
+    ArchivedDataSet,
+    DemandReturnEvent,
+    IngestionSession,
+    InventoryRecord,
+    Order,
+    OrderItem,
+    Product,
+    Sku,
+)
 from supplyforge.metrics import record_ingestion
 from supplyforge.services.storage_backend import StorageBackend
 
@@ -227,10 +237,25 @@ class DynamicFileImportService:
         if force_reset and session_type != 'INITIAL':
             raise ValueError('Chỉ Import mới mới được thay thế bộ dữ liệu hiện tại.')
 
+        # The immutable ingestion session is the authority for the tenant
+        # boundary. Never accept a caller-supplied workspace that disagrees
+        # with it; otherwise a worker could write one session's facts into a
+        # different merchant's operational projection.
+        session_obj = None
+        if session_id:
+            session_obj = IngestionSession.objects.select_related('workspace').filter(id=session_id).first()
+            if not session_obj:
+                raise ValueError('Không tìm thấy phiên import.')
+            if workspace_id is not None and int(workspace_id) != session_obj.workspace_id:
+                raise ValueError('Phiên import không thuộc workspace hiện tại.')
+            workspace_id = session_obj.workspace_id
+        elif workspace_id is not None:
+            workspace_id = int(workspace_id)
+
         # INITIAL replaces the operational dataset. INCREMENTAL is the only mode
         # permitted to merge with it, so user intent is never inferred from DB state.
-        existing_orders = Order.objects.filter(user_id=user_id)
-        existing_products = Product.objects.filter(user_id=user_id)
+        existing_orders = Order.objects.filter(user_id=user_id, workspace_id=workspace_id)
+        existing_products = Product.objects.filter(user_id=user_id, workspace_id=workspace_id)
         existing_orders_count = existing_orders.count()
         existing_products_count = existing_products.count()
         should_replace_dataset = session_type == 'INITIAL'
@@ -262,8 +287,8 @@ class DynamicFileImportService:
                 "data_corrections": [],
                 "overlap_detected": False,
                 "warnings": 0,
-                "products_count": Product.objects.filter(user_id=user_id).count(),
-                "orders_count": Order.objects.filter(user_id=user_id).count()
+                "products_count": Product.objects.filter(user_id=user_id, workspace_id=workspace_id).count(),
+                "orders_count": Order.objects.filter(user_id=user_id, workspace_id=workspace_id).count()
             }
 
         rows_received = max(0, len(lines) - 1)  # Exclude header
@@ -319,6 +344,29 @@ class DynamicFileImportService:
         order_id_idx = find_index('orderId', ['mã đơn hàng', 'mã đơn', 'order id', 'order no', 'order'])
         buyer_idx = find_index('buyerUsername', ['buyer username', 'khách hàng', 'buyer'])
         expiry_idx = find_index('expirationDate', ['expiration date', 'hạn sử dụng', 'expiry', 'hsd'])
+        status_idx = find_index('orderStatus', ['order status', 'trạng thái đơn', 'trạng thái', 'status'])
+        return_idx = find_index('returnId', ['return id', 'return code', 'mã hoàn', 'mã trả hàng'])
+        return_qty_idx = find_index(
+            'returnQuantity',
+            ['return quantity', 'returned quantity', 'return qty', 'số lượng hoàn', 'số lượng trả', 'sl hoàn'],
+        )
+        accounting_idx = find_index('notCalculateMoney', ['not calculate money', 'notcaculatemoney', 'không tính tiền'])
+        warehouse_idx = find_index('warehouse', ['warehouse', 'kho'])
+        # A stock field in a sales row is not automatically an auditable
+        # inventory fact. These columns opt a CSV into the explicit inventory
+        # snapshot contract used for capital scenarios.
+        inventory_as_of_idx = find_index(
+            'inventoryAsOfDate',
+            ['inventory as of date', 'stock as of date', 'inventory snapshot date', 'ngày chốt tồn'],
+        )
+        inventory_snapshot_id_idx = find_index(
+            'inventorySnapshotId',
+            ['inventory snapshot id', 'stock snapshot id', 'snapshot id', 'mã phiên tồn'],
+        )
+        lifecycle_idx = find_index(
+            'lifecycleStatus',
+            ['lifecycle status', 'sku lifecycle', 'trạng thái vòng đời'],
+        )
 
         # Only hydrate existing facts that can collide with this bounded batch.
         # Loading every historical order/item turns an incremental import into
@@ -336,12 +384,14 @@ class DynamicFileImportService:
             if candidate_order_ids:
                 matching_orders = Order.objects.filter(
                     user_id=user_id,
+                    workspace_id=workspace_id,
                     order_id__in=candidate_order_ids,
                 )
                 existing_orders_map = {order.order_id: order for order in matching_orders}
                 for item in (
                     OrderItem.objects.filter(
                         order__user_id=user_id,
+                        order__workspace_id=workspace_id,
                         order__order_id__in=candidate_order_ids,
                     ).select_related('order')
                 ):
@@ -419,11 +469,14 @@ class DynamicFileImportService:
         # --- Stage 5 & 6: Deduplication, Null Data Validation & Canonicalization (IR-005 - IR-010) ---
         sku_catalog = {}
         order_rows = []
+        return_rows = []
         seen_row_signatures = set()
         duplicate_rows_count = 0
         updated_rows_count = 0
         data_corrections_log = []
         rejected_rows_log = []
+        inventory_evidence_incomplete_skus = set()
+        inventory_evidence_conflict_skus = set()
 
         # Include structural CSV corrupted rows from Stage 1 validation
         for cr in val_res.corrupted_rows:
@@ -444,12 +497,15 @@ class DynamicFileImportService:
             if not re.match(r'^-?\d+$', s_clean):
                 return None
             try:
-                val = int(s_clean)
-                if val <= 0:
-                    return None
-                return val
-            except Exception:
+                value = int(s_clean)
+            except ValueError:
                 return None
+            return value if value > 0 else None
+
+        def parse_bool(s):
+            if s is None:
+                return None
+            return str(s).strip().lower() in {'1', 'true', 'yes', 'y', 'có'}
 
         for idx, line in enumerate(lines[1:], start=2):
             if idx in corrupted_line_numbers:
@@ -474,8 +530,12 @@ class DynamicFileImportService:
             raw_sku = get_col(sku_idx)
             raw_date = get_col(date_idx)
             raw_qty = get_col(qty_idx)
+            raw_return_qty = get_col(return_qty_idx)
             raw_price = get_col(price_idx)
             raw_cost = get_col(cost_idx)
+            raw_inventory_as_of = get_col(inventory_as_of_idx)
+            raw_inventory_snapshot_id = get_col(inventory_snapshot_id_idx)
+            raw_lifecycle_status = get_col(lifecycle_idx)
 
             # --- IR-010 Rule 1: SKU must NOT be NULL / empty ---
             if not raw_sku or raw_sku.upper() in ["NULL", "NONE", "NAN", "UNDEFINED", ""]:
@@ -498,21 +558,35 @@ class DynamicFileImportService:
                 })
                 continue
 
-            # --- IR-010 Rule 3: Quantity must be valid integer > 0 ---
-            qty_val = validate_strict_qty(raw_qty) if raw_qty else (1 if qty_idx is None else None)
+            return_identifier = get_col(return_idx) or None
+            is_return_event = bool(return_identifier)
+            if raw_return_qty and not is_return_event:
+                rows_rejected_count += 1
+                rejected_rows_log.append({
+                    "line_number": idx,
+                    "raw_content": line[:150],
+                    "reason": "Dòng hoàn trả thiếu mã hoàn/mã trả hàng để đối soát",
+                })
+                continue
+            # A return can have a partial quantity distinct from the original
+            # sale. It is a negative demand event, not a rejected order row.
+            quantity_input = raw_return_qty or raw_qty
+            qty_val = validate_strict_qty(quantity_input) if quantity_input else (
+                1 if qty_idx is None and not is_return_event else None
+            )
             if qty_val is None:
                 rows_rejected_count += 1
                 rejected_rows_log.append({
                     "line_number": idx,
                     "raw_content": line[:150],
-                    "reason": f"Số lượng không hợp lệ hoặc <= 0 ('{raw_qty or 'NULL'}')"
+                    "reason": f"Số lượng không hợp lệ hoặc <= 0 ('{quantity_input or 'NULL'}')"
                 })
                 continue
 
             # --- IR-010 Rule 4: Revenue / Price & Cost check ---
             price_val = parse_decimal(raw_price)
             cost_val = parse_decimal(raw_cost)
-            if price_val <= 0 and cost_val <= 0:
+            if not is_return_event and price_val <= 0 and cost_val <= 0:
                 rows_rejected_count += 1
                 rejected_rows_log.append({
                     "line_number": idx,
@@ -528,10 +602,42 @@ class DynamicFileImportService:
             # offset so fallback keys remain stable and unique across batches.
             source_line_number = source_line_offset + idx
             order_id_val = get_col(order_id_idx) or f"AUTO-{session_id or import_time}-{source_line_number}"
-            buyer_val = get_col(buyer_idx) or "shopee_buyer"
+            buyer_val = get_col(buyer_idx) or "sales_buyer"
             exp_date_val = parse_date(get_col(expiry_idx))
+            status_val = (get_col(status_idx) or 'UNKNOWN').upper().strip()
+            not_accounting = parse_bool(get_col(accounting_idx))
+            warehouse_code = get_col(warehouse_idx) or None
+            # Generic CSV imports cannot prove order fulfillment semantics.
+            # Only a source explicitly carrying every required field is
+            # eligible for the temporal demand-model contract.
+            demand_eligibility_verified = all(
+                index is not None for index in (status_idx, return_idx, accounting_idx)
+            )
 
             incoming_dates.append(date_val)
+
+            if is_return_event:
+                event_key = hashlib.sha256(
+                    '|'.join([
+                        'csv-return-v1', str(workspace_id or ''), str(session_id or 'UNVERSIONED'),
+                        str(source_line_number), order_id_val, sku_val, return_identifier,
+                        date_val.isoformat(), str(qty_val),
+                    ]).encode('utf-8')
+                ).hexdigest()
+                return_rows.append({
+                    'canonical_sku': sku_val,
+                    'platform': 'sales_import',
+                    'warehouse_code': warehouse_code or '',
+                    'original_order_id': order_id_val,
+                    'external_return_id': return_identifier,
+                    'quantity': Decimal(qty_val),
+                    'occurred_at': date_val,
+                    'source_event_key': event_key,
+                    'source_line_number': source_line_number,
+                })
+                # Return facts must not change the product stock or turn into
+                # a sale line. Verified inventory snapshots remain separate.
+                continue
 
             # Business Natural Key for Order line item: (order_id, sku)
             natural_key = (order_id_val, sku_val)
@@ -593,7 +699,11 @@ class DynamicFileImportService:
                     updated_rows_count += 1
 
                     # Sync product catalog price/cost if updated
-                    existing_p = Product.objects.filter(user_id=user_id, item_sku=sku_val).first()
+                    existing_p = Product.objects.filter(
+                        user_id=user_id,
+                        workspace_id=workspace_id,
+                        item_sku=sku_val,
+                    ).first()
                     if existing_p:
                         if price_val > 0: existing_p.price = price_val
                         if cost_val > 0: existing_p.cost = cost_val
@@ -628,7 +738,8 @@ class DynamicFileImportService:
                     'order_count': 0,
                     'min_date': date_val,
                     'max_date': date_val,
-                    'expiration_date': exp_date_val.date() if exp_date_val else None
+                    'expiration_date': exp_date_val.date() if exp_date_val else None,
+                    'inventory_evidence': None,
                 }
             cat = sku_catalog[sku_val]
             cat['total_qty'] += qty_val
@@ -640,6 +751,61 @@ class DynamicFileImportService:
             if price_val > 0: cat['price'] = price_val
             if cost_val > 0: cat['cost'] = cost_val
 
+            inventory_evidence_columns_present = any(
+                index is not None
+                for index in (inventory_as_of_idx, inventory_snapshot_id_idx, lifecycle_idx)
+            )
+            if inventory_evidence_columns_present:
+                inventory_as_of = parse_date(raw_inventory_as_of)
+                lifecycle_status = str(raw_lifecycle_status or '').strip().upper()
+                warehouse_for_snapshot = str(warehouse_code or '').strip()
+                snapshot_is_complete = (
+                    inventory_as_of is not None
+                    and bool(raw_inventory_snapshot_id)
+                    and bool(warehouse_for_snapshot)
+                    and lifecycle_status in {'ACTIVE', 'DISCONTINUED', 'ARCHIVED', 'INACTIVE'}
+                    and stock_val is not None
+                    and stock_val >= 0
+                    and cost_val > 0
+                )
+                if not snapshot_is_complete:
+                    # Sales remain usable; only the optional capital claim is
+                    # withheld. Count an incomplete SKU once, not per row.
+                    if sku_val not in inventory_evidence_incomplete_skus:
+                        inventory_evidence_incomplete_skus.add(sku_val)
+                        warnings_count += 1
+                elif sku_val not in inventory_evidence_conflict_skus:
+                    candidate_evidence = {
+                        'record_date': inventory_as_of.date(),
+                        'snapshot_id': str(raw_inventory_snapshot_id).strip()[:128],
+                        'warehouse_code': warehouse_for_snapshot[:128],
+                        'lifecycle_status': lifecycle_status,
+                        'available_quantity': Decimal(stock_val),
+                        'cost_price': cost_val,
+                        'selling_price': price_val,
+                    }
+                    existing_evidence = cat.get('inventory_evidence')
+                    if (
+                        existing_evidence
+                        and existing_evidence['record_date'] == candidate_evidence['record_date']
+                        and existing_evidence['snapshot_id'] == candidate_evidence['snapshot_id']
+                        and (
+                            existing_evidence['warehouse_code'] != candidate_evidence['warehouse_code']
+                            or existing_evidence['available_quantity'] != candidate_evidence['available_quantity']
+                            or existing_evidence['cost_price'] != candidate_evidence['cost_price']
+                        )
+                    ):
+                        # Do not choose arbitrarily between contradictory rows
+                        # that claim to describe one source snapshot.
+                        cat['inventory_evidence'] = None
+                        inventory_evidence_conflict_skus.add(sku_val)
+                        warnings_count += 1
+                    elif (
+                        not existing_evidence
+                        or candidate_evidence['record_date'] >= existing_evidence['record_date']
+                    ):
+                        cat['inventory_evidence'] = candidate_evidence
+
             order_rows.append({
                 'order_id': order_id_val,
                 'sku': sku_val,
@@ -648,14 +814,19 @@ class DynamicFileImportService:
                 'price': price_val,
                 'cost': cost_val,
                 'date': date_val,
-                'buyer': buyer_val
+                'buyer': buyer_val,
+                'status': status_val,
+                'return_identifier': return_identifier,
+                'is_accounting': not bool(not_accounting),
+                'warehouse_code': warehouse_code,
+                'demand_eligibility_verified': demand_eligibility_verified,
             })
 
         # A replacement must never erase a usable operational dataset for an
         # invalid or header-only file. Archive and reset only after strict row
         # validation has produced at least one canonical order item.
         if should_replace_dataset:
-            if not order_rows:
+            if not order_rows and not return_rows:
                 raise ValueError('Không có dòng dữ liệu hợp lệ để thay thế bộ dữ liệu hiện tại.')
             if existing_orders_count or existing_products_count:
                 DynamicFileImportService.clear_data(
@@ -695,14 +866,6 @@ class DynamicFileImportService:
                 overlap_end = min(inc_end_d, e_end_d)
 
         # --- Stage 7: Persist (Atomic Append or Merge + Lineage Metadata IR-017) ---
-        session_obj = None
-        if session_id:
-            try:
-                from supplyforge.models import IngestionSession
-                session_obj = IngestionSession.objects.filter(id=session_id).first()
-            except Exception:
-                session_obj = None
-
         import_id_str = (
             session_obj.ingestion_id if (session_obj and session_obj.ingestion_id)
             else (f"IMP-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}")
@@ -716,6 +879,7 @@ class DynamicFileImportService:
         base_lineage_meta = {
             "import_id": import_id_str,
             "session_id": str(session_id) if session_id else None,
+            "workspace_id": workspace_id,
             "file": file_name_str,
             "merchant": str(user_id),
             "uploaded": uploaded_at_str,
@@ -726,6 +890,7 @@ class DynamicFileImportService:
             p.item_sku: p
             for p in Product.objects.filter(
                 user_id=user_id,
+                workspace_id=workspace_id,
                 item_sku__in=list(sku_catalog),
             )
         }
@@ -744,6 +909,8 @@ class DynamicFileImportService:
                 if cat['cost'] > 0: existing_p.cost = cat['cost']
                 if calculated_stock > 0: existing_p.stock = (existing_p.stock or 0) + calculated_stock
                 existing_p.updated_at = timezone.now()
+                if not existing_p.canonical_sku:
+                    existing_p.canonical_sku = sku_val
 
                 p_data = existing_p.data or {}
                 hist = p_data.get("import_history", [])
@@ -761,8 +928,10 @@ class DynamicFileImportService:
                 p = Product(
                     id=prod_id,
                     user_id=user_id,
+                    workspace_id=workspace_id,
                     product_name=cat['product_name'],
                     item_sku=sku_val,
+                    canonical_sku=sku_val,
                     price=cat['price'],
                     cost=cat['cost'],
                     stock=calculated_stock,
@@ -778,7 +947,106 @@ class DynamicFileImportService:
         if products_to_create:
             Product.objects.bulk_create(products_to_create, batch_size=2000)
         if products_to_update:
-            Product.objects.bulk_update(products_to_update, ['price', 'cost', 'stock', 'updated_at', 'data'], batch_size=2000)
+            Product.objects.bulk_update(products_to_update, ['price', 'cost', 'stock', 'canonical_sku', 'updated_at', 'data'], batch_size=2000)
+
+        # A CSV can support capital decisions only when it provides an
+        # explicit as-of snapshot. Persist it before the assessment hook so
+        # the decision generator never infers stock from sales transactions.
+        inventory_snapshots_created = 0
+        snapshot_workspace_id = session_obj.workspace_id if session_obj else workspace_id
+        inventory_evidence_by_sku = {
+            sku: cat['inventory_evidence']
+            for sku, cat in sku_catalog.items()
+            if cat.get('inventory_evidence')
+        }
+        if snapshot_workspace_id and inventory_evidence_by_sku:
+            sku_objects = {
+                item.normalized_name: item
+                for item in Sku.objects.filter(
+                    workspace_id=snapshot_workspace_id,
+                    normalized_name__in=list(inventory_evidence_by_sku),
+                )
+            }
+            missing_sku_objects = [
+                Sku(
+                    workspace_id=snapshot_workspace_id,
+                    original_name=sku_catalog[sku]['product_name'][:2000],
+                    normalized_name=sku,
+                )
+                for sku in inventory_evidence_by_sku
+                if sku not in sku_objects
+            ]
+            if missing_sku_objects:
+                Sku.objects.bulk_create(missing_sku_objects, batch_size=2_000)
+                sku_objects = {
+                    item.normalized_name: item
+                    for item in Sku.objects.filter(
+                        workspace_id=snapshot_workspace_id,
+                        normalized_name__in=list(inventory_evidence_by_sku),
+                    )
+                }
+
+            for sku, evidence in inventory_evidence_by_sku.items():
+                sku_object = sku_objects[sku]
+                observed_at = timezone.make_aware(
+                    datetime.combine(evidence['record_date'], datetime.min.time())
+                )
+                source_lineage = {
+                    'source_type': 'CSV_EXPLICIT_INVENTORY_SNAPSHOT',
+                    'import_id': import_id_str,
+                    'session_id': str(session_id) if session_id else None,
+                    'file': file_name_str,
+                    'merchant': str(user_id),
+                    'source_snapshot_id': evidence['snapshot_id'],
+                    'as_of_date': evidence['record_date'].isoformat(),
+                    'warehouse_code': evidence['warehouse_code'],
+                }
+                source_checksum = hashlib.sha256(
+                    json.dumps(
+                        {
+                            **source_lineage,
+                            'sku': sku,
+                            'available_quantity': str(evidence['available_quantity']),
+                            'cost_price': str(evidence['cost_price']),
+                            'selling_price': str(evidence['selling_price']),
+                            'lifecycle_status': evidence['lifecycle_status'],
+                        },
+                        sort_keys=True,
+                        separators=(',', ':'),
+                    ).encode('utf-8')
+                ).hexdigest()
+                values = {
+                    'quantity': evidence['available_quantity'],
+                    'cost_price': evidence['cost_price'],
+                    'selling_price': evidence['selling_price'],
+                    'available_quantity': evidence['available_quantity'],
+                    'reserved_quantity': Decimal('0'),
+                    'lifecycle_status': evidence['lifecycle_status'],
+                    'as_of_verified': True,
+                    'source_snapshot_id': evidence['snapshot_id'],
+                    'source_observed_at': observed_at,
+                    'source_checksum': source_checksum,
+                    'source_lineage_json': source_lineage,
+                }
+                record = InventoryRecord.objects.filter(
+                    sku=sku_object,
+                    canonical_sku=sku,
+                    warehouse_code=evidence['warehouse_code'],
+                    record_date=evidence['record_date'],
+                ).order_by('-updated_at', '-id').first()
+                if record:
+                    for field, value in values.items():
+                        setattr(record, field, value)
+                    record.save(update_fields=[*values, 'updated_at'])
+                else:
+                    InventoryRecord.objects.create(
+                        sku=sku_object,
+                        canonical_sku=sku,
+                        warehouse_code=evidence['warehouse_code'],
+                        record_date=evidence['record_date'],
+                        **values,
+                    )
+                    inventory_snapshots_created += 1
 
         orders_to_create = []
         orders_to_update = []
@@ -816,11 +1084,18 @@ class DynamicFileImportService:
                 o = Order(
                     id=o_pk,
                     user_id=user_id,
+                    workspace_id=workspace_id,
                     order_id=oid,
-                    platform='shopee',
+                    platform='sales_import',
                     amount=total_amount,
                     buyer_user_name=first_item['buyer'],
                     cancelled_after_packaged=False,
+                    status=first_item['status'],
+                    return_identifier=first_item['return_identifier'],
+                    is_accounting=first_item['is_accounting'],
+                    warehouse_code=first_item['warehouse_code'],
+                    source_event_at=first_item['date'],
+                    demand_eligibility_verified=first_item['demand_eligibility_verified'],
                     created_at=first_item['date'],
                     updated_at=timezone.now(),
                     data=o_data
@@ -832,6 +1107,7 @@ class DynamicFileImportService:
                 item_obj = OrderItem(
                     order=o,
                     sku=it['sku'],
+                    canonical_sku=it['sku'],
                     product_name=it['product_name'],
                     price=it['price'],
                     cost=it['cost'],
@@ -845,6 +1121,28 @@ class DynamicFileImportService:
             Order.objects.bulk_update(orders_to_update, ['amount', 'updated_at', 'data'], batch_size=2000)
         if items_to_create:
             OrderItem.objects.bulk_create(items_to_create, batch_size=2000)
+        if return_rows:
+            DemandReturnEvent.objects.bulk_create([
+                DemandReturnEvent(
+                    workspace_id=workspace_id,
+                    ingestion_session=session_obj,
+                    canonical_sku=row['canonical_sku'],
+                    platform=row['platform'],
+                    warehouse_code=row['warehouse_code'],
+                    original_order_id=row['original_order_id'],
+                    external_return_id=row['external_return_id'],
+                    quantity=row['quantity'],
+                    occurred_at=row['occurred_at'],
+                    source_event_key=row['source_event_key'],
+                    source_lineage_json={
+                        **base_lineage_meta,
+                        'record_type': 'demand_return',
+                        'record_id': row['external_return_id'],
+                        'source_line_number': row['source_line_number'],
+                    },
+                )
+                for row in return_rows
+            ], batch_size=2_000, ignore_conflicts=True)
 
         # Derived artifacts and expensive analytics run once after the final
         # bounded batch, not once per chunk.
@@ -861,6 +1159,7 @@ class DynamicFileImportService:
                         "total_products_created": len(products_to_create),
                         "total_orders_created": len(orders_to_create),
                         "total_order_items": len(items_to_create),
+                        "total_return_events_received": len(return_rows),
                         "duplicate_rows": duplicate_rows_count,
                         "updated_rows": updated_rows_count,
                         "rejected_rows": rows_rejected_count
@@ -891,6 +1190,7 @@ class DynamicFileImportService:
                     "duplicate_rows": duplicate_rows_count,
                     "updated_rows": updated_rows_count,
                     "new_rows": len(items_to_create),
+                    "return_events_received": len(return_rows),
                     "data_corrections": data_corrections_log,
                     "rejected_rows": rejected_rows_log
                 }
@@ -977,6 +1277,7 @@ class DynamicFileImportService:
             "temporal_range": temporal_range,
             "rows_received": rows_received,
             "new_rows": new_rows_count,
+            "return_events_received": len(return_rows),
             "rows_valid": rows_valid_count,
             "rows_rejected": rows_rejected_count,
             "rejected_rows": rejected_rows_log,
@@ -986,9 +1287,16 @@ class DynamicFileImportService:
             "data_corrections": data_corrections_log,
             "dataset_consistency": consistency_report,
             "warnings": warnings_count,
-            "products_count": Product.objects.filter(user_id=user_id).count(),
-            "orders_count": Order.objects.filter(user_id=user_id).count(),
-            "order_items_count": OrderItem.objects.filter(order__user_id=user_id).count()
+            "inventory_snapshots_created": inventory_snapshots_created,
+            "inventory_snapshot_incomplete_skus": len(
+                inventory_evidence_incomplete_skus | inventory_evidence_conflict_skus
+            ),
+            "products_count": Product.objects.filter(user_id=user_id, workspace_id=workspace_id).count(),
+            "orders_count": Order.objects.filter(user_id=user_id, workspace_id=workspace_id).count(),
+            "order_items_count": OrderItem.objects.filter(
+                order__user_id=user_id,
+                order__workspace_id=workspace_id,
+            ).count()
         }
 
     @staticmethod
@@ -1001,9 +1309,14 @@ class DynamicFileImportService:
         replacement must never remove prior training snapshots or other tenants.
         """
         user_key = str(user_id)
-        active_products = Product.objects.filter(user_id=user_key)
-        active_orders = Order.objects.filter(user_id=user_key)
-        active_order_items = OrderItem.objects.filter(order__user_id=user_key)
+        product_filters = {'user_id': user_key}
+        order_filters = {'user_id': user_key}
+        if workspace_id is not None:
+            product_filters['workspace_id'] = workspace_id
+            order_filters['workspace_id'] = workspace_id
+        active_products = Product.objects.filter(**product_filters)
+        active_orders = Order.objects.filter(**order_filters)
+        active_order_items = OrderItem.objects.filter(order__in=active_orders)
         product_count = active_products.count()
         order_count = active_orders.count()
         item_count = active_order_items.count()
@@ -1047,10 +1360,21 @@ class DynamicFileImportService:
                 },
             )
 
-        # Operational facts are scoped by the authenticated user, never globally.
-        OrderItem.objects.filter(order__user_id=user_key).delete()
-        Order.objects.filter(user_id=user_key).delete()
-        Product.objects.filter(user_id=user_key).delete()
+        # Operational facts are scoped by workspace. The source-system user id
+        # is not a tenant key and can legitimately own more than one business.
+        active_order_items.delete()
+        active_orders.delete()
+        active_products.delete()
+        if workspace_id:
+            DemandReturnEvent.objects.filter(workspace_id=workspace_id).delete()
+
+        # CSV inventory snapshots belong to the replaced source. Retain ERP
+        # evidence because it has an independent sync lifecycle.
+        if workspace_id:
+            InventoryRecord.objects.filter(
+                sku__workspace_id=workspace_id,
+                source_lineage_json__source_type='CSV_EXPLICIT_INVENTORY_SNAPSHOT',
+            ).delete()
 
         # Derived records are invalid after a replacement. Keep the immutable
         # ingestion history, but retire its active projection so the same file
@@ -1061,6 +1385,7 @@ class DynamicFileImportService:
                 DatasetVersion,
                 RiskExplanationRecord,
                 RiskMonitoringRun,
+                SlowMovingAssessmentRun,
                 SlowMovingRiskAssessment,
             )
             from supplyforge.services.cache_policy import CachePolicy
@@ -1083,6 +1408,14 @@ class DynamicFileImportService:
                 status=DatasetVersion.STATUS_SUPERSEDED,
                 superseded_at=timezone.now(),
             )
+            # The projection rows are deleted above, so an older run cannot
+            # remain selectable as the current merchant result while a
+            # replacement CSV is being imported.
+            SlowMovingAssessmentRun.objects.filter(
+                workspace_id=workspace_id,
+                dataset_version__ingestion_session__in=previous_sessions,
+                is_current=True,
+            ).update(is_current=False)
 
             # Retain the session and source lineage for audit/training, while
             # removing it from the idempotency window for a deliberate reload.
@@ -1190,11 +1523,13 @@ class DynamicFileImportService:
                 for field in (
                     'rows_received', 'new_rows', 'rows_valid', 'rows_rejected',
                     'rows_appended', 'duplicate_rows', 'updated_rows', 'warnings',
+                    'inventory_snapshots_created', 'inventory_snapshot_incomplete_skus',
                 ):
                     total[field] = 0
             for field in (
                 'rows_received', 'new_rows', 'rows_valid', 'rows_rejected',
                 'rows_appended', 'duplicate_rows', 'updated_rows', 'warnings',
+                'inventory_snapshots_created', 'inventory_snapshot_incomplete_skus',
             ):
                 total[field] += int(result.get(field) or 0)
             append_limited(total['data_corrections'], result.get('data_corrections') or [])

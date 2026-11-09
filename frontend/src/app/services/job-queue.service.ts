@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, interval, of } from 'rxjs';
-import { switchMap, takeWhile, catchError } from 'rxjs/operators';
+import { Observable, interval } from 'rxjs';
+import { switchMap, takeWhile } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
 export interface StageStatus {
@@ -49,12 +49,7 @@ export class JobQueueService {
 
   getJobsList(activeOnly: boolean = false): Observable<{ jobs: BackgroundJobDto[] }> {
     const suffix = activeOnly ? '?active_only=true' : '';
-    return this.http.get<{ jobs: BackgroundJobDto[] }>(`${this.apiUrl}/api/v2/jobs/${suffix}`).pipe(
-      catchError(err => {
-        console.error('Error fetching jobs:', err);
-        return of({ jobs: [] });
-      })
-    );
+    return this.http.get<{ jobs: BackgroundJobDto[] }>(`${this.apiUrl}/api/v2/jobs/${suffix}`);
   }
 
   getJobStatus(jobId: string): Observable<BackgroundJobDto> {

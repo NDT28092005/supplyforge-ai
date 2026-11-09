@@ -163,7 +163,12 @@ class DashboardQueryService:
             )
             for record in records:
                 evidence = record.evidence if isinstance(record.evidence, dict) else {}
-                capital = cls._as_non_negative_float(evidence.get('capital_exposure_vnd'))
+                readiness = evidence.get('inventory_readiness') or {}
+                capital = (
+                    cls._as_non_negative_float(evidence.get('capital_exposure_vnd'))
+                    if readiness.get('status') == 'READY'
+                    else 0.0
+                )
                 top_risk_skus.append({
                     'sku': record.sku,
                     'name': record.product_name,
@@ -448,18 +453,16 @@ class DashboardQueryService:
 
         for a in all_assessments:
             ev = a.evidence if isinstance(a.evidence, dict) else {}
-            stock_qty = ev.get('stock_quantity')
-            unit_cost = ev.get('unit_cost')
             real_cap = ev.get('capital_exposure_vnd')
+            readiness = ev.get('inventory_readiness') or {}
+            # Legacy rows without an explicit readiness result do not prove
+            # inventory evidence. Treat them as unavailable rather than
+            # recreating capital from historic Product.stock values.
+            inventory_ready = readiness.get('status') == 'READY'
 
-            if real_cap is not None and real_cap > 0:
+            if inventory_ready and real_cap is not None and real_cap > 0:
                 cap_val = float(real_cap)
                 has_observed_inventory = True
-            elif stock_qty is not None and unit_cost is not None and stock_qty > 0 and unit_cost > 0:
-                cap_val = float(stock_qty * unit_cost)
-                has_observed_inventory = True
-            elif ev.get('sold_90d'):
-                cap_val = float(ev['sold_90d'] * 150000)
             else:
                 cap_val = 0.0
 
@@ -474,12 +477,19 @@ class DashboardQueryService:
 
         # 2. Extract Top 5 priority SKUs separately (highest capital exposure among CRITICAL/HIGH risk SKUs)
         assessments_list = list(all_assessments)
+        def observed_capital(item) -> float:
+            evidence = item.evidence if isinstance(item.evidence, dict) else {}
+            readiness = evidence.get('inventory_readiness') or {}
+            if readiness.get('status') != 'READY':
+                return 0.0
+            return cls._as_non_negative_float(evidence.get('capital_exposure_vnd'))
+
         assessments_list.sort(
             key=lambda item: (
-                float(item.evidence.get('capital_exposure_vnd', 0) if isinstance(item.evidence, dict) else 0),
+                observed_capital(item),
                 1 if item.risk_class == 'CRITICAL' else (0.5 if item.risk_class == 'HIGH_RISK' else 0)
             ),
-            reverse=True
+            reverse=True,
         )
         top_risk_skus = []
         for a in (
@@ -489,7 +499,12 @@ class DashboardQueryService:
             if len(top_risk_skus) == 5:
                 break
             ev = a.evidence if isinstance(a.evidence, dict) else {}
-            cap_val = float(ev.get('capital_exposure_vnd') or 0.0)
+            readiness = ev.get('inventory_readiness') or {}
+            cap_val = (
+                float(ev.get('capital_exposure_vnd') or 0.0)
+                if readiness.get('status') == 'READY'
+                else 0.0
+            )
             top_risk_skus.append({
                 'sku': a.sku,
                 'name': a.product_name,
@@ -500,7 +515,7 @@ class DashboardQueryService:
             })
 
         # Determine capital status (STRICT DATA INTEGRITY — No fake fallbacks)
-        capital_status = 'OBSERVED' if has_observed_inventory else 'ESTIMATED'
+        capital_status = 'OBSERVED' if has_observed_inventory else 'INVENTORY_INCOMPLETE'
 
         return {
             'hasData': True,

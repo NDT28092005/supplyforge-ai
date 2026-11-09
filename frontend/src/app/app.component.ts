@@ -5,8 +5,8 @@ import { Router, RouterModule } from '@angular/router';
 
 import { HeaderComponent } from './header/header.component';
 import { SidebarComponent } from './sidebar/sidebar.component';
-import { LoginModalComponent } from './login-modal/login-modal.component';
 import { CopilotWidgetComponent } from './copilot-widget/copilot-widget.component';
+import { LoginModalComponent } from './login-modal/login-modal.component';
 
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
@@ -22,8 +22,8 @@ import { DashboardStateService } from './core/state/dashboard-state.service';
     RouterModule,
     HeaderComponent,
     SidebarComponent,
+    CopilotWidgetComponent,
     LoginModalComponent,
-    CopilotWidgetComponent
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
@@ -59,52 +59,13 @@ export class AppComponent implements OnInit {
     } catch {
       // The application remains usable when browser storage is unavailable.
     }
-    console.info('[Auth Debug] Khởi động ứng dụng với Router. URL:', window.location.href);
-
-    const tokenMatch = window.location.href.match(/[?&]token=([^&]+)/);
-    const refreshTokenMatch = window.location.href.match(/[?&]refresh_token=([^&]+)/);
-    const urlToken = tokenMatch ? tokenMatch[1] : null;
-    const urlRefreshToken = refreshTokenMatch ? refreshTokenMatch[1] : null;
-    if (urlToken) {
-      console.info('[Auth Debug] Phát hiện token trên URL. Tiến hành lưu trữ...');
-      this.authService.setSession(urlToken, urlRefreshToken || undefined);
-    }
-
-    const requiresPhoneMatch = window.location.href.match(/[?&]requires_phone=true/);
-    if (requiresPhoneMatch) {
-      console.info('[Auth Debug] Tài khoản Google mới, yêu cầu điền số điện thoại...');
-      const tempUserIdMatch = window.location.href.match(/[?&]tempUserId=([^&]+)/);
-      const emailMatch = window.location.href.match(/[?&]email=([^&]+)/);
-      const nameMatch = window.location.href.match(/[?&]name=([^&]+)/);
-      const pictureMatch = window.location.href.match(/[?&]picture=([^&]+)/);
-
-      this.tempPhoneUser = {
-        tempUserId: tempUserIdMatch ? tempUserIdMatch[1] : '',
-        email: emailMatch ? decodeURIComponent(emailMatch[1]) : '',
-        name: nameMatch ? decodeURIComponent(nameMatch[1]) : 'User',
-        picture: pictureMatch ? decodeURIComponent(pictureMatch[1]) : ''
-      };
-      this.requiresPhone = true;
-    }
-
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('auth_success') || urlParams.has('error') || urlParams.has('token') || urlParams.has('requires_phone')) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
-    this.authService.loadUserFromToken();
     // Dashboard cache is tenant-specific. Never trust a browser session cache
     // before the API confirms that it belongs to the authenticated workspace.
     this.dashboardState.reset();
-
-    // Check if database already has imported data
-    this.apiService.checkData().subscribe({
-      next: (res) => {
-        if (res && res.hasData && !this.ingestionState.isDatasetTransitionActive) {
-          this.dashboardState.setHasData(true);
-        }
-      },
-      error: (err) => console.log('Check data error:', err)
+    this.authService.restoreSession().subscribe({
+      next: (user) => {
+        if (user) this.loadWorkspaceDataState();
+      }
     });
   }
 
@@ -249,27 +210,9 @@ export class AppComponent implements OnInit {
   }
 
   performLogout(): void {
-    this.authService.clearToken();
-    this.dashboardState.reset();
-    this.ingestionState.reset();
-    this.router.navigate(['/']);
-  }
-
-  performDemoLogin(): void {
-    this.apiService.loginUser('demo@supplyforge.ai', 'demo123').subscribe({
-      next: (res: any) => {
-        const token = res?.access_token || res?.token;
-        if (token) {
-          this.authService.setSession(token, res.refresh_token);
-          this.router.navigate(['/app/dashboard']);
-        }
-      },
-      error: (err) => {
-        console.error('Demo login error:', err);
-        // Fallback for offline demo
-        this.authService.setToken('demo_token_fallback');
-        this.router.navigate(['/app/dashboard']);
-      }
+    this.apiService.logoutUser().subscribe({
+      complete: () => this.finishLogout(),
+      error: () => this.finishLogout(),
     });
   }
 
@@ -287,7 +230,7 @@ export class AppComponent implements OnInit {
         this.requiresPhone = false;
         const token = res?.access_token || res?.token;
         if (token) {
-          this.authService.setSession(token, res.refresh_token);
+          this.authService.setSession(token, res.user);
           this.router.navigate(['/app/dashboard']);
         }
       },
@@ -296,5 +239,22 @@ export class AppComponent implements OnInit {
         this.phoneError = err.error?.error || 'Không thể cập nhật số điện thoại. Vui lòng thử lại.';
       }
     });
+  }
+
+  private loadWorkspaceDataState(): void {
+    this.apiService.checkData().subscribe({
+      next: (res) => {
+        if (res?.hasData && !this.ingestionState.isDatasetTransitionActive) {
+          this.dashboardState.setHasData(true);
+        }
+      },
+    });
+  }
+
+  private finishLogout(): void {
+    this.authService.clearToken();
+    this.dashboardState.reset();
+    this.ingestionState.reset();
+    this.router.navigate(['/']);
   }
 }

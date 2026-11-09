@@ -1,0 +1,79 @@
+{
+  "schema_version": "temporal-demand-ground-truth-v2",
+  "status": "CANDIDATE_PENDING_REVALIDATION",
+  "task": "future_fulfilled_demand_risk",
+  "source_scope": "orders_full operational source only; not Online Retail",
+  "decision_protocol": {
+    "horizon_days": 60,
+    "horizon_sensitivity_days": [30, 60, 90],
+    "horizon_sensitivity_threshold_policy": "Use the same predeclared 0/5/25 absolute-demand thresholds; exclude only cutoff-horizon pairs without a complete future window.",
+    "observation_boundary": "Only fulfilled demand events at or before the decision cutoff.",
+    "outcome_boundary": "Future fulfilled demand strictly after the decision cutoff through the next 60 days.",
+    "eligibility": "Historical fulfilled quantity must exceed 5 units.",
+    "selection_rule": "Thresholds are not changed using downstream model accuracy, calibration, SHAP, or held-out test performance."
+  },
+  "selected_strategy": {
+    "id": "absolute_future_demand",
+    "display_name": "Strategy A: Absolute Future Demand",
+    "risk_order": ["CRITICAL", "HIGH_RISK", "MEDIUM_RISK", "LOW_RISK"],
+    "thresholds": {
+      "critical_future_quantity": 0,
+      "high_risk_future_quantity_max": 5,
+      "medium_risk_future_quantity_max": 25
+    },
+    "labels": {
+      "CRITICAL": "future fulfilled quantity = 0 and historical fulfilled quantity > 5",
+      "HIGH_RISK": "future fulfilled quantity 1 to 5",
+      "MEDIUM_RISK": "future fulfilled quantity 6 to 25",
+      "LOW_RISK": "future fulfilled quantity > 25"
+    }
+  },
+  "threshold_sensitivity_policies": [
+    {
+      "id": "baseline_0_5_25",
+      "high_risk_future_quantity_max": 5,
+      "medium_risk_future_quantity_max": 25
+    },
+    {
+      "id": "alternative_0_3_20",
+      "high_risk_future_quantity_max": 3,
+      "medium_risk_future_quantity_max": 20
+    },
+    {
+      "id": "alternative_0_10_30",
+      "high_risk_future_quantity_max": 10,
+      "medium_risk_future_quantity_max": 30
+    },
+    {
+      "id": "alternative_0_5_20",
+      "high_risk_future_quantity_max": 5,
+      "medium_risk_future_quantity_max": 20
+    },
+    {
+      "id": "alternative_0_10_25",
+      "high_risk_future_quantity_max": 10,
+      "medium_risk_future_quantity_max": 25
+    }
+  ],
+  "alternative_strategy": {
+    "id": "demand_retention_ratio",
+    "display_name": "Strategy B: Demand Retention Ratio",
+    "role": "Robustness comparator only; never a downstream-model tuning target.",
+    "formula": "future_velocity / max(historical_lifetime_velocity, denominator_floor)",
+    "denominator_floor": 0.05,
+    "high_risk_drr_max": 0.25,
+    "medium_risk_drr_max": 0.75,
+    "critical_policy": "future fulfilled quantity = 0 and historical fulfilled quantity > 5"
+  },
+  "validation_outputs": {
+    "compare_by": "rolling decision cutoff and temporal split",
+    "metrics": [
+      "class_distribution",
+      "weighted_cohen_kappa",
+      "label_agreement",
+      "adjacent_transition_rate",
+      "cohens_d_discriminability"
+    ],
+    "interpretation_boundary": "This validates a proxy for future fulfilled-demand risk. Physical inventory, cost, age, lifecycle, markdown and action outcomes are required to validate actual inventory and capital risk."
+  }
+}

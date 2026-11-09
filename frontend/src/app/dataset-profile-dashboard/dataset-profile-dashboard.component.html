@@ -17,7 +17,7 @@
       </p>
     </header>
 
-    <div *ngIf="profileData" class="space-y-6 animate-fade-in">
+    <div *ngIf="hasProfileData; else profileUnavailable" class="space-y-6 animate-fade-in">
 
       <!-- 1. Readiness Banner -->
       <article
@@ -27,24 +27,23 @@
           <div class="space-y-2">
             <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Đánh giá chất lượng dữ liệu</span>
             <div class="flex items-center gap-3">
-              <span [class]="getStatusBadgeClass(profileData?.readiness?.status || 'READY')"
+              <span [class]="getStatusBadgeClass(readinessStatus || 'INSUFFICIENT_DATA')"
                 class="text-xs font-mono font-bold uppercase tracking-wider border px-3.5 py-1.5 rounded-full inline-block">
-                {{ (profileData?.readiness?.status || 'READY') === 'READY' ? 'ĐẠT YÊU CẦU' :
-                profileData?.readiness?.status }}
+                {{ readinessStatus === 'READY' ? 'ĐẠT YÊU CẦU' : (readinessStatus || 'CHƯA CÓ KẾT QUẢ') }}
               </span>
               <span class="text-xs text-slate-600 font-sans font-medium">Điểm đánh giá: <strong
-                  class="text-slate-900 font-bold text-base font-mono">{{ profileData?.readiness?.readinessScore || 90
-                  }} / 100</strong></span>
+                  class="text-slate-900 font-bold text-base font-mono">{{ displayValue(readinessScore) }}<span *ngIf="readinessScore !== null"> / 100</span></strong></span>
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <span
+            <span *ngIf="checksPassedCount !== null; else checksUnavailable"
               class="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-xl flex items-center gap-1.5">
               <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
               </svg>
-              <span>{{ profileData?.readiness?.checksPassed?.length || 3 }} tiêu chí kiểm tra Đạt</span>
+              <span>{{ checksPassedCount }} tiêu chí kiểm tra đạt</span>
             </span>
+            <ng-template #checksUnavailable><span class="text-xs font-medium text-slate-500">Chưa có chi tiết tiêu chí kiểm tra</span></ng-template>
           </div>
         </div>
 
@@ -266,20 +265,21 @@
         <!-- Time Coverage -->
         <article class="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-1 shadow-xs">
           <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Khoảng thời gian tích lũy</span>
-          <p class="text-2xl font-black text-slate-900 font-mono">{{ profileData?.overview?.observationPeriodDays || 30
-            }} <span class="text-xs font-normal">ngày</span></p>
+          <p class="text-2xl font-black text-slate-900 font-mono">{{ displayValue(profileData?.overview?.observationPeriodDays)
+            }} <span *ngIf="profileData?.overview?.observationPeriodDays !== null && profileData?.overview?.observationPeriodDays !== undefined" class="text-xs font-normal">ngày</span></p>
           <p class="text-xs text-emerald-700 font-medium truncate">
             {{ (profileData?.temporal_range?.existing_start || profileData?.temporal_range?.incoming_start ||
-            profileData?.overview?.minTransactionDate || 'N/A') }} → {{ (profileData?.temporal_range?.incoming_end ||
-            profileData?.overview?.maxTransactionDate || 'N/A') }}
+            profileData?.overview?.minTransactionDate || 'Chưa xác định') }} → {{ (profileData?.temporal_range?.incoming_end ||
+            profileData?.overview?.maxTransactionDate || 'Chưa xác định') }}
           </p>
+          <p class="text-[11px] text-slate-500 font-medium">Đây là khoảng quan sát doanh số, không phải tuổi tồn kho.</p>
         </article>
 
         <!-- Zero-Sales Sparsity -->
         <article class="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-1 shadow-xs">
           <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tỷ lệ ngày không bán được</span>
-          <p class="text-2xl font-black text-amber-600 font-mono">{{ profileData?.sparsity?.avgZeroSalesRatePct || 20.0
-            }}%</p>
+          <p class="text-2xl font-black text-amber-600 font-mono">{{ displayValue(profileData?.sparsity?.avgZeroSalesRatePct)
+            }}<span *ngIf="profileData?.sparsity?.avgZeroSalesRatePct !== null && profileData?.sparsity?.avgZeroSalesRatePct !== undefined">%</span></p>
           <p class="text-xs text-slate-500 font-medium">Trung bình trên toàn bộ SKU</p>
         </article>
       </div>
@@ -298,7 +298,7 @@
           <!-- Intermittent -->
           <div class="p-4 rounded-2xl bg-purple-50 border border-purple-100 space-y-1">
             <span class="text-purple-800 font-bold uppercase text-[11px]">Bán thưa thớt (Bán rất chậm)</span>
-            <p class="text-xl font-black text-purple-900 font-mono">{{ profileData?.sparsity?.intermittentSkuCount || 0
+            <p class="text-xl font-black text-purple-900 font-mono">{{ displayValue(profileData?.sparsity?.intermittentSkuCount)
               }} SKU</p>
             <p class="text-xs text-purple-700/80 font-medium">Trên 75% số ngày không có đơn phát sinh</p>
           </div>
@@ -306,7 +306,7 @@
           <!-- Lumpy -->
           <div class="p-4 rounded-2xl bg-amber-50 border border-amber-100 space-y-1">
             <span class="text-amber-800 font-bold uppercase text-[11px]">Bán không đều (Theo đợt)</span>
-            <p class="text-xl font-black text-amber-900 font-mono">{{ profileData?.sparsity?.lumpySkuCount || 0 }} SKU
+            <p class="text-xl font-black text-amber-900 font-mono">{{ displayValue(profileData?.sparsity?.lumpySkuCount) }} SKU
             </p>
             <p class="text-xs text-amber-700/80 font-medium">Từ 50% – 75% số ngày không có đơn</p>
           </div>
@@ -314,8 +314,7 @@
           <!-- Smooth -->
           <div class="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 space-y-1">
             <span class="text-emerald-800 font-bold uppercase text-[11px]">Bán đều đặn (Ổn định)</span>
-            <p class="text-xl font-black text-emerald-900 font-mono">{{ profileData?.sparsity?.smoothSkuCount ||
-              totalSkus || 0 }} SKU</p>
+            <p class="text-xl font-black text-emerald-900 font-mono">{{ displayValue(profileData?.sparsity?.smoothSkuCount) }} SKU</p>
             <p class="text-xs text-emerald-700/80 font-medium">Dưới 50% số ngày không có đơn phát sinh</p>
           </div>
         </div>
@@ -407,10 +406,10 @@
       <!-- Action Footer CTA -->
       <footer class="pt-4 flex items-center justify-between border-t border-slate-200">
         <span class="text-xs text-slate-600 font-medium flex items-center gap-1.5">
-          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-          Dữ liệu hoàn toàn sẵn sàng cho phân tích kho
+          <span class="w-2 h-2 rounded-full" [ngClass]="canProceedToAnalysis ? 'bg-emerald-500' : 'bg-amber-500'"></span>
+          {{ canProceedToAnalysis ? 'Dữ liệu đã được kiểm tra và có thể dùng để phân tích nhu cầu.' : 'Cần hoàn tất kiểm tra dữ liệu trước khi phân tích.' }}
         </span>
-        <button (click)="onProceed()" [disabled]="isProceeding"
+        <button (click)="onProceed()" [disabled]="isProceeding || !canProceedToAnalysis"
           class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-7 py-3 rounded-xl transition-all active:scale-95 flex items-center gap-2 cursor-pointer shadow-xs disabled:cursor-not-allowed disabled:opacity-60">
           <span *ngIf="!isProceeding">Chuyển sang trang Tổng quan kho hàng</span>
           <span *ngIf="isProceeding">Đang xây dựng đánh giá rủi ro...</span>
@@ -422,5 +421,12 @@
       </footer>
       <p *ngIf="analysisError" role="alert" class="mt-3 text-xs font-medium text-rose-700">{{ analysisError }}</p>
     </div>
+    <ng-template #profileUnavailable>
+      <article class="bg-white border border-slate-200/80 rounded-3xl p-8 text-center space-y-3 shadow-xs">
+        <h2 class="text-lg font-bold text-slate-900">Chưa có kết quả kiểm tra dữ liệu</h2>
+        <p class="text-sm text-slate-600">{{ loadingProfile ? 'Đang tải kết quả từ phiên nạp dữ liệu.' : (profileLoadError || 'Hãy chạy kiểm tra dữ liệu trước khi mở phân tích.') }}</p>
+        <button *ngIf="sessionId && !loadingProfile" (click)="loadProfile()" class="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold">Tải lại kết quả</button>
+      </article>
+    </ng-template>
   </section>
 </main>

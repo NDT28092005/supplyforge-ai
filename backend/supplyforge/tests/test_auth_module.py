@@ -1,6 +1,11 @@
 import json
 import datetime
+import hashlib
+from urllib.parse import parse_qs, urlsplit
+from unittest.mock import patch
 from django.test import TestCase, Client
+from django.conf import settings
+from django.core import signing
 from django.utils import timezone
 from django.contrib.auth.hashers import make_password
 from supplyforge.models import User, RefreshToken
@@ -118,7 +123,9 @@ class AuthModuleTestCase(TestCase):
         self.assertEqual(ver_resp.status_code, 200)
         data = ver_resp.json()
         self.assertIn("access_token", data)
-        self.assertIn("refresh_token", data)
+        self.assertNotIn("refresh_token", data)
+        self.assertIn(settings.AUTH_REFRESH_COOKIE_NAME, ver_resp.cookies)
+        self.assertTrue(ver_resp.cookies[settings.AUTH_REFRESH_COOKIE_NAME]['httponly'])
 
         # Check DB updated
         user = User.objects.get(email=self.valid_email)
@@ -156,8 +163,12 @@ class AuthModuleTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("access_token", data)
-        self.assertIn("refresh_token", data)
+        self.assertNotIn("refresh_token", data)
         self.assertEqual(data["user"]["email"], self.valid_email)
+        refresh_cookie = response.cookies[settings.AUTH_REFRESH_COOKIE_NAME]
+        self.assertTrue(refresh_cookie['httponly'])
+        self.assertEqual(refresh_cookie['samesite'], settings.AUTH_COOKIE_SAMESITE)
+        self.assertEqual(bool(refresh_cookie['secure']), settings.AUTH_COOKIE_SECURE)
 
         # Verify DB last_login_at updated
         user.refresh_from_db()
@@ -267,20 +278,39 @@ class AuthModuleTestCase(TestCase):
         )
         refresh_token = generate_refresh_token(user)
 
-        response = self.client.post(
-            '/api/v1/auth/refresh',
-            data=json.dumps({"refresh_token": refresh_token}),
-            content_type='application/json'
-        )
+        missing_cookie = self.client.post('/api/v1/auth/refresh')
+        self.assertEqual(missing_cookie.status_code, 401)
+
+        self.client.cookies[settings.AUTH_REFRESH_COOKIE_NAME] = refresh_token
+        response = self.client.post('/api/v1/auth/refresh')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("access_token", data)
-        self.assertIn("refresh_token", data)
+        self.assertNotIn("refresh_token", data)
+        self.assertIn(settings.AUTH_REFRESH_COOKIE_NAME, response.cookies)
+        self.assertTrue(response.cookies[settings.AUTH_REFRESH_COOKIE_NAME]['httponly'])
 
         # Old refresh token should now be revoked in DB
         old_hash = hashlib.sha256(refresh_token.encode('utf-8')).hexdigest()
         old_db_token = RefreshToken.objects.get(token=old_hash)
         self.assertTrue(old_db_token.is_revoked)
+
+    def test_cookie_session_endpoints_reject_untrusted_browser_origin(self):
+        user = User.objects.create(
+            email=self.valid_email,
+            password_hash=make_password(self.valid_password),
+            status=User.STATUS_ACTIVE,
+            is_email_verified=True,
+        )
+        refresh_token = generate_refresh_token(user)
+        self.client.cookies[settings.AUTH_REFRESH_COOKIE_NAME] = refresh_token
+
+        response = self.client.post('/api/v1/auth/refresh', HTTP_ORIGIN='https://attacker.invalid')
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()['code'], 'UNTRUSTED_ORIGIN')
+        token_hash = hashlib.sha256(refresh_token.encode('utf-8')).hexdigest()
+        self.assertFalse(RefreshToken.objects.get(token=token_hash).is_revoked)
 
     def test_logout_flow(self):
         import hashlib
@@ -292,22 +322,53 @@ class AuthModuleTestCase(TestCase):
         )
         refresh_token = generate_refresh_token(user)
 
-        response = self.client.post(
-            '/api/v1/auth/logout',
-            data=json.dumps({"refresh_token": refresh_token}),
-            content_type='application/json'
-        )
+        self.client.cookies[settings.AUTH_REFRESH_COOKIE_NAME] = refresh_token
+        response = self.client.post('/api/v1/auth/logout')
         self.assertEqual(response.status_code, 200)
+        self.assertIn(settings.AUTH_REFRESH_COOKIE_NAME, response.cookies)
+        self.assertEqual(response.cookies[settings.AUTH_REFRESH_COOKIE_NAME]['max-age'], 0)
 
         # Verify refresh token is revoked
         token_hash = hashlib.sha256(refresh_token.encode('utf-8')).hexdigest()
         db_token = RefreshToken.objects.get(token=token_hash)
         self.assertTrue(db_token.is_revoked)
 
-        # Submitting revoked refresh token should fail
-        ref_resp = self.client.post(
-            '/api/v1/auth/refresh',
-            data=json.dumps({"refresh_token": refresh_token}),
-            content_type='application/json'
-        )
+        # Refresh credentials supplied in a body are ignored after logout.
+        self.client.cookies.clear()
+        ref_resp = self.client.post('/api/v1/auth/refresh', data=json.dumps({"refresh_token": refresh_token}), content_type='application/json')
         self.assertEqual(ref_resp.status_code, 401)
+
+    @patch('supplyforge.views.auth.GOOGLE_REDIRECT_URI', '')
+    @patch('supplyforge.views.auth.GOOGLE_CLIENT_SECRET', 'google-secret')
+    @patch('supplyforge.views.auth.GOOGLE_CLIENT_ID', 'google-client-id')
+    @patch('supplyforge.views.auth.GOOGLE_OAUTH_ENABLED', True)
+    def test_google_oauth_start_uses_server_pkce_and_http_only_state(self):
+        response = self.client.get('/api/v1/auth/google/start')
+
+        self.assertEqual(response.status_code, 302)
+        query = parse_qs(urlsplit(response['Location']).query)
+        self.assertEqual(query['response_type'], ['code'])
+        self.assertEqual(query['code_challenge_method'], ['S256'])
+        self.assertIn('state', query)
+        self.assertIn('nonce', query)
+        cookie = response.cookies['sf_google_oauth']
+        self.assertTrue(cookie['httponly'])
+        flow = signing.loads(cookie.value, salt='supplyforge.google-oauth.pkce.v1')
+        self.assertEqual(flow['state'], query['state'][0])
+        self.assertEqual(flow['nonce'], query['nonce'][0])
+        self.assertIn('code_verifier', flow)
+
+    @patch('supplyforge.views.auth.GOOGLE_CLIENT_SECRET', 'google-secret')
+    @patch('supplyforge.views.auth.GOOGLE_CLIENT_ID', 'google-client-id')
+    @patch('supplyforge.views.auth.GOOGLE_OAUTH_ENABLED', True)
+    def test_google_callback_rejects_missing_or_mismatched_state_before_exchange(self):
+        missing = self.client.get('/api/v1/auth/google/callback?code=received-code')
+        self.assertEqual(missing.status_code, 302)
+        self.assertIn('google_auth_failed', missing['Location'])
+
+        self.client.cookies['sf_google_oauth'] = signing.dumps({
+            'state': 'expected-state', 'nonce': 'nonce', 'code_verifier': 'verifier',
+        }, salt='supplyforge.google-oauth.pkce.v1')
+        mismatch = self.client.get('/api/v1/auth/google/callback?code=received-code&state=wrong-state')
+        self.assertEqual(mismatch.status_code, 302)
+        self.assertIn('google_auth_state_invalid', mismatch['Location'])

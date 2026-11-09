@@ -9,7 +9,6 @@ class BackgroundJob(models.Model):
 
     JOB_TYPE_CHOICES = [
         ('CSV_IMPORT', 'CSV Import Pipeline'),
-        ('SHOPEE_SYNC', 'Shopee Data Sync'),
         ('ML_RETRAIN', 'Model Retraining'),
         ('FEATURE_REFRESH', 'Feature Store Refresh'),
         ('MODEL_EVALUATION', 'Model Offline Evaluation'),

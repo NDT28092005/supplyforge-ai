@@ -377,6 +377,7 @@ class MLOpsGovernanceTests(TestCase):
         Product.objects.create(
             id='product-own-000000000001',
             user_id=str(self.owner.id),
+            workspace=self.workspace,
             third_party_id='own-product',
             item_sku='SKU-OWN',
             product_name='Own product',
@@ -386,6 +387,7 @@ class MLOpsGovernanceTests(TestCase):
         Product.objects.create(
             id='product-other-0000000001',
             user_id=str(other_owner.id),
+            workspace=other_workspace,
             third_party_id='other-product',
             item_sku='SKU-OTHER',
             product_name='Other product',

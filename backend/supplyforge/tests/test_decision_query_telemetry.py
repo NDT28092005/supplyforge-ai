@@ -80,6 +80,7 @@ class DecisionTelemetryTest(TestCase):
             "unit_price": 100000.0,
             "unit_cost": 70000.0,
             "stock_on_hand": 50,
+            "demand_context": {"sales_velocity_30d": 1.0},
             "capital_context": {"capital_exposure": 3500000.0},
             "risk_context": {"risk_class": "CRITICAL"}
         }

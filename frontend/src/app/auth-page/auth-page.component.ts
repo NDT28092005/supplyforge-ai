@@ -64,6 +64,16 @@ export class AuthPageComponent implements OnInit {
     if (typeof requestedReturnUrl === 'string' && requestedReturnUrl.startsWith('/app/')) {
       this.returnUrl = requestedReturnUrl;
     }
+    if (this.route.snapshot.queryParams['auth_success'] === 'true') {
+      this.loading = true;
+      this.authService.restoreSession().subscribe({
+        next: (user) => {
+          this.loading = false;
+          if (user) this.router.navigateByUrl(this.returnUrl);
+          else this.errorMessage = 'Không thể khôi phục phiên đăng nhập an toàn.';
+        }
+      });
+    }
     if (this.route.snapshot.queryParams['reason'] === 'session_expired') {
       this.errorMessage = 'Phiên làm việc đã kết thúc. Vui lòng đăng nhập lại để tiếp tục thao tác.';
     }
@@ -104,7 +114,7 @@ export class AuthPageComponent implements OnInit {
         this.loading = false;
         const token = res.access_token || res.token;
         if (token) {
-          this.authService.setSession(token, res.refresh_token);
+          this.authService.setSession(token, res.user);
         }
         const userName = res.user?.name || res.user?.display_name || this.loginForm.email.split('@')[0];
         const userObj = {
@@ -201,7 +211,7 @@ export class AuthPageComponent implements OnInit {
         this.loading = false;
         const token = res.access_token || res.token;
         if (token) {
-          this.authService.setSession(token, res.refresh_token);
+          this.authService.setSession(token, res.user);
         }
 
         const userName = res.user?.name || res.user?.display_name || this.registerForm.fullName || this.registeredEmail.split('@')[0];
@@ -247,82 +257,12 @@ export class AuthPageComponent implements OnInit {
   }
 
   onDemoLogin(): void {
-    this.apiService.loginUser('demo@supplyforge.ai', 'demo123').subscribe({
-      next: (res: any) => {
-        const token = res.access_token || res.token;
-        if (token) {
-          this.authService.setSession(token, res.refresh_token);
-        }
-        this.demoLogin.emit();
-        this.router.navigate(['/app/dashboard']);
-      },
-      error: () => {
-        this.demoLogin.emit();
-        this.router.navigate(['/app/dashboard']);
-      }
-    });
+    this.errorMessage = 'Môi trường demo không khả dụng. Vui lòng đăng nhập bằng tài khoản được cấp.';
   }
 
   onGoogleLogin(): void {
-    const googleWin = window as any;
-    if (typeof googleWin !== 'undefined' && googleWin.google?.accounts?.id) {
-      googleWin.google.accounts.id.initialize({
-        client_id: '7581962747-uj20trqmtba57s3psahigngcopku3ub3.apps.googleusercontent.com',
-        callback: (response: any) => this.handleGoogleCredentialResponse(response)
-      });
-      googleWin.google.accounts.id.prompt((notification: any) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          this.triggerGoogleRedirectFallback();
-        }
-      });
-    } else {
-      this.triggerGoogleRedirectFallback();
-    }
-  }
-
-  private triggerGoogleRedirectFallback(): void {
-    const clientId = '7581962747-uj20trqmtba57s3psahigngcopku3ub3.apps.googleusercontent.com';
-    const redirectUri = `${this.apiService.getApiUrl()}/api/auth/google/callback`;
-    const scope = 'openid email profile';
-    const nonce = 'supplyforge_' + Date.now();
-
-    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-      `client_id=${encodeURIComponent(clientId)}&` +
-      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-      `response_type=id_token&` +
-      `scope=${encodeURIComponent(scope)}&` +
-      `nonce=${encodeURIComponent(nonce)}&` +
-      `response_mode=form_post&` +
-      `prompt=select_account`;
-
-    console.info(`[Google OAuth] Redirecting browser to Google OAuth: ${googleAuthUrl}`);
-    window.location.href = googleAuthUrl;
-  }
-
-  private handleGoogleCredentialResponse(response: any): void {
-    if (!response || !response.credential) return;
     this.loading = true;
-    this.apiService.completeGoogleLogin(response.credential).subscribe({
-      next: (res: any) => {
-        this.loading = false;
-        const token = res.access_token || res.token;
-        if (token) {
-          this.authService.setSession(token, res.refresh_token);
-        }
-        const userName = res.user?.name || res.user?.email?.split('@')[0] || 'Google User';
-        const userObj = {
-          name: userName,
-          email: res.user?.email
-        };
-        this.authService.setCurrentUser(userObj);
-        this.loginSuccess.emit(userObj);
-        this.router.navigate(['/app/dashboard']);
-      },
-      error: (err: any) => {
-        this.loading = false;
-        this.errorMessage = err.error?.error || 'Xác thực Google không thành công.';
-      }
-    });
+    window.location.assign(`${this.apiService.getApiUrl()}/api/v1/auth/google/start`);
   }
 
   onFacebookLogin(): void {

@@ -1,14 +1,14 @@
 <section sfPageMotion class="integration-page operations-page">
   <header data-motion="header" class="integration-hero operations-hero">
     <div>
-      <p class="eyebrow">KẾT NỐI DỮ LIỆU / ODOO</p>
-      <h1>Nguồn dữ liệu ERP</h1>
-      <p>Kết nối Odoo để đưa dữ liệu bán hàng và tồn kho vào SupplyForge. Hệ thống chỉ đọc dữ liệu, không thay đổi chứng từ trên Odoo.</p>
+      <p class="eyebrow">Dữ liệu vận hành</p>
+      <h1>Kết nối dữ liệu Odoo</h1>
+      <p>Đồng bộ dữ liệu bán hàng, tồn kho và giá vốn từ Odoo để tạo đề xuất xử lý tồn kho có bằng chứng. SupplyForge chỉ đọc dữ liệu, không thay đổi chứng từ ERP.</p>
     </div>
     <div class="hero-assurance">
       <span class="assurance-dot"></span>
       <span>Dữ liệu chỉ đọc</span>
-      <small>Không thay đổi dữ liệu trên Odoo</small>
+      <small>Không thay đổi dữ liệu nguồn</small>
     </div>
   </header>
 
@@ -17,17 +17,6 @@
     <div><strong>Đang tải cấu hình tích hợp</strong><p>Đang kiểm tra quyền sử dụng của workspace.</p></div>
   </div>
 
-  <section *ngIf="!isLoading && !entitled" data-motion="panel" class="entitlement-panel">
-    <span class="eyebrow">ERP INTEGRATIONS</span>
-    <h2>Tính năng tích hợp ERP chưa được kích hoạt</h2>
-    <p>Gói này dành cho workspace cần đồng bộ dữ liệu vận hành từ hệ thống ERP. Liên hệ bộ phận quản trị tài khoản để kích hoạt quyền sử dụng.</p>
-    <dl>
-      <div><dt>Phạm vi V1</dt><dd>Odoo, đồng bộ một chiều, chỉ đọc</dd></div>
-      <div><dt>Nhịp đồng bộ</dt><dd>15 phút, có webhook tăng tốc tùy chọn</dd></div>
-      <div><dt>Kiểm soát</dt><dd>Chọn company, kho và đối soát tồn khả dụng</dd></div>
-    </dl>
-  </section>
-
   <ng-container *ngIf="!isLoading && entitled">
     <p *ngIf="errorMessage" class="message message--error" role="alert">{{ errorMessage }}</p>
     <p *ngIf="successMessage" class="message message--success" role="status">{{ successMessage }}</p>
@@ -35,15 +24,15 @@
     <section data-motion="panel" class="connection-panel">
       <div class="panel-heading">
         <div>
-          <p class="eyebrow">KẾT NỐI</p>
-          <h2>Kết nối Odoo</h2>
+          <p class="eyebrow">ERP nguồn</p>
+          <h2>Quản lý kết nối Odoo</h2>
         </div>
-        <button type="button" class="button button--secondary" (click)="showConnectionForm = !showConnectionForm">
+        <button *ngIf="erpEntitled" type="button" class="button button--secondary" (click)="showConnectionForm = !showConnectionForm">
           {{ showConnectionForm ? 'Đóng biểu mẫu' : 'Kết nối Odoo' }}
         </button>
       </div>
 
-      <form *ngIf="showConnectionForm" class="connection-form" (ngSubmit)="createConnection()">
+      <form *ngIf="showConnectionForm && erpEntitled" class="connection-form" (ngSubmit)="createConnection()">
         <div class="form-note"><strong>Thông tin xác thực được mã hóa.</strong> SupplyForge không hiển thị lại API key sau khi lưu.</div>
         <label>Tên kết nối<input [(ngModel)]="connectionForm.display_name" name="displayName" required maxlength="128" placeholder="Ví dụ: Odoo Việt Nam"></label>
         <label>URL Odoo<input [(ngModel)]="connectionForm.base_url" name="baseUrl" required type="url" placeholder="https://erp.example.com"></label>
@@ -54,15 +43,15 @@
       </form>
 
       <div *ngIf="connections.length === 0 && !showConnectionForm" class="empty-connections">
-        <strong>Chưa có nguồn ERP nào</strong>
-        <p>Kết nối Odoo bằng tài khoản dịch vụ chỉ có quyền đọc để bắt đầu.</p>
+        <strong>Chưa có kết nối Odoo</strong>
+        <p>Thêm service account chỉ đọc, xác thực quyền rồi chọn công ty và kho cần theo dõi.</p>
       </div>
 
-      <div *ngIf="connections.length" class="connection-list" role="tablist" aria-label="Danh sách kết nối ERP">
+      <div *ngIf="connections.length" class="connection-list" role="tablist" aria-label="Danh sách nguồn dữ liệu">
         <button *ngFor="let connection of connections" type="button" class="connection-row" [class.is-active]="connection.id === activeConnection?.id" (click)="selectConnection(connection.id)" role="tab">
-          <span class="connection-mark">O</span>
-          <span class="connection-copy"><strong>{{ connection.display_name }}</strong><small>{{ connection.base_url }}</small></span>
-          <span class="status" [class.status--active]="connection.status === 'ACTIVE'" [class.status--error]="connection.status === 'ERROR'">{{ connection.status === 'ACTIVE' ? 'Đang hoạt động' : connection.status === 'ERROR' ? 'Cần xử lý' : connection.status === 'VALIDATING' ? 'Đang xác thực' : connection.discovery ? 'Chọn phạm vi' : 'Chưa xác thực' }}</span>
+          <span class="connection-mark">{{ providerName(connection).slice(0, 1) }}</span>
+          <span class="connection-copy"><strong>{{ connection.display_name }}</strong><small>{{ connection.data_health ? healthStatusLabel(connection.data_health.status) : providerName(connection) }}</small></span>
+          <span class="status" [class.status--active]="connection.status === 'ACTIVE'" [class.status--error]="connection.status === 'ERROR'">{{ statusLabel(connection.status) }}</span>
         </button>
       </div>
     </section>
@@ -71,7 +60,7 @@
       <article class="connection-detail">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">ODOO / {{ connection.status }}</p>
+            <p class="eyebrow">{{ providerName(connection) }} / {{ statusLabel(connection.status) }}</p>
             <h2>{{ connection.display_name }}</h2>
           </div>
           <button type="button" class="text-button" (click)="loadConnections(false)">Làm mới trạng thái</button>
@@ -81,7 +70,7 @@
           <div><dt>Công ty</dt><dd>{{ connection.company?.name || 'Chưa chọn' }}</dd></div>
           <div><dt>Kho được theo dõi</dt><dd class="numeric-value">{{ connection.warehouses?.length ? connection.warehouses.length + ' kho' : 'Chưa chọn' }}</dd></div>
           <div><dt>Lần đồng bộ gần nhất</dt><dd class="numeric-value">{{ connection.last_successful_sync_at ? (connection.last_successful_sync_at | date:'dd/MM/yyyy HH:mm') : 'Chưa có' }}</dd></div>
-          <div><dt>SKU cần mapping</dt><dd class="numeric-value">{{ connection.unmapped_sku_count || 0 }}</dd></div>
+          <div><dt>SKU cần liên kết</dt><dd class="numeric-value">{{ connection.unmapped_sku_count || 0 }}</dd></div>
         </dl>
         <p *ngIf="connection.last_error" class="inline-error"><strong>{{ connection.last_error.code }}</strong> {{ connection.last_error.message }}</p>
 
@@ -90,7 +79,7 @@
           <button type="button" class="button button--primary" [disabled]="isRunning || !connection.company?.id || !connection.warehouses?.length" (click)="run('initial-sync')">Nạp dữ liệu lịch sử</button>
           <button type="button" class="button button--quiet" [disabled]="isRunning || !connection.company?.id || !connection.warehouses?.length" (click)="run('sync')">Đồng bộ dữ liệu mới</button>
         </div>
-        <p class="helper">{{ isRunning ? 'Yêu cầu đang được xử lý. Trạng thái sẽ tự cập nhật.' : 'Các lượt đồng bộ chỉ đọc dữ liệu Odoo; không tạo hay sửa chứng từ ERP.' }}</p>
+        <p class="helper">{{ isRunning ? 'Yêu cầu đang được xử lý. Trạng thái sẽ tự cập nhật.' : 'Lượt đồng bộ chỉ đọc dữ liệu nguồn; không tạo hay sửa đơn hàng, sản phẩm hoặc tồn kho.' }}</p>
 
         <div class="scope-header">
           <div><h3>Phạm vi đồng bộ</h3><p>Chọn công ty và các kho cần theo dõi.</p></div>
@@ -118,24 +107,22 @@
       <aside class="run-panel">
         <p class="eyebrow">TÌNH TRẠNG ĐỒNG BỘ</p>
         <h3>{{ connection.latest_run?.status === 'RUNNING' || isRunning ? 'Đang xử lý' : connection.latest_run?.status === 'FAILED' ? 'Cần xem lại' : 'Sẵn sàng vận hành' }}</h3>
-        <p>{{ connection.latest_run?.status === 'FAILED' ? (connection.latest_run?.error_message || 'Lượt đồng bộ gần nhất không hoàn tất.') : 'Dữ liệu Odoo được lưu riêng để có thể kiểm tra và đối soát.' }}</p>
+        <p>{{ connection.latest_run?.status === 'FAILED' ? (connection.latest_run?.error_message || 'Lượt đồng bộ gần nhất không hoàn tất.') : 'Dữ liệu nguồn được lưu riêng để có thể kiểm tra và đối soát.' }}</p>
         <dl *ngIf="connection.latest_run?.summary as summary" class="run-summary">
-          <div><dt>Loại lượt chạy</dt><dd>{{ connection.latest_run.type }}</dd></div>
+          <div><dt>Loại lượt chạy</dt><dd>{{ runTypeLabel(connection.latest_run.type) }}</dd></div>
           <div *ngIf="summary.daily_metrics_written !== undefined"><dt>Bản ghi đã cập nhật</dt><dd>{{ formatNumber(summary.daily_metrics_written) }}</dd></div>
           <div *ngIf="summary.sales_source"><dt>Nguồn bán hàng</dt><dd>{{ summary.sales_source === 'POS' ? 'Point of Sale' : 'Sales Orders' }}</dd></div>
-          <div *ngIf="summary.reconciliation"><dt>Chênh lệch tồn</dt><dd>{{ formatNumber(summary.reconciliation.quantity_variance) }}</dd></div>
           <div *ngIf="summary.operational_analytics"><dt>SKU đã đưa vào dashboard</dt><dd>{{ formatNumber(summary.operational_analytics.scored_skus || 0) }}</dd></div>
         </dl>
-        <button type="button" class="button button--quiet button--full" [disabled]="isRunning || !connection.company?.id || !connection.warehouses?.length" (click)="run('reconcile')">Đối soát tồn khả dụng</button>
       </aside>
     </section>
 
     <section *ngIf="activeConnection && overview" data-motion="priority" class="metric-grid">
       <article><span>Doanh số 28 ngày</span><strong class="metric-value">{{ formatNumber(overview.sales_28d) }}</strong><small>Đơn vị sản phẩm đã bán</small></article>
-      <article><span>Doanh thu 28 ngày</span><strong class="metric-value">{{ formatNumber(overview.revenue_28d) }}</strong><small>Theo tiền tệ cấu hình trong Odoo</small></article>
-      <article><span>Tồn khả dụng</span><strong class="metric-value">{{ formatNumber(overview.on_hand_quantity) }}</strong><small>Gộp từ các kho đã chọn</small></article>
+      <article><span>Doanh thu 28 ngày</span><strong class="metric-value">{{ formatNumber(overview.revenue_28d) }}</strong><small>Theo dữ liệu nguồn đã đồng bộ</small></article>
+      <article><span>Tồn khả dụng</span><strong class="metric-value">{{ formatNumber(overview.on_hand_quantity) }}</strong><small>Gộp từ các kho Odoo đã chọn</small></article>
       <article><span>Ngày dữ liệu gần nhất</span><strong class="metric-value">{{ overview.latest_metric_date ? (overview.latest_metric_date | date:'dd/MM/yyyy') : 'Chưa có' }}</strong><small>{{ overview.freshness ? 'Đồng bộ ' + (overview.freshness | date:'dd/MM HH:mm') : 'Chưa đồng bộ' }}</small></article>
-      <article><span>Đã sẵn sàng cho dashboard</span><strong class="metric-value">{{ formatNumber(overview.operational_source?.coverage?.scored_skus || 0) }}</strong><small>{{ overview.operational_source?.status === 'READY' ? 'SKU đã map và còn tồn khả dụng' : 'Cần đồng bộ và xác nhận mapping' }}</small></article>
+      <article><span>SKU cần liên kết</span><strong class="metric-value">{{ formatNumber(overview.unmapped_sku_count || 0) }}</strong><small>Liên kết SKU Odoo với danh mục phân tích nội bộ</small></article>
     </section>
 
     <section *ngIf="activeConnection" data-motion="panel" class="below-grid">
@@ -152,7 +139,7 @@
           <div>
             <p class="eyebrow">LIÊN KẾT SKU</p>
             <h2>Đối chiếu mã sản phẩm</h2>
-            <p>Liên kết chỉ áp dụng cho nguồn Odoo này; không tạo hoặc sửa chứng từ trên Odoo.</p>
+            <p>Liên kết chỉ áp dụng cho nguồn dữ liệu này; không tạo hoặc sửa đơn hàng, sản phẩm hay tồn kho ở nguồn.</p>
           </div>
           <span class="mapping-count">{{ mappingSummary.NEEDS_REVIEW || 0 }}</span>
         </div>
@@ -171,7 +158,7 @@
           <div *ngFor="let mapping of mappings" class="mapping-row" [class.mapping-row--editing]="mapping.status === 'NEEDS_REVIEW' || mapping.is_editing">
             <div class="mapping-source">
               <strong>{{ mapping.external_sku }}</strong>
-              <small>{{ mapping.external_name || 'Không có mô tả từ Odoo' }}</small>
+              <small>{{ mapping.external_name || 'Không có mô tả từ nguồn dữ liệu' }}</small>
             </div>
 
             <div class="mapping-target" *ngIf="mapping.status === 'NEEDS_REVIEW' || mapping.is_editing; else resolvedTarget">
@@ -222,7 +209,7 @@
             </ng-template>
           </div>
         </div>
-        <ng-template #noMappings><p class="empty-copy">Không có SKU ở trạng thái này. SKU mới chỉ xuất hiện sau khi nạp danh mục từ ERP.</p></ng-template>
+        <ng-template #noMappings><p class="empty-copy">Không có SKU ở trạng thái này. SKU mới sẽ xuất hiện sau khi nguồn dữ liệu đồng bộ danh mục.</p></ng-template>
         <div *ngIf="mappingPagination.totalPages > 1" class="pagination">
           <button type="button" [disabled]="mappingPagination.page <= 1" (click)="loadMappings(mappingPagination.page - 1)">Trước</button>
           <span>Trang {{ mappingPagination.page }} / {{ mappingPagination.totalPages }}</span>
@@ -241,13 +228,13 @@
       <section class="mapping-dialog" role="dialog" aria-modal="true" aria-labelledby="mapping-dialog-title">
         <p class="eyebrow">XÁC NHẬN QUẢN TRỊ SKU</p>
         <h2 id="mapping-dialog-title">
-          {{ dialog.action === 'CONFIRM' ? 'Xác nhận liên kết SKU' : dialog.action === 'IGNORE' ? 'Bỏ qua SKU ERP' : dialog.action === 'REOPEN' ? 'Đưa SKU trở lại hàng chờ' : 'Gỡ liên kết SKU' }}
+          {{ dialog.action === 'CONFIRM' ? 'Xác nhận liên kết SKU' : dialog.action === 'IGNORE' ? 'Bỏ qua SKU nguồn' : dialog.action === 'REOPEN' ? 'Đưa SKU trở lại hàng chờ' : 'Gỡ liên kết SKU' }}
         </h2>
-        <p *ngIf="dialog.action === 'CONFIRM'">Liên kết này áp dụng cho nguồn Odoo hiện tại. Dữ liệu ERP và kết quả mô hình rủi ro không bị ghi đè.</p>
+        <p *ngIf="dialog.action === 'CONFIRM'">Liên kết này chỉ áp dụng cho nguồn hiện tại. Dữ liệu nguồn và các kết quả phân tích đang có không bị ghi đè.</p>
         <p *ngIf="dialog.action === 'IGNORE'">SKU sẽ không còn xuất hiện trong hàng chờ. Bạn có thể đưa SKU trở lại để xử lý sau.</p>
         <p *ngIf="dialog.action === 'REOPEN' || dialog.action === 'UNLINK'">SKU sẽ trở lại trạng thái cần xử lý và không còn được dùng như một liên kết đã xác nhận.</p>
         <dl class="mapping-dialog-detail">
-          <div><dt>SKU Odoo</dt><dd>{{ dialog.mapping.external_sku }}</dd></div>
+          <div><dt>SKU nguồn</dt><dd>{{ dialog.mapping.external_sku }}</dd></div>
           <div><dt>SKU SupplyForge</dt><dd>{{ dialog.action === 'CONFIRM' ? dialog.mapping.selected_product?.item_sku : (dialog.mapping.canonical_product?.item_sku || dialog.mapping.canonical_sku || 'Chưa liên kết') }}</dd></div>
         </dl>
         <label class="mapping-note">Ghi chú <span>(tùy chọn)</span>
@@ -262,4 +249,10 @@
       </section>
     </div>
   </ng-container>
+
+  <section *ngIf="!isLoading && !entitled" class="entitlement-panel">
+    <p class="eyebrow">Quyền truy cập</p>
+    <h2>Kết nối Odoo chưa được cấp cho workspace này</h2>
+    <p>Liên hệ quản trị viên để cấp quyền kết nối dữ liệu Odoo. Khi được cấp quyền, bạn có thể xác thực tài khoản chỉ đọc và chọn công ty, kho cần theo dõi.</p>
+  </section>
 </section>

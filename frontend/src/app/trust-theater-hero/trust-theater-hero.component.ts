@@ -72,6 +72,7 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
   localFile: File | null = null;
   showDuplicateFileModal = false;
   isUploading = false;
+  private uploadAttempt = 0;
   private disposeMotion?: () => void;
 
   constructor(
@@ -202,14 +203,20 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
 
   fileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
-    if (input.files && input.files.length > 0) this.localFile = input.files[0];
+    if (input.files && input.files.length > 0) {
+      this.uploadAttempt++;
+      this.showDuplicateFileModal = false;
+      this.localFile = input.files[0];
+    }
   }
 
   removeFile(): void {
+    this.uploadAttempt++;
     this.localFile = null;
   }
 
   returnToDashboardFromDuplicate(): void {
+    this.uploadAttempt++;
     this.showDuplicateFileModal = false;
     this.localFile = null;
     this.ingestionState.reset();
@@ -218,20 +225,29 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
   }
 
   chooseAnotherFile(): void {
+    this.uploadAttempt++;
     this.showDuplicateFileModal = false;
     this.localFile = null;
   }
 
   onUpload(): void {
-    if (!this.localFile) return;
+    if (!this.localFile || this.isUploading) return;
 
+    const attempt = ++this.uploadAttempt;
+    const idempotencyKey = this.createImportRequestKey();
     this.upload.emit({ file: this.localFile });
     this.isUploading = true;
     this.dashboardState.reset();
     this.ingestionState.beginImport(this.localFile, 'INITIAL');
 
-    this.apiService.uploadCsvV2(this.localFile, this.apiService.getCurrentWorkspaceId(), 'INITIAL').subscribe({
+    this.apiService.uploadCsvV2(
+      this.localFile,
+      this.apiService.getCurrentWorkspaceId(),
+      'INITIAL',
+      idempotencyKey,
+    ).subscribe({
       next: (res: any) => {
+        if (attempt !== this.uploadAttempt) return;
         this.isUploading = false;
 
         if (res?.idempotent_retry) {
@@ -268,6 +284,7 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
         }
       },
       error: (err: any) => {
+        if (attempt !== this.uploadAttempt) return;
         this.isUploading = false;
         const errorMsg = err.error?.error || 'File CSV không hợp lệ (sai mã hóa, trùng cột, thiếu header hoặc rỗng).';
         this.ingestionState.setErrorMessage(errorMsg);
@@ -279,6 +296,13 @@ export class TrustTheaterHeroComponent implements AfterViewInit, OnDestroy {
   getFileSizeKb(file: File | null): string {
     if (!file) return '0.0';
     return (file.size / 1024).toFixed(1);
+  }
+
+  private createImportRequestKey(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `csv-import-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   }
 
 }

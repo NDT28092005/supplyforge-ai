@@ -96,3 +96,36 @@ class HealthEndpointsTest(TestCase):
             self.assertNotIn('token', content_str)
             self.assertNotIn('mysql://', content_str)
             self.assertNotIn('redis://', content_str)
+
+    @patch('supplyforge.services.model_loader.ModelLoaderService.runtime_status')
+    def test_model_readiness_exposes_decision_safe_state(self, runtime_status):
+        runtime_status.return_value = {
+            'state': 'READY',
+            'reason': None,
+            'detail': 'Primary model and TreeSHAP explanation engine are ready.',
+            'model_version': 'risk-v1',
+            'explainability': 'READY',
+            'decision_actions_allowed': True,
+        }
+
+        response = self.client.get('/api/v1/model/readiness')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'ready')
+        self.assertTrue(response.json()['model']['decision_actions_allowed'])
+
+    @patch('supplyforge.services.model_loader.ModelLoaderService.runtime_status')
+    def test_model_readiness_returns_503_when_unavailable(self, runtime_status):
+        runtime_status.return_value = {
+            'state': 'UNAVAILABLE',
+            'reason': 'MODEL_INCOMPATIBLE',
+            'detail': 'Checksum mismatch for model artifact.',
+            'model_version': 'risk-v1',
+            'explainability': 'UNAVAILABLE',
+            'decision_actions_allowed': False,
+        }
+
+        response = self.client.get('/api/v1/model/readiness')
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()['status'], 'unavailable')

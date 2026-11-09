@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class OptimizationReasonCode(str, Enum):
     """Structured reason codes for scenario optimization decisions."""
-    HIGH_CAPITAL_RELEASE = "HIGH_CAPITAL_RELEASE"
+    HIGH_CAPITAL_RELEASE = "HIGH_INVENTORY_COST_ROTATION"  # legacy member name; never a cash claim
     WITHIN_DISCOUNT_LIMIT = "WITHIN_DISCOUNT_LIMIT"
     WITHIN_MARGIN_LIMIT = "WITHIN_MARGIN_LIMIT"
     BETTER_THAN_BASELINE = "BETTER_THAN_BASELINE"
@@ -47,7 +47,7 @@ class CapitalRecoveryOptimizationEngine:
        - Minimum Margin Rate (0.05).
        - Action Eligibility (M6-02).
     3. Calculates Multi-Criteria Optimization Score (0.0 - 1.0):
-       - Score = w1*RecoveryRate + w2*CapitalRelease - w3*DiscountPenalty - w4*MarginLoss
+       - Score = w1*inventory-cost-rotation + w2*rotation-rate - w3*discount penalty - w4*margin loss
     4. Ranks Feasible Scenarios descending and selects recommended_scenario.
     5. Calculates Incremental Recovery and Recovery Efficiency metrics.
     6. Generates Structured Reason Codes & Financial Trade-off Analysis.
@@ -85,7 +85,8 @@ class CapitalRecoveryOptimizationEngine:
         value_result: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Ranks recovery scenarios and selects the optimal capital recovery option for a single SKU.
+        Ranks scenario options. The objective is inventory-cost rotation under
+        margin guardrails, never an estimate of cash released.
         """
         if not decision_context or "sku" not in decision_context:
             raise CapitalRecoveryOptimizationError("Invalid or missing DecisionContext object.")
@@ -123,45 +124,36 @@ class CapitalRecoveryOptimizationEngine:
                 "evaluated_at": datetime.now(timezone.utc).isoformat()
             }
 
-        # Build candidate scenarios list
-        candidates = []
-        if simulation_result and simulation_result.get("scenarios"):
-            candidates = simulation_result["scenarios"]
-        elif value_result:
-            candidates = [{
-                "scenario_id": "DEFAULT_STRATEGY",
-                "discount_rate": 0.0,
-                "simulated_price": decision_context.get("unit_price", 100000.0),
-                "simulated_quantity": decision_context.get("stock_on_hand", 100),
-                "simulated_revenue": value_result.get("gross_recovery_value", cap_exp * 0.8),
-                "simulated_margin_rate": 0.25,
-                "capital_recovery": value_result.get("net_recovery_value", cap_exp * 0.75),
-                "recovery_rate": value_result.get("recovery_rate", 0.75),
-                "status": "FEASIBLE"
-            }]
-        else:
-            candidates = [{
-                "scenario_id": "BASELINE",
-                "discount_rate": 0.0,
-                "simulated_price": decision_context.get("unit_price", 100000.0),
-                "simulated_quantity": decision_context.get("stock_on_hand", 100),
-                "simulated_revenue": cap_exp * 0.70,
-                "simulated_margin_rate": 0.25,
-                "capital_recovery": cap_exp * 0.70,
-                "recovery_rate": 0.70,
-                "status": "FEASIBLE"
-            }]
+        # Optimisation only ranks actual simulation output. Defaults would
+        # present invented revenue, margin and recovery as financial advice.
+        candidates = list(simulation_result.get("scenarios") or []) if simulation_result else []
+        if not candidates:
+            return {
+                "sku": sku, "evaluation_status": "DATA_UNAVAILABLE", "capital_exposure": cap_exp,
+                "baseline_scenario": {}, "evaluated_scenarios": [], "recommended_strategy": None,
+                "recommended_scenario": None, "expected_recovery_value": None, "recovery_rate": None,
+                "residual_exposure": None, "optimization_score": None, "ranking": [], "tradeoffs": {},
+                "reason_codes": [OptimizationReasonCode.DATA_NOT_READY.value],
+                "assumptions": {"reason": "Không có kịch bản giá hợp lệ từ dữ liệu quan sát."},
+                "optimization_policy_version": self.policy.get("optimization_policy_version", "1.0"),
+                "evaluated_at": datetime.now(timezone.utc).isoformat(),
+            }
 
         # Identify Baseline Scenario (0% discount rate)
         baseline_scen = next((s for s in candidates if float(s.get("discount_rate", 0.0)) == 0.0), candidates[0])
-        baseline_net_recovery = float(baseline_scen.get("capital_recovery") or baseline_scen.get("simulated_revenue", 0.0))
+        baseline_inventory_rotation = float(
+            baseline_scen.get("projected_inventory_cost_rotation", baseline_scen.get("capital_recovery") or 0.0)
+        )
 
         baseline_obj = {
             "scenario_id": baseline_scen.get("scenario_id", "BASELINE"),
             "discount_rate": float(baseline_scen.get("discount_rate", 0.0)),
             "simulated_revenue": round(float(baseline_scen.get("simulated_revenue", 0.0)), 2),
-            "capital_recovery": round(baseline_net_recovery, 2),
-            "residual_exposure": round(max(0.0, cap_exp - baseline_net_recovery), 2)
+            "projected_inventory_cost_rotation": round(baseline_inventory_rotation, 2),
+            "remaining_inventory_cost_exposure": round(max(0.0, cap_exp - baseline_inventory_rotation), 2),
+            # Legacy aliases are intentionally kept for API compatibility.
+            "capital_recovery": round(baseline_inventory_rotation, 2),
+            "residual_exposure": round(max(0.0, cap_exp - baseline_inventory_rotation), 2),
         }
 
         evaluated_scenarios = []
@@ -173,8 +165,11 @@ class CapitalRecoveryOptimizationEngine:
             sim_price = float(sc.get("simulated_price", 0.0))
             sim_rev = float(sc.get("simulated_revenue", 0.0))
             margin_rate = float(sc.get("simulated_margin_rate", 0.0))
-            cap_rec = float(sc.get("capital_recovery", sim_rev))
-            rec_rate = float(sc.get("recovery_rate", cap_rec / cap_exp if cap_exp > 0 else 0.0))
+            inventory_rotation = float(
+                sc.get("projected_inventory_cost_rotation", sc.get("capital_recovery") or 0.0)
+            )
+            rotation_rate = float(sc.get("inventory_cost_rotation_rate", inventory_rotation / cap_exp if cap_exp > 0 else 0.0))
+            net_contribution = float(sc.get("projected_net_contribution") or 0.0)
 
             # Constraint Validation
             is_feasible = True
@@ -193,10 +188,10 @@ class CapitalRecoveryOptimizationEngine:
                 reject_reasons.append(f"Margin rate ({margin_rate * 100:.1f}%) below minimum requirement ({min_margin * 100:.1f}%).")
 
             # Calculate Incremental Recovery & Efficiencies
-            inc_recovery = round(max(0.0, cap_rec - baseline_net_recovery), 2)
-            rec_gain = round(inc_recovery / cap_exp, 4) if cap_exp > 0 else 0.0
-            rec_efficiency = round(cap_rec / cap_exp, 4) if cap_exp > 0 else 0.0
-            residual_exp = round(max(0.0, cap_exp - cap_rec), 2)
+            incremental_rotation = round(max(0.0, inventory_rotation - baseline_inventory_rotation), 2)
+            rotation_gain = round(incremental_rotation / cap_exp, 4) if cap_exp > 0 else 0.0
+            rotation_efficiency = round(inventory_rotation / cap_exp, 4) if cap_exp > 0 else 0.0
+            residual_exp = round(max(0.0, cap_exp - inventory_rotation), 2)
 
             # Compute Optimization Score
             opt_score = 0.0
@@ -206,8 +201,8 @@ class CapitalRecoveryOptimizationEngine:
                 w3 = weights.get("discount_penalty_weight", 0.20)
                 w4 = weights.get("margin_loss_weight", 0.10)
 
-                cap_release_ratio = cap_rec / cap_exp if cap_exp > 0 else 0.0
-                raw_score = (w1 * rec_rate) + (w2 * cap_release_ratio) - (w3 * disc_rate) - (w4 * max(0.0, 0.30 - margin_rate))
+                rotation_ratio = inventory_rotation / cap_exp if cap_exp > 0 else 0.0
+                raw_score = (w1 * rotation_rate) + (w2 * rotation_ratio) - (w3 * disc_rate) - (w4 * max(0.0, 0.30 - margin_rate))
                 opt_score = round(min(1.0, max(0.0, raw_score)), 4)
 
             eval_item = {
@@ -215,12 +210,20 @@ class CapitalRecoveryOptimizationEngine:
                 "discount_rate": disc_rate,
                 "simulated_price": round(sim_price, 2),
                 "simulated_revenue": round(sim_rev, 2),
-                "capital_recovery": round(cap_rec, 2),
-                "recovery_rate": rec_rate,
+                "projected_inventory_cost_rotation": round(inventory_rotation, 2),
+                "projected_net_contribution": round(net_contribution, 2),
+                "inventory_cost_rotation_rate": rotation_rate,
+                "remaining_inventory_cost_exposure": residual_exp,
+                "incremental_inventory_cost_rotation": incremental_rotation,
+                "inventory_cost_rotation_gain": rotation_gain,
+                "inventory_cost_rotation_efficiency": rotation_efficiency,
+                # Legacy aliases.
+                "capital_recovery": round(inventory_rotation, 2),
+                "recovery_rate": rotation_rate,
                 "residual_exposure": residual_exp,
-                "incremental_recovery": inc_recovery,
-                "recovery_gain": rec_gain,
-                "recovery_efficiency": rec_efficiency,
+                "incremental_recovery": incremental_rotation,
+                "recovery_gain": rotation_gain,
+                "recovery_efficiency": rotation_efficiency,
                 "optimization_score": opt_score,
                 "is_feasible": is_feasible,
                 "reject_reasons": reject_reasons
@@ -237,8 +240,8 @@ class CapitalRecoveryOptimizationEngine:
             best_scen = ranking[0]
             rec_scenario = best_scen["scenario_id"]
             rec_strategy = strategy_result.get("recommended_strategy") or "DISCOUNT"
-            expected_rec = best_scen["capital_recovery"]
-            rec_rate = best_scen["recovery_rate"]
+            expected_rec = best_scen["projected_inventory_cost_rotation"]
+            rec_rate = best_scen["inventory_cost_rotation_rate"]
             residual_exp = best_scen["residual_exposure"]
             opt_score = best_scen["optimization_score"]
         else:
@@ -246,7 +249,7 @@ class CapitalRecoveryOptimizationEngine:
             best_scen = evaluated_scenarios[0]
             rec_scenario = baseline_obj["scenario_id"]
             rec_strategy = strategy_result.get("recommended_strategy") or "HOLD"
-            expected_rec = baseline_obj["capital_recovery"]
+            expected_rec = baseline_obj["projected_inventory_cost_rotation"]
             rec_rate = round(expected_rec / cap_exp, 4) if cap_exp > 0 else 0.0
             residual_exp = baseline_obj["residual_exposure"]
             opt_score = 0.50
@@ -258,16 +261,20 @@ class CapitalRecoveryOptimizationEngine:
             reason_codes.append(OptimizationReasonCode.HIGH_RECOVERY_EFFICIENCY.value)
         if best_scen.get("discount_rate", 0.0) <= max_disc:
             reason_codes.append(OptimizationReasonCode.WITHIN_DISCOUNT_LIMIT.value)
-        if best_scen.get("incremental_recovery", 0.0) > 0:
+        if best_scen.get("incremental_inventory_cost_rotation", best_scen.get("incremental_recovery", 0.0)) > 0:
             reason_codes.append(OptimizationReasonCode.BETTER_THAN_BASELINE.value)
         reason_codes.append(OptimizationReasonCode.WITHIN_MARGIN_LIMIT.value)
 
         # Trade-off Analysis
         tradeoffs = {
             "baseline_vs_recommended": {
-                "incremental_recovery_gain": best_scen.get("incremental_recovery", 0.0),
+                "incremental_inventory_cost_rotation": best_scen.get("incremental_inventory_cost_rotation", best_scen.get("incremental_recovery", 0.0)),
                 "residual_exposure_reduction": round(baseline_obj["residual_exposure"] - residual_exp, 2),
-                "discount_tradeoff": f"Áp dụng {best_scen.get('discount_rate', 0.0) * 100:.0f}% chiết khấu giúp tăng thu hồi {best_scen.get('incremental_recovery', 0.0):,.0f} VNĐ."
+                "discount_tradeoff": (
+                    f"Giảm {best_scen.get('discount_rate', 0.0) * 100:.0f}% thay đổi giá vốn tồn dự kiến quay vòng "
+                    f"thêm {best_scen.get('incremental_inventory_cost_rotation', best_scen.get('incremental_recovery', 0.0)):,.0f} VNĐ; "
+                    "đây không phải dòng tiền hay vốn đã giải phóng thực tế."
+                )
             }
         }
 
@@ -279,6 +286,10 @@ class CapitalRecoveryOptimizationEngine:
             "evaluated_scenarios": evaluated_scenarios,
             "recommended_strategy": rec_strategy,
             "recommended_scenario": rec_scenario,
+            "projected_inventory_cost_rotation": round(expected_rec, 2),
+            "inventory_cost_rotation_rate": rec_rate,
+            "remaining_inventory_cost_exposure": round(residual_exp, 2),
+            # Legacy aliases.
             "expected_recovery_value": round(expected_rec, 2),
             "recovery_rate": rec_rate,
             "residual_exposure": round(residual_exp, 2),
@@ -288,7 +299,7 @@ class CapitalRecoveryOptimizationEngine:
             "reason_codes": reason_codes,
             "assumptions": {
                 "optimization_score": "Policy-weighted ranking score (0.0 - 1.0); not an ML probability prediction.",
-                "capital_release": "Simulated financial capital release projection; non-causal evidence boundary maintained."
+                "projected_inventory_cost_rotation": "Book cost of units expected to sell in a scenario; not cash received, accounting capital release or a causal outcome."
             },
             "optimization_policy_version": self.policy.get("optimization_policy_version", "1.0"),
             "evaluated_at": datetime.now(timezone.utc).isoformat()

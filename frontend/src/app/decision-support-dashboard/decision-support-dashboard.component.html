@@ -7,29 +7,33 @@
     class="operations-hero bg-white border border-slate-200 p-6 sm:p-8 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div class="space-y-1">
       <h1 class="font-bold text-2xl sm:text-3xl text-slate-900 tracking-tight">
-        Khuyến nghị xử lý hàng tồn và thu hồi vốn
+        Điều phối phương án xử lý tồn kho
       </h1>
       <p class="text-slate-500 text-sm font-normal">
-        Phân tích rủi ro bán chậm và xây dựng phương án xử lý tồn kho để hỗ trợ thu hồi dòng tiền.
+        Đánh giá tín hiệu bán chậm, phê duyệt phương án có căn cứ và theo dõi kết quả triển khai theo từng SKU.
       </p>
     </div>
 
     <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 shrink-0 w-full sm:w-auto">
+      <button (click)="refreshRecommendations()" [disabled]="isRefreshingRecommendations || dataState === 'loading'"
+        class="w-full sm:w-auto bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl transition-all cursor-pointer active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+        {{ isRefreshingRecommendations ? 'Đang cập nhật...' : 'Cập nhật khuyến nghị' }}
+      </button>
       <button (click)="openCreatePlanModal()" [disabled]="dataState !== 'ready'"
         class="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 font-semibold text-xs sm:text-sm px-4 py-2.5 rounded-xl transition-all cursor-pointer active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
-        Tạo kế hoạch xử lý
+        Tạo kế hoạch thủ công
       </button>
     </div>
   </div>
 
   <div *ngIf="dataState === 'loading'" role="status" class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
     <span class="mx-auto block h-7 w-7 rounded-full border-2 border-indigo-200 border-t-indigo-600 animate-spin"></span>
-    <h3 class="text-base font-bold text-slate-900">Đang tải khuyến nghị xử lý</h3>
-    <p class="text-xs sm:text-sm text-slate-500">Đang kiểm tra các phương án được tạo từ bộ dữ liệu hiện tại.</p>
+      <h3 class="text-base font-bold text-slate-900">Đang tải hàng chờ quyết định</h3>
+      <p class="text-xs sm:text-sm text-slate-500">Đang đối chiếu khuyến nghị, chính sách vận hành và dữ liệu đầu vào hiện có.</p>
   </div>
 
   <div *ngIf="dataState === 'error'" role="alert" class="bg-rose-50 border border-rose-200 rounded-2xl p-8 text-center space-y-3">
-    <h3 class="text-base font-bold text-rose-900">Chưa thể tải khuyến nghị xử lý</h3>
+    <h3 class="text-base font-bold text-rose-900">Chưa thể tải hàng chờ quyết định</h3>
     <p class="text-xs sm:text-sm text-rose-700">{{ errorMessage }}</p>
     <button (click)="loadDecisions()" class="px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-semibold text-xs transition-all cursor-pointer">Thử tải lại</button>
   </div>
@@ -37,9 +41,9 @@
   <!-- Thông báo khi chưa có dữ liệu -->
   <div *ngIf="dataState === 'empty'"
     class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
-    <h3 class="text-base font-bold text-slate-900">Chưa có đề xuất giải phóng hàng tồn</h3>
+    <h3 class="text-base font-bold text-slate-900">Chưa có khuyến nghị cần xử lý</h3>
     <p class="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
-      Vui lòng nạp tệp CSV lịch sử đơn hàng mới để hệ thống đo lường và đưa ra các phương án thu hồi vốn.
+      Nạp dữ liệu bán hàng và tồn kho để hệ thống đánh giá rủi ro, sau đó tạo hàng chờ để bộ phận phụ trách rà soát.
     </p>
     <button (click)="goToImport()"
       class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition-all cursor-pointer inline-block">
@@ -49,6 +53,118 @@
 
   <ng-container *ngIf="dataState === 'ready'">
 
+  <section *ngIf="decisionDataStatus" data-motion="panel" class="bg-white border border-slate-200 p-5 sm:p-6 rounded-2xl" aria-labelledby="data-status-title">
+    <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+      <div class="max-w-2xl">
+        <div class="flex items-center gap-2 flex-wrap">
+          <h2 id="data-status-title" class="font-bold text-base text-slate-900">Tình trạng dữ liệu quyết định</h2>
+          <span class="rounded-lg border px-2.5 py-1 text-[11px] font-semibold" [ngClass]="getDecisionDataStatusClass(decisionDataStatus.state)">
+            {{ getDecisionDataStatusLabel(decisionDataStatus.state) }}
+          </span>
+        </div>
+        <p class="mt-2 text-xs leading-5 text-slate-600">{{ decisionDataStatus.message }}</p>
+        <p class="mt-2 text-[11px] leading-5 text-slate-500">{{ decisionDataStatus.boundary }}</p>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-5 gap-y-3 shrink-0 text-xs">
+        <div><span class="block text-slate-500">Đủ để rà soát</span><strong class="text-lg text-emerald-800">{{ decisionDataStatus.counts?.ready_for_review || 0 }}</strong></div>
+        <div><span class="block text-slate-500">Cần bổ sung</span><strong class="text-lg text-amber-800">{{ decisionDataStatus.counts?.needs_data || 0 }}</strong></div>
+        <div><span class="block text-slate-500">Cần kiểm tra nguồn</span><strong class="text-lg text-slate-800">{{ decisionDataStatus.counts?.needs_source_check || 0 }}</strong></div>
+        <div><span class="block text-slate-500">Tổng SKU đang xét</span><strong class="text-lg text-slate-900">{{ decisionDataStatus.counts?.current_decisions || 0 }}</strong></div>
+      </div>
+    </div>
+    <div *ngIf="decisionDataStatus.merchant_feedback?.items?.length" class="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 lg:grid-cols-[13rem_1fr] gap-2 text-xs">
+      <div><strong class="text-slate-800">Điều merchant đã ghi nhận</strong><p class="mt-1 text-slate-500">{{ decisionDataStatus.merchant_feedback.message }}</p></div>
+      <div class="flex flex-wrap gap-2 items-start">
+        <span *ngFor="let item of decisionDataStatus.merchant_feedback.items" class="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-slate-700">{{ item.label }}: <strong>{{ item.count }}</strong></span>
+      </div>
+    </div>
+    <div *ngIf="decisionLearningReport" class="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 lg:grid-cols-3 gap-3 text-xs">
+      <div><strong class="text-slate-800">Điều đội ngũ đã chọn</strong><p class="mt-1 text-slate-500">{{ decisionLearningReport.merchant_choices?.message }}</p><ng-container *ngFor="let item of decisionLearningReport.merchant_choices?.items || []"><p class="mt-2 text-slate-700">{{ item.label }}: <strong>{{ item.count }}</strong></p></ng-container></div>
+      <div><strong class="text-slate-800">Điểm đang làm chậm</strong><p class="mt-1 text-slate-500">Dùng để cải thiện quy trình, không tự đổi phương án.</p><ng-container *ngFor="let item of decisionLearningReport.operational_blockers?.items || []"><p class="mt-2 text-slate-700">{{ item.label }}: <strong>{{ item.count }}</strong></p></ng-container></div>
+      <div><strong class="text-slate-800">Kết quả đã đối soát</strong><p class="mt-1 text-slate-500">Odoo đủ dữ liệu: <strong>{{ decisionLearningReport.outcome_coverage?.odoo_observed || 0 }}</strong> · Chưa đối soát: <strong>{{ decisionLearningReport.outcome_coverage?.not_reconciled || 0 }}</strong></p><p class="mt-2 text-[11px] text-slate-500">{{ decisionLearningReport.outcome_coverage?.message }}</p></div>
+    </div>
+  </section>
+
+  <section data-motion="panel" class="bg-white border border-slate-200 p-5 sm:p-6 rounded-2xl space-y-4" aria-labelledby="portfolio-queue-title">
+    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Danh mục thực thi</p>
+        <h2 id="portfolio-queue-title" class="mt-1 font-bold text-base text-slate-900">Việc nên review trong kỳ này</h2>
+        <p class="mt-1 text-xs text-slate-500">Xếp theo mức khẩn cấp, ưu tiên vận hành và giá trị tồn đang chịu rủi ro; không phải xác suất, ROI hay lệnh thực thi tự động.</p>
+      </div>
+      <span *ngIf="portfolioQueue?.planning_window" class="text-xs font-mono bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg">
+        {{ portfolioQueue.planning_window.start_date }} — {{ portfolioQueue.planning_window.end_date }}
+      </span>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-end">
+      <label class="text-xs text-slate-600">Năng lực xử lý (SKU/kỳ)
+        <input type="number" min="0" [(ngModel)]="portfolioCapacity" placeholder="Bắt buộc" class="mt-1 w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900" />
+      </label>
+      <label class="text-xs text-slate-600">Ngân sách chiến dịch VND (nếu có)
+        <input type="number" min="0" [(ngModel)]="portfolioBudget" placeholder="Không tự giả định" class="mt-1 w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900" />
+      </label>
+      <label class="text-xs text-slate-600">Kỳ lập danh mục
+        <select [(ngModel)]="portfolioWindowDays" class="mt-1 w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900">
+          <option [ngValue]="7">7 ngày</option><option [ngValue]="14">14 ngày</option><option [ngValue]="30">30 ngày</option>
+        </select>
+      </label>
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+      <button type="button" (click)="buildDecisionPortfolioQueue()" [disabled]="isPortfolioQueueLoading" class="px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold disabled:opacity-50">
+        {{ isPortfolioQueueLoading ? 'Đang lập danh mục...' : 'Lập danh mục' }}
+      </button>
+      <p *ngIf="portfolioQueueError" class="text-xs text-rose-700" role="alert">{{ portfolioQueueError }}</p>
+      <p *ngIf="portfolioQueue?.boundary" class="text-xs text-slate-500">{{ portfolioQueue.boundary }}</p>
+    </div>
+    <div *ngIf="portfolioQueue?.summary" class="grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+      <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-3"><span class="text-emerald-700">Được chọn</span><strong class="block text-lg text-emerald-900">{{ portfolioQueue.summary.selected }}</strong></div>
+      <div class="bg-amber-50 border border-amber-100 rounded-xl p-3"><span class="text-amber-700">Có chủ đích hoãn</span><strong class="block text-lg text-amber-900">{{ portfolioQueue.summary.deferred }}</strong></div>
+      <div class="bg-rose-50 border border-rose-100 rounded-xl p-3"><span class="text-rose-700">Bị chặn</span><strong class="block text-lg text-rose-900">{{ portfolioQueue.summary.blocked }}</strong></div>
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3"><span class="text-slate-600">Cần dữ liệu/rà soát</span><strong class="block text-lg text-slate-900">{{ portfolioQueue.summary.review_or_data_needed }}</strong></div>
+    </div>
+    <div *ngIf="portfolioQueue?.items?.length" class="overflow-x-auto border border-slate-200 rounded-xl">
+      <table class="w-full min-w-[620px] text-left text-xs"><thead class="bg-slate-50 text-slate-600"><tr><th class="p-3">SKU</th><th class="p-3">Phương án</th><th class="p-3">Trạng thái danh mục</th><th class="p-3">Lý do</th></tr></thead>
+        <tbody><tr *ngFor="let item of portfolioQueue.items" class="border-t border-slate-100"><td class="p-3 font-mono font-semibold text-slate-900">{{ item.sku }}</td><td class="p-3">{{ translateAction(item.strategy) }}</td><td class="p-3 font-semibold">{{ portfolioQueueStateLabel(item.queue_state) }}</td><td class="p-3 text-slate-600">{{ item.reasons?.join(' ') }}</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="pt-4 mt-4 border-t border-slate-100 space-y-3" aria-labelledby="weekly-action-title">
+      <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div>
+          <h3 id="weekly-action-title" class="font-bold text-sm text-slate-900">Kế hoạch tuần này</h3>
+          <p class="mt-1 text-xs text-slate-500">Chuyển danh mục thành việc có người phụ trách và hạn xử lý. Chưa tạo hoặc thay đổi kế hoạch SKU tự động.</p>
+        </div>
+        <div *ngIf="!weeklyActionPlan" class="flex flex-col sm:flex-row gap-2 sm:items-end">
+          <label class="text-xs text-slate-600">Giao trước cho
+            <select [(ngModel)]="weeklyAssigneeUserId" class="mt-1 w-full sm:w-48 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900">
+              <option [ngValue]="null">Chưa giao người phụ trách</option>
+              <option *ngFor="let assignee of actionPlanAssignees" [ngValue]="assignee.user_id">{{ assignee.display_name }}</option>
+            </select>
+          </label>
+          <button type="button" (click)="createWeeklyActionPlan()" [disabled]="!portfolioQueue?.run_id || isWeeklyActionPlanLoading" class="px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold disabled:opacity-50">
+            {{ isWeeklyActionPlanLoading ? 'Đang tạo...' : 'Lập kế hoạch tuần' }}
+          </button>
+        </div>
+      </div>
+      <p *ngIf="weeklyActionPlanError" class="text-xs text-rose-700" role="alert">{{ weeklyActionPlanError }}</p>
+      <div *ngIf="weeklyActionPlan" class="space-y-3">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-2.5"><span class="text-emerald-700">Làm trong kỳ</span><strong class="block text-lg text-emerald-900">{{ weeklyActionPlan.summary?.today || 0 }}</strong></div>
+          <div class="rounded-xl border border-amber-100 bg-amber-50 p-2.5"><span class="text-amber-700">Cần giao việc</span><strong class="block text-lg text-amber-900">{{ weeklyActionPlan.summary?.needs_owner || 0 }}</strong></div>
+          <div class="rounded-xl border border-rose-100 bg-rose-50 p-2.5"><span class="text-rose-700">Đang bị chặn</span><strong class="block text-lg text-rose-900">{{ weeklyActionPlan.summary?.blocked || 0 }}</strong></div>
+          <div class="rounded-xl border border-slate-200 bg-slate-50 p-2.5"><span class="text-slate-600">Để kỳ sau</span><strong class="block text-lg text-slate-900">{{ weeklyActionPlan.summary?.deferred || 0 }}</strong></div>
+        </div>
+        <div *ngIf="weeklyActionPlan.sections?.today?.length" class="overflow-x-auto border border-slate-200 rounded-xl">
+          <table class="w-full min-w-[600px] text-left text-xs"><thead class="bg-slate-50 text-slate-600"><tr><th class="p-3">SKU</th><th class="p-3">Người phụ trách</th><th class="p-3">Hạn</th><th class="p-3">Việc đầu tiên</th></tr></thead>
+            <tbody><tr *ngFor="let item of weeklyActionPlan.sections.today" class="border-t border-slate-100"><td class="p-3 font-mono font-semibold text-slate-900">{{ item.sku }}</td><td class="p-3">{{ item.owner?.display_name || item.owner_label }}</td><td class="p-3">{{ item.due_date }}</td><td class="p-3 text-slate-600">{{ item.next_step }}</td></tr></tbody>
+          </table>
+        </div>
+        <p *ngIf="weeklyActionPlan.sections?.needs_owner?.length" class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">{{ weeklyActionPlan.sections.needs_owner.length }} việc chưa có người phụ trách. Giao việc trước khi đưa vào thực thi.</p>
+        <p class="text-[11px] text-slate-500">{{ weeklyActionPlan.boundary }}</p>
+      </div>
+    </div>
+  </section>
+
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 2. TỔNG QUAN CHỈ SỐ VỐN & THU HỒI (KPI METRICS)                    -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -56,73 +172,72 @@
 
     <!-- Card 1: Số sản phẩm cần xử lý -->
     <div class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2">
-      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Sản phẩm cần xử lý</span>
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">SKU rủi ro cao</span>
       <div class="text-2xl sm:text-3xl font-bold text-slate-900 font-mono">
         {{ totalAtRiskSkus }} <span class="text-xs font-sans font-normal text-slate-500">mã</span>
       </div>
-      <p class="text-xs text-slate-500">Có tín hiệu tiêu thụ chậm cần được đánh giá</p>
+      <p class="text-xs text-slate-500">Toàn bộ danh mục, không phụ thuộc trang đang xem</p>
     </div>
 
     <!-- Card 2: Vốn đang đọng -->
     <div class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2">
-      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Vốn đang đọng trong kho</span>
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Giá vốn đang chịu rủi ro</span>
       <div class="text-2xl sm:text-3xl font-bold text-slate-900 font-mono">
         {{ formatCurrency(totalCapitalExposure) }}
       </div>
-      <p class="text-xs text-slate-500">Giá vốn của các mã hàng có dấu hiệu bán chậm</p>
+      <p class="text-xs text-slate-500">Chỉ phản ánh SKU rủi ro cao, không phải giá trị tồn kho kế toán</p>
     </div>
 
     <!-- Card 3: Vốn dự kiến thu hồi -->
     <div class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2">
-      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Vốn dự kiến thu hồi</span>
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Giá trị kịch bản có dữ liệu</span>
       <div class="text-2xl sm:text-3xl font-bold text-emerald-700 font-mono">
         {{ formatCurrency(totalExpectedRecovery) }}
       </div>
-      <p class="text-xs text-slate-500">Giá trị dự kiến thu hồi sau khi áp dụng phương án xử lý</p>
+      <p class="text-xs text-slate-500">{{ decisionSummary.projected_sku_count }} SKU có đủ dữ liệu để lập kịch bản, không phải cam kết kết quả</p>
     </div>
 
     <!-- Card 4: Mức ưu tiên cao -->
     <div class="bg-white border border-slate-200 p-5 rounded-2xl space-y-2">
-      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Ưu tiên cao</span>
+      <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Chờ rà soát</span>
       <div class="text-2xl sm:text-3xl font-bold text-amber-700 font-mono">
-        {{ highPriorityCount }} <span class="text-xs font-sans font-normal text-slate-500">mã</span>
+        {{ pendingDecisionsCount }} <span class="text-xs font-sans font-normal text-slate-500">mã</span>
       </div>
-      <p class="text-xs text-slate-500">Các mã cần được ưu tiên xem xét trong kỳ vận hành hiện tại</p>
+      <p class="text-xs text-slate-500">Rủi ro cao chưa được người phụ trách phê duyệt hoặc từ chối</p>
     </div>
 
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <!-- 3. TIẾN TRÌNH THU HỒI VỐN TỔNG THỂ                                  -->
+  <!-- 3. PHẠM VI GIÁ VỐN TỒN DỰ KIẾN QUAY VÒNG                            -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <div data-motion="panel" class="bg-white border border-slate-200 p-6 rounded-2xl space-y-4" *ngIf="totalCapitalExposure > 0">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
       <div>
-        <h3 class="font-bold text-base text-slate-900">Tiến trình thu hồi tiền mặt từ kho</h3>
-        <p class="text-xs text-slate-500">Tỷ lệ vốn dự kiến giải phóng so với tổng giá vốn đang chịu rủi ro</p>
+        <h3 class="font-bold text-base text-slate-900">Phạm vi giá vốn tồn dự kiến quay vòng</h3>
+        <p class="text-xs text-slate-500">Tổng hợp kịch bản chỉ từ SKU có đủ tồn kho, giá bán, giá vốn và vận tốc bán quan sát được.</p>
       </div>
       <span class="text-xs font-mono font-bold text-slate-700 bg-slate-100 px-3 py-1 rounded-lg">
-        Thu hồi: {{ formatPercent(totalExpectedRecovery / totalCapitalExposure) }} giá vốn
+        {{ decisionSummary.projected_sku_count }} / {{ totalAtRiskSkus }} SKU có kịch bản
       </span>
     </div>
 
     <!-- Thanh tiến trình đơn giản -->
     <div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex border border-slate-200">
       <div class="h-full bg-slate-800 rounded-l-full transition-all duration-300"
-        [style.width.%]="(totalExpectedRecovery / totalCapitalExposure) * 100"></div>
+        [style.width.%]="getProjectedRecoveryPercent()"></div>
       <div class="h-full bg-slate-200 rounded-r-full transition-all duration-300"
-        [style.width.%]="100 - ((totalExpectedRecovery / totalCapitalExposure) * 100)"></div>
+        [style.width.%]="100 - getProjectedRecoveryPercent()"></div>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs">
       <div class="p-3 rounded-xl border border-slate-200 flex justify-between items-center bg-slate-50/50">
-        <span class="text-slate-600 font-semibold">Giá trị dự kiến thu hồi</span>
+        <span class="text-slate-600 font-semibold">Giá vốn tồn dự kiến quay vòng</span>
         <span class="font-mono font-bold text-slate-900 text-sm">{{ formatCurrency(totalExpectedRecovery) }}</span>
       </div>
       <div class="p-3 rounded-xl border border-slate-200 flex justify-between items-center bg-slate-50/50">
-        <span class="text-slate-600 font-semibold">Chi phí chiết khấu chấp nhận</span>
-        <span class="font-mono font-bold text-slate-900 text-sm">{{ formatCurrency(totalCapitalExposure -
-          totalExpectedRecovery) }}</span>
+        <span class="text-slate-600 font-semibold">Giá vốn chưa có kịch bản</span>
+        <span class="font-mono font-bold text-slate-900 text-sm">{{ decisionSummary.unprojected_at_risk_sku_count }} SKU</span>
       </div>
     </div>
   </div>
@@ -136,7 +251,10 @@
     <div class="space-y-4 border-b border-slate-100 pb-4">
       <!-- Hàng 1: Nút Xuất báo cáo -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h3 class="font-bold text-base text-slate-900">Đề xuất xử lý tồn kho</h3>
+        <div>
+          <h3 class="font-bold text-base text-slate-900">Hàng chờ khuyến nghị</h3>
+          <p class="mt-1 text-xs text-slate-500">Chọn SKU để xem căn cứ, phương án thay thế và điều kiện phê duyệt trước khi lập kế hoạch.</p>
+        </div>
         <div class="flex flex-wrap items-center gap-2 shrink-0">
           <button (click)="exportDecisionReport('csv')"
             class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
@@ -147,6 +265,24 @@
             <span>Xuất trang Excel</span>
           </button>
         </div>
+      </div>
+
+      <div class="decision-inbox-segments" role="group" aria-label="Nhóm hàng chờ quyết định">
+        <button type="button" (click)="setQueueSegment('TODAY')" [class.is-active]="activeQueueSegment === 'TODAY'">
+          Cần xử lý hôm nay
+        </button>
+        <button type="button" (click)="setQueueSegment('NEEDS_APPROVAL')" [class.is-active]="activeQueueSegment === 'NEEDS_APPROVAL'">
+          Chờ phê duyệt
+        </button>
+        <button type="button" (click)="setQueueSegment('ACCEPTED')" [class.is-active]="activeQueueSegment === 'ACCEPTED'">
+          Đã phê duyệt
+        </button>
+        <button type="button" (click)="setQueueSegment('MISSING_DATA')" [class.is-active]="activeQueueSegment === 'MISSING_DATA'">
+          Thiếu dữ liệu
+        </button>
+        <button type="button" (click)="setQueueSegment('ALL')" [class.is-active]="activeQueueSegment === 'ALL'">
+          Tất cả
+        </button>
       </div>
 
       <!-- Hàng 2: Bộ lọc đa trường & Tìm kiếm -->
@@ -175,6 +311,7 @@
           <select [(ngModel)]="selectedPriority" (change)="onFilterChange()"
             class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400 cursor-pointer">
             <option value="ALL">Ưu tiên: Tất cả</option>
+            <option value="P1,P2">P1/P2 - Cần xử lý hôm nay</option>
             <option value="P1">P1 - Ưu tiên khẩn cấp</option>
             <option value="P2">P2 - Ưu tiên cao</option>
             <option value="P3">P3 - Ưu tiên trung bình</option>
@@ -201,19 +338,31 @@
             class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400 cursor-pointer">
             <option value="priority">Sắp xếp: Mức ưu tiên</option>
             <option value="capital">Sắp xếp: Vốn tồn đọng (VND)</option>
-            <option value="recovery">Sắp xếp: Thu hồi dự kiến</option>
-            <option value="risk">Sắp xếp: Xác suất rủi ro</option>
+            <option value="recovery">Sắp xếp: Giá vốn quay vòng theo kịch bản</option>
+            <option value="risk">Sắp xếp: Điểm tín hiệu rủi ro</option>
+          </select>
+        </div>
+
+        <div>
+          <select [(ngModel)]="selectedStatus" (change)="onFilterChange()"
+            class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400 cursor-pointer">
+            <option value="ALL">Trạng thái: Tất cả</option>
+            <option value="GENERATED,RECOMMENDED,NEEDS_REVIEW,REVIEWED">Đang chờ quyết định</option>
+            <option value="REVIEWED">Đã xem căn cứ</option>
+            <option value="ACCEPTED">Đã phê duyệt</option>
+            <option value="REJECTED">Đã từ chối</option>
+            <option value="EXECUTED">Đã triển khai</option>
           </select>
         </div>
       </div>
     </div>
 
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500">
-      <span *ngIf="!isLoading">Hiển thị {{ filteredDecisions.length }} trên tổng số {{ decisionPagination.total_items }} đề xuất phù hợp.</span>
+      <span *ngIf="!isLoading">Hiển thị {{ filteredDecisions.length }} đề xuất trong trang hiện tại.</span>
       <span *ngIf="isLoading">Đang tải đề xuất xử lý tồn kho...</span>
       <div class="flex items-center gap-2">
         <button (click)="changeDecisionPage(decisionPagination.page - 1)" [disabled]="!decisionPagination.has_previous || isLoading" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Trang trước</button>
-        <span class="font-mono text-slate-700">Trang {{ decisionPagination.page }} / {{ decisionPagination.total_pages }}</span>
+        <span class="font-mono text-slate-700">Trang {{ decisionPagination.page }}</span>
         <button (click)="changeDecisionPage(decisionPagination.page + 1)" [disabled]="!decisionPagination.has_next || isLoading" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed">Trang sau</button>
       </div>
     </div>
@@ -226,9 +375,9 @@
             <th class="py-3.5 px-4 whitespace-nowrap">Mã sản phẩm</th>
             <th class="py-3.5 px-4 text-center whitespace-nowrap">Mức rủi ro</th>
             <th class="py-3.5 px-4 text-right whitespace-nowrap">Vốn đang đọng</th>
-            <th class="py-3.5 px-4 whitespace-nowrap">Phương án đề xuất</th>
-            <th class="py-3.5 px-4 text-right whitespace-nowrap">Vốn thu hồi dự kiến</th>
-            <th class="py-3.5 px-4 text-center whitespace-nowrap">Trạng thái</th>
+            <th class="py-3.5 px-4 whitespace-nowrap">Phương án có điều kiện</th>
+            <th class="py-3.5 px-4 text-right whitespace-nowrap">Giá vốn quay vòng theo kịch bản</th>
+            <th class="py-3.5 px-4 text-center whitespace-nowrap">Bước tiếp theo</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 bg-white">
@@ -263,17 +412,26 @@
                     100).toFixed(0) }}%)</span>
                 </ng-container>
               </span>
+              <span *ngIf="item.decision.action_parameters?.requires_review || item.decision.action_parameters?.approval_required"
+                class="mt-1 inline-flex rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                Cần phê duyệt bổ sung
+              </span>
             </td>
 
             <td class="py-3.5 px-4 text-right font-mono font-bold text-emerald-700 text-sm whitespace-nowrap">
-              {{ formatCurrency(item.financial_impact.expected_recovery_value) }}
+              <ng-container *ngIf="hasProjection(item); else noProjection">
+                {{ formatCurrency(item.financial_impact.expected_recovery_value) }}
+              </ng-container>
+              <ng-template #noProjection><span class="text-slate-500 font-sans text-xs font-medium">{{ getProjectionReadinessLabel(item) }}</span></ng-template>
             </td>
 
-            <td class="py-3.5 px-4 text-center whitespace-nowrap">
-              <span
-                class="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-slate-200 bg-slate-50 text-slate-700">
-                {{ translateStatus(item.decision.status) }}
-              </span>
+            <td class="py-3.5 px-4 whitespace-nowrap">
+              <div class="flex flex-col items-center gap-1">
+                <span class="px-2.5 py-1 rounded-md text-[11px] font-semibold border border-slate-200 bg-slate-50 text-slate-700">
+                  {{ getDecisionNextAction(item).label }}
+                </span>
+                <span class="text-[10px] text-slate-500">{{ translateStatus(item.decision.status) }}</span>
+              </div>
             </td>
 
           </tr>
@@ -298,9 +456,9 @@
     <!-- Header section -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
       <div>
-        <h3 class="font-bold text-base text-slate-900">Hàng chờ xử lý SKU và theo dõi hiệu quả</h3>
+        <h3 class="font-bold text-base text-slate-900">Kế hoạch triển khai và đối soát kết quả</h3>
         <p class="text-xs text-slate-500">
-          Giao việc theo SKU, kiểm soát hạn xử lý và đối chiếu kết quả thực tế với dự kiến trước khi khép lại kế hoạch.
+          Giao việc theo SKU sau bước phê duyệt; kết quả thực tế và quan sát ERP được lưu tách biệt để phục vụ đối soát.
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2 shrink-0">
@@ -314,7 +472,7 @@
         </button>
         <button (click)="openCreatePlanModal()"
           class="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs px-3.5 py-2 rounded-xl transition-all cursor-pointer shrink-0">
-          Tạo kế hoạch xử lý
+          Tạo kế hoạch thủ công
         </button>
       </div>
     </div>
@@ -341,23 +499,23 @@
     <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
       <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
         <div>
-          <h4 class="text-sm font-bold text-slate-900">Bằng chứng hiệu quả của hệ thống hỗ trợ quyết định</h4>
-          <p class="text-xs text-slate-500">Chất lượng nhận diện rủi ro được đo từ nhãn hậu kiểm; kết quả vận hành chỉ tổng hợp từ kế hoạch đã hoàn tất.</p>
+          <h4 class="text-sm font-bold text-slate-900">Theo dõi chất lượng cảnh báo</h4>
+          <p class="text-xs text-slate-500">Hệ thống đối chiếu cảnh báo với tình hình bán hàng sau thời gian theo dõi. Kết quả triển khai chỉ dùng số liệu merchant nhập hoặc ERP đã đối soát.</p>
         </div>
-        <span *ngIf="decisionEffectiveness.status === 'READY'" class="text-[10px] font-semibold uppercase tracking-wider text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-md">Đủ nhãn hậu kiểm</span>
-        <span *ngIf="decisionEffectiveness.status !== 'READY'" class="text-[10px] font-semibold uppercase tracking-wider text-amber-800 bg-amber-100 border border-amber-200 px-2 py-1 rounded-md">Đang chờ nhãn hậu kiểm</span>
+        <span *ngIf="decisionEffectiveness.status === 'READY'" class="text-[10px] font-semibold uppercase tracking-wider text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-md">Đã có kết quả theo dõi</span>
+        <span *ngIf="decisionEffectiveness.status !== 'READY'" class="text-[10px] font-semibold uppercase tracking-wider text-amber-800 bg-amber-100 border border-amber-200 px-2 py-1 rounded-md">Chưa đủ thời gian theo dõi</span>
       </div>
 
       <div *ngIf="decisionEffectiveness.status === 'READY'" class="grid grid-cols-2 gap-2 text-xs">
-        <div class="rounded-lg border border-slate-200 bg-white p-3"><span class="block text-slate-500">Precision&#64;{{ decisionEffectiveness.evaluated_k }}</span><strong class="block mt-1 text-base text-slate-900 font-mono">{{ formatPercent(decisionEffectiveness.precision_at_k) }}</strong></div>
-        <div class="rounded-lg border border-slate-200 bg-white p-3"><span class="block text-slate-500">Recall nhóm rủi ro cao</span><strong class="block mt-1 text-base text-slate-900 font-mono">{{ formatPercent(decisionEffectiveness.high_risk_recall) }}</strong></div>
+        <div class="rounded-lg border border-slate-200 bg-white p-3"><span class="block text-slate-500">Trong nhóm ưu tiên, SKU vẫn bán chậm</span><strong class="block mt-1 text-base text-slate-900 font-mono">{{ formatPercent(decisionEffectiveness.precision_at_k) }}</strong></div>
+        <div class="rounded-lg border border-slate-200 bg-white p-3"><span class="block text-slate-500">SKU bán chậm đã được nhận diện</span><strong class="block mt-1 text-base text-slate-900 font-mono">{{ formatPercent(decisionEffectiveness.high_risk_recall) }}</strong></div>
       </div>
       <p *ngIf="decisionEffectiveness.status !== 'READY'" class="text-xs text-slate-600">
-        Chưa có nhãn thực tế đã đóng băng sau cửa sổ quan sát nên chưa thể kết luận Precision&#64;K hoặc Recall rủi ro cao. Kết quả vận hành vẫn được theo dõi khi kế hoạch hoàn tất.
+        Chưa đủ dữ liệu bán hàng sau thời gian theo dõi để kết luận chất lượng cảnh báo. Kết quả vận hành vẫn được ghi nhận khi kế hoạch hoàn tất.
       </p>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
         <div class="rounded-lg border border-slate-200 bg-white p-3"><span class="block text-slate-500">SKU đã xử lý</span><strong class="block mt-1 text-base text-slate-900 font-mono">{{ actionPlanSummary.completed_sku_count }}</strong></div>
-        <div class="rounded-lg border border-slate-200 bg-white p-3"><span class="block text-slate-500">Vốn đã giải phóng</span><strong class="block mt-1 text-base text-emerald-800 font-mono">{{ formatCurrency(actionPlanSummary.actual_recovery_value) }}</strong></div>
+        <div class="rounded-lg border border-slate-200 bg-white p-3"><span class="block text-slate-500">Merchant đã khai báo giá vốn quay vòng</span><strong class="block mt-1 text-base text-emerald-800 font-mono">{{ formatCurrency(actionPlanSummary.merchant_reported_inventory_cost_rotation ?? actionPlanSummary.actual_recovery_value) }}</strong></div>
         <div class="rounded-lg border border-slate-200 bg-white p-3"><span class="block text-slate-500">Doanh số sau xử lý</span><strong class="block mt-1 text-base text-slate-900 font-mono">{{ formatCurrency(actionPlanSummary.actual_sales_value) }}</strong></div>
       </div>
     </div>
@@ -369,7 +527,7 @@
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
         <div class="p-2.5 rounded-lg border bg-white border-slate-200 text-slate-800 font-medium">
           <span class="block text-[10px] text-slate-400 uppercase font-mono">Bước 1</span>
-          AI đề xuất bản nháp
+          Đề xuất bản nháp
         </div>
         <div class="p-2.5 rounded-lg border bg-white border-slate-200 text-slate-800 font-medium">
           <span class="block text-[10px] text-slate-400 uppercase font-mono">Bước 2</span>
@@ -420,7 +578,7 @@
             <th class="py-3.5 px-4 whitespace-nowrap">Mã sản phẩm</th>
             <th class="py-3.5 px-4 whitespace-nowrap">Phương án</th>
             <th class="py-3.5 px-4 whitespace-nowrap">Phụ trách / hạn xử lý</th>
-            <th class="py-3.5 px-4 text-right whitespace-nowrap">Thu hồi vốn dự kiến / thực tế</th>
+            <th class="py-3.5 px-4 text-right whitespace-nowrap">Giá vốn quay vòng: kịch bản / merchant khai báo</th>
             <th class="py-3.5 px-4 text-center whitespace-nowrap">Sản lượng dự kiến / thực tế</th>
             <th class="py-3.5 px-4 text-center whitespace-nowrap">Trạng thái</th>
             <th class="py-3.5 px-4 text-right whitespace-nowrap">Phê duyệt và đánh giá</th>
@@ -438,6 +596,7 @@
               {{ plan.campaign_name || plan.campaign }}
               <span class="block text-[10px] font-normal text-slate-500 font-mono">{{ plan.duration_days ||
                 plan.duration }} ngày | Bắt đầu {{ plan.start_date || plan.start }}</span>
+              <span *ngIf="plan.checklist" class="block mt-1 text-[10px] font-normal text-slate-600">Checklist: {{ plan.checklist.required_resolved }}/{{ plan.checklist.required_total }} bước bắt buộc</span>
             </td>
 
             <!-- Mã SP -->
@@ -447,7 +606,10 @@
 
             <!-- Chiến Lược -->
             <td class="py-3.5 px-4 text-slate-800 font-medium whitespace-nowrap">
-              {{ plan.strategy }}
+              {{ translateAction(plan.strategy_label || plan.strategy) }}
+              <span *ngIf="plan.action_parameters?.discount_rate !== undefined" class="block mt-1 text-[10px] text-slate-500 font-mono">
+                Điều chỉnh giá {{ (plan.action_parameters.discount_rate * 100).toFixed(0) }}%
+              </span>
             </td>
 
             <td class="py-3.5 px-4 whitespace-nowrap">
@@ -459,22 +621,27 @@
               </span>
             </td>
 
-            <!-- Thu Hồi Vốn (Expected vs Actual Recovery) -->
+            <!-- Giá vốn tồn theo kịch bản vs merchant khai báo -->
             <td class="py-3.5 px-4 text-right font-mono whitespace-nowrap">
               <div class="font-bold text-slate-900">
-                <span class="text-slate-500 font-normal">Dự kiến:</span> {{ formatCurrency(plan.expected_recovery_value
-                || 0) }}
+                <span class="text-slate-500 font-normal">Kịch bản:</span> {{ formatCurrency(plan.projected_inventory_cost_rotation ?? (plan.expected_recovery_value
+                || 0)) }}
               </div>
               <div *ngIf="plan.actual_recovery_value !== null && plan.actual_recovery_value !== undefined"
                 class="text-emerald-700 font-bold">
-                <span class="text-slate-500 font-normal">Thực tế:</span> {{ formatCurrency(plan.actual_recovery_value)
+                <span class="text-slate-500 font-normal">Merchant khai báo:</span> {{ formatCurrency(plan.merchant_reported_inventory_cost_rotation ?? plan.actual_recovery_value)
                 }}
-                <span class="text-[10px] font-normal text-emerald-800">({{ plan.recovery_accuracy_pct ?? 0 }}%
-                  đạt)</span>
+                <span class="text-[10px] font-normal text-emerald-800">({{ plan.inventory_cost_rotation_vs_projection_pct ?? plan.recovery_accuracy_pct ?? 0 }}% so với kịch bản)</span>
               </div>
               <div *ngIf="plan.actual_recovery_value === null || plan.actual_recovery_value === undefined"
                 class="text-slate-400 text-[11px]">
-                Chưa ghi nhận thực tế
+                Chưa có số liệu merchant khai báo
+              </div>
+              <div *ngIf="plan.observed_outcome?.status === 'OBSERVED'" class="mt-1 text-[10px] font-sans font-semibold text-blue-700">
+                Đã đối soát từ ERP
+              </div>
+              <div *ngIf="plan.observed_outcome?.status === 'PARTIAL'" class="mt-1 text-[10px] font-sans font-semibold text-amber-700">
+                ERP thiếu một phần dữ liệu
               </div>
             </td>
 
@@ -487,7 +654,7 @@
                 class="text-emerald-700 font-bold">
                 <span class="text-slate-500 font-normal">Thực tế:</span> {{ plan.actual_units_sold }} SP
                 <span class="text-[10px] font-normal text-emerald-800">({{ plan.units_accuracy_pct ?? 0 }}%
-                  đạt)</span>
+                  so với kế hoạch)</span>
               </div>
               <div *ngIf="plan.actual_units_sold === null || plan.actual_units_sold === undefined"
                 class="text-slate-400 text-[11px]">
@@ -523,6 +690,10 @@
                 class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer">
                 Ghi nhận kết quả
               </button>
+              <button (click)="openChecklist(plan)"
+                class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 transition-all cursor-pointer">
+                Checklist
+              </button>
               <button *ngIf="['DRAFT', 'CONFIRMED', 'IN_PROGRESS'].includes(plan.status)"
                 (click)="cancelActionPlan(plan)"
                 class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 transition-all cursor-pointer">
@@ -537,211 +708,150 @@
         </tbody>
       </table>
     </div>
+
+    <section *ngIf="selectedChecklistPlan" class="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3" aria-live="polite">
+      <div class="flex items-start justify-between gap-3">
+        <div><h4 class="text-sm font-bold text-slate-900">Checklist thực thi: {{ selectedChecklistPlan.sku }}</h4><p class="mt-1 text-xs text-slate-500">Hoàn tất từng bước kèm bằng chứng trước khi ghi nhận kết quả.</p></div>
+        <button (click)="closeChecklist()" class="text-xs font-semibold text-slate-600 hover:text-slate-900">Đóng</button>
+      </div>
+      <p *ngIf="checklistError" class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">{{ checklistError }}</p>
+      <p *ngIf="checklistLoading" class="text-xs text-slate-500">Đang tải checklist...</p>
+      <div *ngFor="let task of checklistData?.items" class="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2"><div><p class="text-xs font-bold text-slate-900">{{ task.title }} <span *ngIf="task.is_required" class="text-rose-700">*</span></p><p class="mt-0.5 text-[11px] text-slate-500">{{ task.instruction }}</p><p class="mt-1 text-[11px] text-slate-500">Hạn: {{ task.due_date || 'Chưa đặt hạn' }}<span *ngIf="task.assignee?.display_name"> · Phụ trách: {{ task.assignee.display_name }}</span></p></div><span class="text-[10px] font-semibold rounded-full bg-slate-100 px-2 py-1 text-slate-700">{{ task.status === 'COMPLETED' ? 'Đã hoàn thành' : task.status === 'SKIPPED' ? 'Không thực hiện' : task.status === 'IN_PROGRESS' ? 'Đang thực hiện' : 'Chưa thực hiện' }}</span></div>
+        <div *ngIf="task.status !== 'COMPLETED' && task.status !== 'SKIPPED'" class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+          <input [(ngModel)]="evidenceDraft(task.id).title" [name]="'evidenceTitle' + task.id" placeholder="Tên bằng chứng" class="rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+          <input [(ngModel)]="evidenceDraft(task.id).reference_url" [name]="'evidenceUrl' + task.id" placeholder="Liên kết bằng chứng" class="rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+          <button (click)="addChecklistEvidence(task)" class="rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Lưu bằng chứng</button>
+          <div class="flex gap-2"><button (click)="updateChecklistTask(task, 'COMPLETED')" class="rounded-lg bg-emerald-700 px-2 py-1.5 text-xs font-semibold text-white">Hoàn tất</button><button (click)="updateChecklistTask(task, 'SKIPPED')" class="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs font-semibold text-amber-800">Bỏ qua</button></div>
+        </div>
+      </div>
+    </section>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- 5. CHI TIẾT PHƯƠNG ÁN & CÔNG CỤ MÔ PHỎNG (MODAL POPUP)               -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div *ngIf="isDrawerOpen && selectedDecision" (click)="closeDrawer()"
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-
-    <div (click)="$event.stopPropagation()"
-      class="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden max-w-2xl w-full max-h-[85vh] flex flex-col">
-
-      <!-- Modal Header -->
-      <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/50 shrink-0">
+  <div *ngIf="isDrawerOpen && selectedDecision" (click)="closeDrawer()" class="decision-drawer-backdrop">
+    <aside #drawerPanel (click)="$event.stopPropagation()" (keydown.tab)="trapDrawerFocus($event)" tabindex="-1"
+      class="decision-drawer" role="dialog" aria-modal="true" aria-labelledby="decision-drawer-title">
+      <header class="decision-drawer__header">
         <div>
-          <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Chi tiết phương án giải
-            phóng</span>
-          <h2 class="text-lg font-bold text-slate-900 font-mono mt-0.5">
-            Mã sản phẩm: {{ selectedDecision.sku }}
-          </h2>
+          <p class="decision-drawer__eyebrow">Hồ sơ quyết định</p>
+          <h2 id="decision-drawer-title" class="decision-drawer__title">{{ selectedDecision.sku }}</h2>
+          <p class="decision-drawer__subhead">{{ selectedDecision.decision_id }}</p>
         </div>
+        <button type="button" (click)="closeDrawer()" class="decision-drawer__close" aria-label="Đóng hồ sơ quyết định">Đóng</button>
+      </header>
 
-        <button (click)="closeDrawer()"
-          class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer">
-          Đóng
-        </button>
-      </div>
+      <ol class="decision-steps" aria-label="Tiến trình xử lý quyết định">
+        <li [class.is-current]="canMarkReviewed(selectedDecision)" [class.is-complete]="!canMarkReviewed(selectedDecision)"><span>1</span><strong>Xem căn cứ</strong></li>
+        <li [class.is-current]="selectedDecision.decision.status === 'REVIEWED'" [class.is-complete]="['ACCEPTED', 'EXECUTED', 'COMPLETED'].includes(selectedDecision.decision.status)"><span>2</span><strong>Phê duyệt</strong></li>
+        <li [class.is-current]="selectedDecision.decision.status === 'ACCEPTED'" [class.is-complete]="['EXECUTED', 'COMPLETED'].includes(selectedDecision.decision.status)"><span>3</span><strong>Lập kế hoạch</strong></li>
+      </ol>
 
-      <!-- Modal Body (Scrollable) -->
-      <div class="p-5 overflow-y-auto space-y-5 flex-1 custom-scrollbar text-xs">
-
-        <!-- ═══════════════════════════════════════════════════════════════════ -->
-        <!-- MÔ PHỎNG TÀI CHÍNH TỰ ĐỘNG (SIM-001)                                 -->
-        <!-- ═══════════════════════════════════════════════════════════════════ -->
-        <div class="p-5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-4">
-          <div class="flex items-center justify-between border-b border-slate-200/60 pb-2.5">
-            <h4 class="font-bold text-sm text-slate-900">Mô phỏng tài chính khi giảm giá</h4>
-            <span class="font-mono text-slate-600">Giảm {{ simDiscountRate }}% trong {{ simDurationDays }} ngày</span>
+      <main class="decision-drawer__body">
+        <section class="decision-brief">
+          <div class="decision-brief__meta">
+            <span class="rounded-md border px-2 py-1 text-[10px] font-semibold" [ngClass]="getRiskBadgeClass(selectedDecision.risk.class)">{{ translateRiskClass(selectedDecision.risk.class) }}</span>
+            <span class="rounded-md border px-2 py-1 text-[10px] font-semibold" [ngClass]="getPriorityBadgeClass(selectedDecision.decision.priority)">{{ selectedDecision.decision.priority }}</span>
+            <span class="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700">{{ translateStatus(selectedDecision.decision.status) }}</span>
           </div>
+          <p class="decision-brief__label">Phương án chính</p>
+          <h3 class="decision-brief__title">{{ getRecommendationOptions(selectedDecision)[0].label }}</h3>
+          <p class="decision-brief__tradeoff">{{ getRecommendationOptions(selectedDecision)[0].tradeoff }}</p>
+          <p *ngIf="selectedDecision.decision.action_parameters?.requires_review || selectedDecision.decision.action_parameters?.approval_required" class="decision-brief__guardrail">Cần phê duyệt bổ sung. Hệ thống không tự thay đổi giá, đơn mua hoặc chứng từ ERP.</p>
+        </section>
 
-          <!-- Nhập thông số -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div class="bg-white p-3 rounded-xl border border-slate-200 space-y-1.5">
-              <div class="flex justify-between font-semibold text-slate-700">
-                <span>Mức giảm giá</span>
-                <span class="font-mono font-bold text-slate-900">{{ simDiscountRate }}%</span>
-              </div>
-              <input type="range" min="5" max="60" step="1" [(ngModel)]="simDiscountRate"
-                (ngModelChange)="updateSimDiscount($event)"
-                class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900" />
-              <div class="flex justify-between gap-1 pt-1">
-                <button *ngFor="let pct of [10, 15, 20, 30, 40]" (click)="updateSimDiscount(pct)"
-                  class="px-2 py-0.5 rounded text-[11px] font-mono font-medium border cursor-pointer"
-                  [ngClass]="simDiscountRate === pct ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200'">
-                  {{ pct }}%
-                </button>
-              </div>
-            </div>
+        <section class="decision-impact" aria-label="Tác động dự kiến">
+          <div><span>Giá vốn có rủi ro</span><strong>{{ formatCurrency(selectedDecision.financial_impact.capital_exposure) }}</strong></div>
+          <div><span>Giá vốn dự kiến quay vòng</span><strong *ngIf="hasProjection(selectedDecision); else noScenario" class="text-emerald-700">{{ formatCurrency(selectedDecision.financial_impact.projected_inventory_cost_rotation ?? selectedDecision.financial_impact.expected_recovery_value) }}</strong><ng-template #noScenario><strong class="decision-impact__label">Chưa có kịch bản</strong></ng-template></div>
+          <div><span>Giá vốn tồn còn lại theo kịch bản</span><strong>{{ formatCurrency(selectedDecision.financial_impact.remaining_inventory_cost_exposure ?? selectedDecision.financial_impact.residual_exposure) }}</strong></div>
+          <div><span>Dữ liệu kịch bản</span><strong class="decision-impact__label">{{ getProjectionReadinessLabel(selectedDecision) }}</strong></div>
+        </section>
 
-            <div class="bg-white p-3 rounded-xl border border-slate-200 space-y-1.5">
-              <div class="flex justify-between font-semibold text-slate-700">
-                <span>Thời gian triển khai</span>
-                <span class="font-mono font-bold text-slate-900">{{ simDurationDays }} ngày</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <input type="number" min="1" max="90" [(ngModel)]="simDurationDays"
-                  (ngModelChange)="updateSimDuration($event)"
-                  class="w-20 bg-slate-50 border border-slate-200 text-slate-900 font-mono font-bold rounded-lg p-1.5 outline-none" />
-                <div class="flex gap-1 flex-1">
-                  <button *ngFor="let d of [7, 14, 30, 60]" (click)="updateSimDuration(d)"
-                    class="px-2 py-1 rounded text-[11px] font-mono font-medium border cursor-pointer flex-1 text-center"
-                    [ngClass]="simDurationDays === d ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200'">
-                    {{ d }}d
-                  </button>
-                </div>
-              </div>
+        <section class="decision-section">
+          <div class="decision-section__heading"><h3>Phạm vi dữ liệu đã dùng</h3><p>{{ getDecisionScopeText(selectedDecision) }}</p></div>
+          <p *ngIf="selectedDecision.decision.options?.financial_boundary" class="decision-simulation__notice">{{ selectedDecision.decision.options?.financial_boundary }}</p>
+        </section>
+
+        <section *ngIf="getDecisionDataContract(selectedDecision) as dataContract" class="decision-data-contract" [ngClass]="getDecisionDataContractClass(dataContract.state)" aria-label="Tình trạng dữ liệu của quyết định">
+          <div class="decision-data-contract__headline">
+            <div>
+              <h3>{{ dataContract.label }}</h3>
+              <p>{{ dataContract.message }}</p>
             </div>
+            <span>{{ dataContract.asOf }}</span>
           </div>
-
-          <p *ngIf="isSimulating" class="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-800">
-            Đang tính toán kịch bản từ dữ liệu của SKU.
-          </p>
-          <p *ngIf="!isSimulating && simulationError" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
-            {{ simulationError }}
-          </p>
-
-          <!-- Kết quả mô phỏng chỉ hiển thị khi dịch vụ trả về dữ liệu. -->
-          <div *ngIf="sim001Result" class="space-y-1.5">
-            <span class="font-semibold text-slate-600 block">Kết quả tính toán dự kiến:</span>
-            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
-                <span class="text-[10px] text-slate-500 font-medium block">Sản lượng bán</span>
-                <span class="font-mono font-bold text-slate-900 text-sm block">{{ sim001Result?.expected_units_sold
-                  }} SP</span>
-              </div>
-
-              <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
-                <span class="text-[10px] text-slate-500 font-medium block">Doanh thu</span>
-                <span class="font-mono font-bold text-slate-900 text-sm block">{{
-                  formatCurrency(sim001Result?.expected_revenue) }}</span>
-              </div>
-
-              <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
-                <span class="text-[10px] text-slate-500 font-medium block">Vốn thu hồi</span>
-                <span class="font-mono font-bold text-emerald-700 text-sm block">{{
-                  formatCurrency(sim001Result?.estimated_recovery) }}</span>
-              </div>
-
-              <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
-                <span class="text-[10px] text-slate-500 font-medium block">Chi phí giảm giá</span>
-                <span class="font-mono font-bold text-slate-900 text-sm block">{{
-                  formatCurrency(sim001Result?.discount_cost) }}</span>
-              </div>
-
-              <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
-                <span class="text-[10px] text-slate-500 font-medium block">Vốn còn đọng</span>
-                <span class="font-mono font-bold text-slate-900 text-sm block">{{
-                  formatCurrency(sim001Result?.remaining_exposure) }}</span>
-              </div>
+          <dl class="decision-data-contract__facts">
+            <div *ngFor="let item of dataContract.rows" [class.is-ready]="item.ready" [class.is-missing]="!item.ready">
+              <dt>{{ item.label }}</dt><dd>{{ item.value }}</dd>
             </div>
+          </dl>
+          <ul *ngIf="dataContract.reasons.length" class="decision-data-contract__reasons"><li *ngFor="let reason of dataContract.reasons">{{ reason }}</li></ul>
+          <p class="decision-data-contract__refresh-rule">{{ dataContract.refreshRule }}</p>
+        </section>
+
+        <section *ngIf="decisionRevalidation" class="decision-section rounded-xl border p-4" [ngClass]="decisionRevalidation.state === 'READY' ? 'border-emerald-200 bg-emerald-50/40' : (decisionRevalidation.state === 'NEEDS_RECHECK' ? 'border-amber-200 bg-amber-50/50' : 'border-rose-200 bg-rose-50/50')" aria-label="Kiểm tra dữ liệu trước khi thực thi">
+          <div class="decision-section__heading"><h3>{{ decisionRevalidation.title }}</h3><p>{{ decisionRevalidation.message }}</p></div>
+          <p class="mt-2 text-[11px] text-slate-600">Dữ liệu hiện tại: {{ decisionRevalidation.current_data?.as_of || 'chưa xác định thời điểm' }}. {{ decisionRevalidation.boundary }}</p>
+          <ul *ngIf="decisionRevalidation.changes?.length" class="mt-3 space-y-1 text-xs text-slate-700"><li *ngFor="let change of decisionRevalidation.changes">{{ change.label }}{{ change.scope ? ' · ' + change.scope : '' }}: <strong>{{ change.before }}</strong> → <strong>{{ change.after }}</strong></li></ul>
+          <p *ngIf="decisionRevalidation.last_review?.approved_at" class="mt-2 text-[11px] text-slate-500">Đã kiểm tra lần gần nhất: {{ decisionRevalidation.last_review.approved_at }}</p>
+        </section>
+
+        <section *ngIf="getRecommendationOptions(selectedDecision).length" class="decision-section">
+          <div class="decision-section__heading"><h3>Phương án đã đối chiếu</h3><p>Mỗi phương án nêu rõ trạng thái và điều kiện; không so sánh bằng điểm nội bộ.</p></div>
+          <article *ngFor="let option of getRecommendationOptions(selectedDecision)" class="decision-alternative" [class.ring-1]="option.isPrimary" [class.ring-slate-300]="option.isPrimary">
+            <div>
+              <h4>{{ option.label }}</h4><p>{{ option.tradeoff }}</p>
+              <p *ngIf="option.reasons.length" class="mt-1 text-[11px] text-slate-600">{{ option.reasons[0] }}</p>
+              <p *ngIf="option.financialScenario?.message" class="mt-1 text-[11px] text-slate-500">{{ option.financialScenario?.message }}</p>
+            </div>
+            <span class="decision-alternative__tag border" [ngClass]="getOptionStatusClass(option)">{{ option.statusLabel }}</span>
+          </article>
+        </section>
+
+        <section class="decision-section decision-evidence" [class.is-open]="isEvidenceOpen">
+          <div class="decision-section__heading"><h3>Căn cứ quyết định</h3><p>{{ isEvidenceOpen ? 'Các dữ liệu lưu vết được dùng để đánh giá SKU này.' : 'Mở căn cứ trước khi phê duyệt phương án.' }}</p></div>
+          <button *ngIf="!isEvidenceOpen" type="button" (click)="openEvidence()" [disabled]="isReviewingEvidence" class="decision-evidence__open">
+            {{ isReviewingEvidence ? 'Đang ghi nhận...' : 'Xem căn cứ' }}
+          </button>
+          <div *ngIf="isEvidenceOpen" class="decision-evidence__content">
+            <p>{{ getEvidenceSummary(selectedDecision) }}</p>
+            <div *ngIf="selectedDecision.explanation?.reason_codes?.length" class="decision-evidence__codes">
+              <span *ngFor="let code of selectedDecision.explanation?.reason_codes">{{ translateReasonCode(code) }}</span>
+            </div>
+            <dl *ngIf="getEvidenceItems().length" class="decision-evidence__list">
+              <div *ngFor="let evidence of getEvidenceItems()"><dt>{{ translateEvidenceMetric(evidence.metric) }}</dt><dd>{{ formatEvidenceValue(evidence) }}<small *ngIf="evidence.interpretation">{{ evidence.interpretation }}</small></dd></div>
+            </dl>
+            <p *ngIf="selectedDecision.decision.action_parameters?.operational_guidance?.length" class="decision-evidence__guidance"><strong>Hướng vận hành:</strong><span *ngFor="let guidance of selectedDecision.decision.action_parameters.operational_guidance">{{ guidance }}</span></p>
           </div>
+        </section>
+
+        <section class="decision-section">
+          <div class="decision-section__heading"><h3>Kịch bản tài chính</h3><p>Chỉ chạy khi cần so sánh thay đổi giá; không phải cam kết doanh số.</p></div>
+          <button *ngIf="!isSimulationOpen" type="button" (click)="openSimulation()" class="decision-simulation__open">{{ canSimulateDecision(selectedDecision) ? (hasProjection(selectedDecision) ? 'Mở mô phỏng giá' : 'Kiểm tra kịch bản theo dữ liệu hiện tại') : 'Xem tình trạng dữ liệu' }}</button>
+          <div *ngIf="isSimulationOpen && canSimulateDecision(selectedDecision)" class="decision-simulation">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="bg-white p-3 rounded-xl border border-slate-200 space-y-1.5"><div class="flex justify-between font-semibold text-slate-700"><span>Mức giảm giá</span><span class="font-mono text-slate-900">{{ simDiscountRate }}%</span></div><input type="range" min="0" max="50" step="1" [(ngModel)]="simDiscountRate" (ngModelChange)="updateSimDiscount($event)" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900" /><div class="flex gap-1"><button *ngFor="let pct of [10, 15, 20, 30]" (click)="updateSimDiscount(pct)" class="flex-1 px-1 py-1 rounded text-[10px] font-mono border" [ngClass]="simDiscountRate === pct ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200'">{{ pct }}%</button></div></div>
+              <div class="bg-white p-3 rounded-xl border border-slate-200 space-y-1.5"><div class="flex justify-between font-semibold text-slate-700"><span>Thời gian</span><span class="font-mono text-slate-900">{{ simDurationDays }} ngày</span></div><input type="number" min="1" max="90" [(ngModel)]="simDurationDays" (ngModelChange)="updateSimDuration($event)" class="w-full bg-slate-50 border border-slate-200 text-slate-900 font-mono font-bold rounded-lg p-1.5 outline-none" /><div class="flex gap-1"><button *ngFor="let d of [7, 14, 30, 60]" (click)="updateSimDuration(d)" class="flex-1 px-1 py-1 rounded text-[10px] font-mono border" [ngClass]="simDurationDays === d ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200'">{{ d }}d</button></div></div>
+            </div>
+            <p *ngIf="isSimulating" class="decision-simulation__notice">Đang tính kịch bản từ dữ liệu của SKU.</p>
+            <p *ngIf="!isSimulating && simulationError" class="decision-simulation__notice is-warning">{{ simulationError }}</p>
+            <div *ngIf="sim001Result" class="decision-simulation__results"><div><span>Sản lượng</span><strong>{{ sim001Result?.expected_units_sold }} SP</strong></div><div><span>Doanh thu</span><strong>{{ formatCurrency(sim001Result?.expected_revenue) }}</strong></div><div><span>Giá vốn tồn dự kiến quay vòng</span><strong class="text-emerald-700">{{ formatCurrency(sim001Result?.estimated_recovery) }}</strong></div><div><span>Giá vốn tồn còn lại theo kịch bản</span><strong>{{ formatCurrency(sim001Result?.remaining_exposure) }}</strong></div></div>
+          </div>
+          <p *ngIf="isSimulationOpen && !canSimulateDecision(selectedDecision)" class="decision-simulation__notice is-warning">{{ getSimulationUnavailableMessage(selectedDecision) }}</p>
+        </section>
+      </main>
+
+      <footer class="decision-drawer__footer">
+        <div><p class="decision-drawer__footer-label">Bước tiếp theo</p><p>{{ getDecisionNextAction(selectedDecision).helper }}</p></div>
+        <button type="button" (click)="runNextDecisionAction()" [disabled]="getDecisionNextAction(selectedDecision).kind === 'resolved' || isReviewingEvidence || isDecisionRevalidating" class="decision-drawer__primary-action">{{ getDecisionNextAction(selectedDecision).label }}</button>
+        <div class="decision-drawer__secondary-actions">
+          <button type="button" (click)="toggleCopilot(selectedDecision.sku)">Hỏi trợ lý</button>
+          <button *ngIf="['RECOMMENDED', 'NEEDS_REVIEW', 'REVIEWED', 'ACCEPTED'].includes(selectedDecision.decision.status)" type="button" (click)="openRejectModal()">Chưa chọn</button>
         </div>
-
-        <!-- ═══════════════════════════════════════════════════════════════════ -->
-        <!-- SO SÁNH CÁC MỨC GIẢM GIÁ (SIM-002)                                  -->
-        <!-- ═══════════════════════════════════════════════════════════════════ -->
-        <div *ngIf="sim002Result" class="p-5 rounded-xl border border-slate-200 bg-white space-y-3">
-          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h4 class="font-bold text-sm text-slate-900">So sánh các kịch bản giảm giá</h4>
-            <span class="text-slate-500">So sánh trong {{ simDurationDays }} ngày</span>
-          </div>
-
-          <div class="overflow-x-auto rounded-lg border border-slate-200">
-            <table class="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
-                  <th class="py-2.5 px-3">Chỉ số so sánh</th>
-                  <th *ngFor="let header of sim002Result?.comparison_table?.headers"
-                    class="py-2.5 px-3 text-center font-bold">
-                    Giảm {{ header }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100 bg-white">
-                <tr>
-                  <td class="py-2.5 px-3 text-slate-700 font-medium">Sản lượng bán dự kiến</td>
-                  <td *ngFor="let val of sim002Result?.comparison_table?.metrics?.expected_sales"
-                    class="py-2.5 px-3 text-center font-mono font-bold">
-                    {{ val }} SP
-                  </td>
-                </tr>
-
-                <tr>
-                  <td class="py-2.5 px-3 text-slate-700 font-medium">Tiền vốn thu hồi dự kiến</td>
-                  <td *ngFor="let val of sim002Result?.comparison_table?.metrics?.recovery"
-                    class="py-2.5 px-3 text-center font-mono font-bold text-emerald-700">
-                    {{ formatCurrency(val) }}
-                  </td>
-                </tr>
-
-                <tr>
-                  <td class="py-2.5 px-3 text-slate-700 font-medium">Vốn đọng còn lại</td>
-                  <td *ngFor="let val of sim002Result?.comparison_table?.metrics?.remaining_capital"
-                    class="py-2.5 px-3 text-center font-mono font-bold">
-                    {{ formatCurrency(val) }}
-                  </td>
-                </tr>
-
-                <tr>
-                  <td class="py-2.5 px-3 text-slate-700 font-medium">Ảnh hưởng lợi nhuận</td>
-                  <td *ngFor="let val of sim002Result?.comparison_table?.metrics?.margin_impact"
-                    class="py-2.5 px-3 text-center font-mono font-bold">
-                    {{ val }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Modal Footer -->
-      <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-end gap-2 shrink-0">
-        <button (click)="openCreatePlanModal(selectedDecision)"
-          class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer">
-          Tạo kế hoạch xử lý
-        </button>
-        <button *ngIf="['RECOMMENDED', 'REVIEWED'].includes(selectedDecision.decision.status)"
-          (click)="acceptDecision(selectedDecision)"
-          class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white transition-all cursor-pointer">
-          Đồng ý duyệt phương án
-        </button>
-        <button *ngIf="['RECOMMENDED', 'REVIEWED', 'ACCEPTED'].includes(selectedDecision.decision.status)"
-          (click)="openRejectModal()"
-          class="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-all cursor-pointer">
-          Từ chối
-        </button>
-        <button (click)="closeDrawer()"
-          class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700 transition-all cursor-pointer">
-          Đóng
-        </button>
-      </div>
-
-    </div>
-
+      </footer>
+    </aside>
   </div>
 
   <!-- Modal từ chối -->
@@ -749,30 +859,31 @@
     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
     <div (click)="$event.stopPropagation()"
       class="bg-white rounded-2xl border border-slate-200 p-6 max-w-md w-full space-y-4 shadow-xl">
-      <h3 class="font-bold text-base text-slate-900">Từ chối gợi ý cho mã: {{ selectedDecision?.sku }}</h3>
+      <h3 class="font-bold text-base text-slate-900">Chưa chọn phương án cho mã: {{ selectedDecision?.sku }}</h3>
 
       <div class="space-y-1">
-        <label class="text-xs font-semibold text-slate-700">Lý do từ chối:</label>
+        <label class="text-xs font-semibold text-slate-700">Điều gì chưa phù hợp?</label>
         <select [(ngModel)]="rejectionReason"
           class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl p-2.5 outline-none">
-          <option value="ALREADY_PLANNING_PROMOTION">Đã có chương trình khuyến mãi riêng</option>
-          <option value="SUPPLIER_RETURN_AVAILABLE">Có thể hoàn trả nhà cung cấp</option>
-          <option value="STRATEGICALLY_IMPORTANT">Sản phẩm chiến lược, cần giữ nguyên giá</option>
-          <option value="RECOMMENDATION_NOT_SUITABLE">Mức giảm giá chưa phù hợp</option>
+          <option value="ALREADY_HAS_PLAN">Đã có phương án xử lý khác</option>
+          <option value="DATA_DOES_NOT_MATCH">Dữ liệu thực tế chưa khớp</option>
+          <option value="KEEP_PRICE_OR_STOCK">Cần giữ giá hoặc giữ hàng</option>
+          <option value="SUPPLIER_OR_PO_LOCKED">PO hoặc nhà cung cấp chưa thể thay đổi</option>
+          <option value="TIMING_NOT_RIGHT">Chưa đúng thời điểm</option>
           <option value="OTHER">Lý do khác</option>
         </select>
       </div>
 
       <div class="space-y-1">
-        <label class="text-xs font-semibold text-slate-700">Ghi chú bổ sung:</label>
-        <textarea [(ngModel)]="customRejectionNote" placeholder="Nhập thêm ghi chú từ chối..."
+        <label class="text-xs font-semibold text-slate-700">Ghi chú thêm (nếu cần):</label>
+        <textarea [(ngModel)]="customRejectionNote" placeholder="Ví dụ: chờ kết thúc chiến dịch đang chạy"
           class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl p-2.5 outline-none min-h-[70px]"></textarea>
       </div>
 
       <div class="flex justify-end gap-2 pt-2">
         <button (click)="confirmRejectDecision()"
           class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer">
-          Xác nhận từ chối
+          Lưu lý do
         </button>
         <button (click)="closeRejectModal()"
           class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer">
@@ -784,19 +895,30 @@
 
   <!-- Modal tạo kế hoạch xử lý SKU -->
   <div *ngIf="isCreatePlanModalOpen" (click)="closeCreatePlanModal()"
-    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+    class="plan-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs"
+    [class.plan-modal-overlay--from-decision]="!!planDecisionId">
     <div (click)="$event.stopPropagation()"
-      class="bg-white rounded-2xl border border-slate-200 p-6 max-w-xl w-full max-h-[90vh] overflow-y-auto space-y-4 shadow-xl">
+      class="plan-modal-panel bg-white rounded-2xl border border-slate-200 p-6 max-w-xl w-full max-h-[90vh] overflow-y-auto space-y-4 shadow-xl"
+      [class.plan-modal-panel--from-decision]="!!planDecisionId">
       <div class="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
         <div>
-          <h3 class="font-bold text-base text-slate-900">Tạo kế hoạch xử lý SKU</h3>
-          <p class="text-xs text-slate-500 mt-0.5">Kế hoạch được tạo ở trạng thái bản nháp và cần phê duyệt trước khi triển khai.</p>
+          <h3 class="font-bold text-base text-slate-900">Lập kế hoạch triển khai</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Kế hoạch lưu ở trạng thái bản nháp. Không có giá, đơn mua hoặc chứng từ ERP nào được thay đổi tự động.</p>
         </div>
         <button (click)="closeCreatePlanModal()"
           class="text-xs text-slate-500 hover:text-slate-900 font-semibold shrink-0" aria-label="Đóng biểu mẫu">Đóng</button>
       </div>
 
       <div class="space-y-3 text-xs">
+        <div *ngIf="errorMessage" class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-rose-800">
+          {{ errorMessage }}
+        </div>
+        <div *ngIf="planDecisionId" class="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900">
+          Kế hoạch này kế thừa căn cứ từ khuyến nghị đã phê duyệt. Chỉ các phương án đủ điều kiện mới được chọn.
+        </div>
+        <div *ngIf="!planDecisionId" class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+          Kế hoạch thủ công không được dùng để đánh giá hiệu năng của mô hình. Hãy ghi rõ bối cảnh trong phần ghi chú.
+        </div>
         <div class="space-y-1">
           <label class="font-semibold text-slate-700">Tên chiến dịch:</label>
           <input type="text" [(ngModel)]="planCampaign" placeholder="Ví dụ: Xử lý tồn kho CRIT-024"
@@ -821,9 +943,54 @@
         </div>
 
         <div class="space-y-1">
-          <label class="font-semibold text-slate-700">Phương án xử lý:</label>
-          <input type="text" [(ngModel)]="planStrategy" placeholder="Ví dụ: Giảm giá 15%"
-            class="w-full bg-white border border-slate-200 text-slate-900 font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
+          <label class="font-semibold text-slate-700">Phương án triển khai:</label>
+          <select [(ngModel)]="planStrategy" (ngModelChange)="onPlanStrategyChanged()"
+            class="w-full bg-white border border-slate-200 text-slate-900 font-medium rounded-xl p-2.5 outline-none focus:border-slate-400">
+            <option *ngFor="let option of planStrategyOptions" [value]="option.value">{{ option.label }}{{ option.requiresReview ? ' · cần rà soát bổ sung' : '' }}</option>
+          </select>
+        </div>
+
+        <div *ngIf="isPriceAction(planStrategy)" class="space-y-1">
+          <label class="font-semibold text-slate-700">Mức điều chỉnh giá (%):</label>
+          <input type="number" min="0" max="50" [(ngModel)]="planDiscountPercent" placeholder="Ví dụ: 15"
+            (ngModelChange)="onPlanDiscountChanged()"
+            class="w-full bg-white border border-slate-200 text-slate-900 font-mono font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
+          <p class="text-[11px] text-slate-500">Giới hạn vận hành là 0-50%. Các mức cao vẫn cần được phê duyệt theo chính sách.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+          <div class="space-y-1">
+            <label class="font-semibold text-slate-700">Kho áp dụng</label>
+            <input type="text" [(ngModel)]="planWarehouseCode" placeholder="Ví dụ: WH-HCM"
+              class="w-full bg-white border border-slate-200 text-slate-900 font-mono font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
+          </div>
+          <div class="space-y-1">
+            <label class="font-semibold text-slate-700">Kênh áp dụng</label>
+            <input type="text" [(ngModel)]="planChannel" placeholder="Ví dụ: Web, cửa hàng"
+              class="w-full bg-white border border-slate-200 text-slate-900 font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
+          </div>
+          <p class="sm:col-span-2 text-[11px] text-slate-500">Khai báo kho và kênh giúp hệ thống chặn các kế hoạch chồng lấn. Nếu để trống, hệ thống sẽ chặn theo phạm vi bảo thủ.</p>
+        </div>
+
+        <div *ngIf="isPlanOverrideForSelectedDecision()" class="space-y-1">
+          <label class="font-semibold text-slate-700">Lý do điều chỉnh phương án <span class="text-rose-700">*</span></label>
+          <select [(ngModel)]="planStrategyOverrideReasonCode" class="w-full bg-white border border-amber-300 text-slate-900 font-medium rounded-xl p-2.5 outline-none focus:border-amber-500">
+            <option value="">Chọn lý do</option>
+            <option value="OWN_PLAN">Đã có kế hoạch xử lý phù hợp hơn</option>
+            <option value="STOCK_OR_PRICE_CHANGED">Tồn kho hoặc mức giá thực tế đã thay đổi</option>
+            <option value="SUPPLIER_CONSTRAINT">Điều kiện nhà cung cấp hoặc PO không cho phép</option>
+            <option value="SEASONAL_OR_STRATEGIC">Cần giữ hàng hoặc giữ giá theo kế hoạch kinh doanh</option>
+            <option value="OTHER">Lý do khác</option>
+          </select>
+          <textarea [(ngModel)]="planStrategyOverrideReason" placeholder="Nêu thêm căn cứ cho thay đổi này (tối thiểu 8 ký tự)"
+            class="mt-2 w-full min-h-[60px] bg-white border border-amber-300 text-slate-900 font-medium rounded-xl p-2.5 outline-none focus:border-amber-500"></textarea>
+        </div>
+
+        <div *ngIf="planEvidenceOverrideRequired" class="space-y-1 rounded-xl border border-amber-300 bg-amber-50 p-3">
+          <label class="font-semibold text-amber-950">Ngoại lệ dữ liệu Odoo <span class="text-rose-700">*</span></label>
+          <p class="text-[11px] leading-5 text-amber-900">Tồn kho, giá vốn hoặc giá bán đã thay đổi từ lúc đề xuất được tạo. Owner hoặc Admin chỉ nên tiếp tục khi đã kiểm tra tác động.</p>
+          <textarea [(ngModel)]="planDataEvidenceOverrideReason" placeholder="Nêu lý do tiếp tục với dữ liệu Odoo mới (tối thiểu 16 ký tự)"
+            class="w-full min-h-[60px] bg-white border border-amber-300 text-slate-900 font-medium rounded-xl p-2.5 outline-none focus:border-amber-500"></textarea>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -852,25 +1019,26 @@
               class="w-full bg-white border border-slate-200 text-slate-900 font-mono font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
           </div>
           <div class="space-y-1">
-            <label class="font-semibold text-slate-700">Thu hồi dự kiến (VND):</label>
-            <input type="number" min="0" [(ngModel)]="planExpectedRecovery"
-              class="w-full bg-white border border-slate-200 text-slate-900 font-mono font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
+            <label class="font-semibold text-slate-700">Giá vốn dự kiến quay vòng (VND):</label>
+            <input type="number" min="0" [(ngModel)]="planExpectedRecovery" [readonly]="!!planDecisionId"
+              class="w-full bg-white border border-slate-200 text-slate-900 font-mono font-medium rounded-xl p-2.5 outline-none focus:border-slate-400 read-only:bg-slate-50 read-only:text-slate-500" />
+            <p *ngIf="planDecisionId" class="mt-1 text-[10px] text-slate-500">Đây là giá vốn của lượng dự kiến bán theo kịch bản, không phải doanh thu hay tiền thực nhận.</p>
           </div>
           <div class="space-y-1">
-            <label class="font-semibold text-slate-700">Doanh số dự kiến (VND):</label>
+            <label class="font-semibold text-slate-700">Mục tiêu doanh số (VND):</label>
             <input type="number" min="0" [(ngModel)]="planExpectedSales"
               class="w-full bg-white border border-slate-200 text-slate-900 font-mono font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
           </div>
           <div class="space-y-1">
-            <label class="font-semibold text-slate-700">Sản lượng dự kiến:</label>
+            <label class="font-semibold text-slate-700">Mục tiêu sản lượng:</label>
             <input type="number" min="0" [(ngModel)]="planExpectedUnits"
               class="w-full bg-white border border-slate-200 text-slate-900 font-mono font-medium rounded-xl p-2.5 outline-none focus:border-slate-400" />
           </div>
         </div>
 
         <div class="space-y-1">
-          <label class="font-semibold text-slate-700">Ghi chú:</label>
-          <textarea [(ngModel)]="planNotes" placeholder="Nhập ghi chú..."
+          <label class="font-semibold text-slate-700">Ghi chú triển khai:</label>
+          <textarea [(ngModel)]="planNotes" placeholder="Phạm vi triển khai, kênh bán hoặc bối cảnh cần lưu ý"
             class="w-full bg-white border border-slate-200 text-slate-900 font-medium rounded-xl p-2.5 outline-none min-h-[60px] focus:border-slate-400"></textarea>
         </div>
       </div>
@@ -878,7 +1046,7 @@
       <div class="flex flex-wrap justify-end gap-2 pt-2 border-t border-slate-100">
         <button (click)="submitCreateActionPlan()"
           class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer">
-          Tạo kế hoạch
+          Lưu bản nháp kế hoạch
         </button>
         <button (click)="closeCreatePlanModal()"
           class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer">
@@ -888,7 +1056,7 @@
     </div>
   </div>
 
-  <!-- Modal Ghi Nhận Kết Quả Thực Tế Sau Chiến Dịch (ACT-004 Outcome Tracking & Decision Usefulness) -->
+  <!-- Modal ghi nhận kết quả thực tế -->
   <div *ngIf="isOutcomeModalOpen" (click)="closeOutcomeModal()"
     class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
     <div (click)="$event.stopPropagation()"
@@ -905,17 +1073,17 @@
       </div>
 
       <div class="space-y-4 text-xs">
-        <!-- Nhập Thu Hồi Vốn -->
+        <!-- Merchant ghi nhận giá vốn tồn quay vòng -->
         <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
-          <span class="font-bold text-slate-900 block">1. Giá trị thu hồi (VND)</span>
+          <span class="font-bold text-slate-900 block">1. Giá vốn tồn đã quay vòng theo merchant (VND)</span>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
             <div>
-              <span class="text-[11px] text-slate-500 font-medium block">Dự kiến thu hồi:</span>
+              <span class="text-[11px] text-slate-500 font-medium block">Theo kịch bản:</span>
               <span class="font-mono font-bold text-slate-900 text-sm">{{ formatCurrency(outcomeExpectedRecovery)
                 }}</span>
             </div>
             <div>
-              <label class="text-[11px] font-semibold text-slate-700 block">Giá trị thực tế:</label>
+              <label class="text-[11px] font-semibold text-slate-700 block">Merchant khai báo:</label>
               <input type="number" [(ngModel)]="outcomeActualRecovery" (ngModelChange)="calculateOutcomeMetrics()"
                 class="w-full bg-white border border-slate-300 text-slate-900 font-mono font-bold rounded-lg p-2 outline-none focus:border-slate-500" />
             </div>
@@ -959,16 +1127,27 @@
             class="w-full min-h-[64px] bg-white border border-slate-300 text-slate-900 rounded-lg p-2 outline-none focus:border-slate-500"></textarea>
         </div>
 
-        <!-- Thẻ Đánh Giá Mức Độ Hiệu Quả Của Đề Xuất AI (Decision Usefulness Card) -->
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+          <div><strong class="text-xs text-slate-900">Sau khi kết thúc, cần làm gì?</strong><p class="mt-1 text-[11px] text-slate-500">Chọn bước tiếp theo cho đội ngũ. Kết quả từ Odoo, nếu có, vẫn được đối chiếu riêng.</p></div>
+          <select [(ngModel)]="outcomeNextStep" class="w-full bg-white border border-slate-300 text-slate-900 text-xs rounded-lg p-2 outline-none focus:border-slate-500">
+            <option value="MONITOR">Tiếp tục theo dõi</option>
+            <option value="NEW_DECISION">Lập quyết định mới</option>
+            <option value="CLOSE">Đóng kế hoạch</option>
+          </select>
+          <textarea [(ngModel)]="outcomeBusinessContext" placeholder="Điều gì làm kết quả thay đổi: hàng trả, nhập kho, chiến dịch khác hoặc bối cảnh cần nhớ?"
+            class="w-full min-h-[56px] bg-white border border-slate-300 text-slate-900 rounded-lg p-2 outline-none focus:border-slate-500"></textarea>
+        </div>
+
+        <!-- Đối chiếu kết quả với kịch bản đã lưu -->
         <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 space-y-2">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <span class="font-bold text-slate-900">Đánh giá hiệu quả phương án</span>
-            <span class="px-2.5 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-white">Đối chiếu outcome</span>
+            <span class="font-bold text-slate-900">Đối chiếu với kịch bản kế hoạch</span>
+            <span class="px-2.5 py-0.5 rounded text-[11px] font-bold bg-slate-800 text-white">Dữ liệu khai báo</span>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-xs pt-1">
             <div class="p-2 bg-white rounded-lg border border-emerald-100">
-              <span class="text-[10px] text-slate-500 block font-sans">Tỷ lệ thu hồi vốn đạt:</span>
+              <span class="text-[10px] text-slate-500 block font-sans">Mức ghi nhận so với kịch bản:</span>
               <span class="font-bold text-emerald-800 text-sm">{{ outcomeAccuracyRecoveryPct }}%</span>
             </div>
             <div class="p-2 bg-white rounded-lg border border-emerald-100">
@@ -978,7 +1157,7 @@
           </div>
 
           <p class="text-[11px] text-slate-600 font-medium pt-1">
-            Kết quả: <span class="font-bold text-slate-900">{{ outcomeUsefulnessRating }}</span>
+            <span class="font-semibold">Lưu ý:</span> {{ outcomeUsefulnessRating }}. Đây là số liệu merchant khai báo, không phải đối soát kế toán/ERP; chênh lệch không chứng minh nguyên nhân do phương án hoặc mô hình.
           </p>
         </div>
       </div>
@@ -994,9 +1173,10 @@
         </button>
       </div>
     </div>
+  </div>
 
-    <!-- Modal Trợ Lý AI Phân Tích (COP-001 Context Awareness & COP-002 Grounded Answers) -->
-    <div *ngIf="isCopilotOpen" (click)="toggleCopilot()"
+  <!-- Modal Trợ Lý AI Phân Tích (COP-001 Context Awareness & COP-002 Grounded Answers) -->
+  <div *ngIf="isCopilotOpen" (click)="toggleCopilot()"
       class="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/40 backdrop-blur-xs">
       <div (click)="$event.stopPropagation()"
         class="bg-white w-full max-w-xl sm:max-w-2xl h-full shadow-2xl flex flex-col border-l border-slate-200">
@@ -1090,8 +1270,6 @@
           </button>
         </div>
       </div>
-    </div>
-
   </div>
   </ng-container>
 </div>

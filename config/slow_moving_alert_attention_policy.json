@@ -1,0 +1,18 @@
+{
+  "version": "slow_moving_attention_v1",
+  "recheck_days": 7,
+  "feedback_remediation_due_days": 7,
+  "digest_max_items": 20,
+  "material_change": {
+    "priority_score_delta": 10,
+    "stock_increase_ratio": 0.2,
+    "stock_increase_units": 1,
+    "velocity_drop_ratio": 0.3,
+    "days_without_order_increase": 7
+  },
+  "notification": {
+    "default_delivery_mode": "IN_APP_DIGEST",
+    "require_owner_for_direct_delivery": true,
+    "require_quality_gate_for_proactive_delivery": true
+  }
+}

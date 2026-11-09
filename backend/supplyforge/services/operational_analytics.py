@@ -7,13 +7,15 @@ modifies, or combines with, the reproducible CSV/LightGBM research pipeline.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections import defaultdict
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models import Avg, Max, Min, Sum
+from django.db.models import Avg, Max, Min, Q, Sum
 from django.utils import timezone
 
 from supplyforge.models import (
@@ -24,10 +26,20 @@ from supplyforge.models import (
     IntegrationOperationalRiskSnapshot,
     IntegrationSkuDailyMetric,
     IntegrationSkuMapping,
+    SlowMovingAlertState,
+    SlowMovingAssessmentRun,
+    Workspace,
+)
+from supplyforge.services.slow_moving_alert_trust import (
+    SlowMovingAlertAttentionPolicy,
+    SlowMovingAlertTrustService,
+    SlowMovingCatalogContextResolver,
 )
 
 
 LOOKBACK_DAYS = 90
+MINIMUM_OBSERVED_DAYS = 60
+MINIMUM_SOURCE_COVERAGE_DAYS = 45
 ANNUAL_OPPORTUNITY_RATE = 0.12
 ACTIVE_MAPPING_STATUSES = (
     IntegrationSkuMapping.STATUS_AUTO,
@@ -111,7 +123,13 @@ class OdooOperationalAnalyticsService:
             ).select_related('canonical_product')
         )
         mapped_skus = [mapping.external_sku for mapping in mappings]
-        metrics = IntegrationSkuDailyMetric.objects.filter(connection=connection)
+        warehouse_ids = sorted({str(value) for value in connection.warehouse_ids or [] if str(value)})
+        # Sales are recorded once per connection (``warehouse_id=''``), while
+        # stock is deliberately constrained to the warehouses chosen by the
+        # merchant. Never let old or unselected warehouse facts alter risk.
+        metrics = IntegrationSkuDailyMetric.objects.filter(connection=connection).filter(
+            Q(warehouse_id='') | Q(warehouse_id__in=warehouse_ids)
+        )
         reference_date = metrics.aggregate(value=Max('metric_date'))['value']
         total_mappings = connection.sku_mappings.count()
         needs_review = connection.sku_mappings.filter(status=IntegrationSkuMapping.STATUS_REVIEW).count()
@@ -123,37 +141,58 @@ class OdooOperationalAnalyticsService:
             'scored_skus': 0,
             'excluded_without_on_hand': 0,
             'missing_unit_cost_skus': 0,
+            'excluded_insufficient_history': 0,
+            'excluded_not_sellable_context': 0,
+            'blocked_catalog_context': 0,
             'lookback_days': LOOKBACK_DAYS,
+            'warehouse_ids': warehouse_ids,
+            'sales_scope': 'CONNECTION_GLOBAL_SALES',
         }
 
-        if not reference_date or not mapped_skus:
+        if not reference_date or not mapped_skus or not warehouse_ids:
+            if not warehouse_ids:
+                coverage['reason'] = 'WAREHOUSE_SCOPE_NOT_CONFIGURED'
             return cls._save_empty_snapshot(connection, reference_date, coverage)
 
         window_start = reference_date - timedelta(days=LOOKBACK_DAYS - 1)
         first_metric_date = metrics.aggregate(value=Min('metric_date'))['value']
-        observed_days = max(1, min(LOOKBACK_DAYS, (reference_date - (first_metric_date or window_start)).days + 1))
+        source_coverage_days = max(
+            0, min(LOOKBACK_DAYS, (reference_date - first_metric_date).days + 1),
+        ) if first_metric_date else 0
         mapped_metrics = metrics.filter(external_sku__in=mapped_skus)
 
-        sales_by_sku: dict[str, dict] = defaultdict(lambda: {'daily': {}, 'sold_30d': 0.0, 'sold_90d': 0.0, 'last_sale': None})
+        sku_first_seen = {
+            row['external_sku']: row['first_seen']
+            for row in mapped_metrics.values('external_sku').annotate(first_seen=Min('metric_date'))
+        }
+        sales_by_sku: dict[str, dict] = defaultdict(
+            lambda: {'daily': {}, 'sold_30d': 0.0, 'sold_90d': 0.0, 'returned_90d': 0.0, 'last_sale': None}
+        )
         sales_rows = (
             mapped_metrics.filter(metric_date__gte=window_start)
             .values('external_sku', 'metric_date')
-            .annotate(quantity=Sum('sales_quantity'))
+            .annotate(sales=Sum('sales_quantity'), returned=Sum('returned_quantity'))
         )
         for row in sales_rows.iterator(chunk_size=2_000):
             sku = row['external_sku']
-            quantity = max(0.0, _number(row['quantity']))
+            returned = max(0.0, _number(row['returned']))
+            quantity = max(0.0, _number(row['sales']) - returned)
             metric_date = row['metric_date']
             item = sales_by_sku[sku]
             item['daily'][metric_date] = quantity
             item['sold_90d'] += quantity
+            item['returned_90d'] += returned
             if metric_date >= reference_date - timedelta(days=29):
                 item['sold_30d'] += quantity
             if quantity > 0 and (item['last_sale'] is None or metric_date > item['last_sale']):
                 item['last_sale'] = metric_date
 
         inventory_rows = (
-            mapped_metrics.filter(metric_date=reference_date, on_hand_quantity__isnull=False)
+            mapped_metrics.filter(
+                metric_date=reference_date,
+                warehouse_id__in=warehouse_ids,
+                on_hand_quantity__isnull=False,
+            )
             .values('external_sku')
             .annotate(on_hand=Sum('on_hand_quantity'), unit_cost=Avg('unit_cost'), unit_price=Avg('unit_price'))
         )
@@ -167,18 +206,44 @@ class OdooOperationalAnalyticsService:
         }
 
         records: list[dict] = []
+        context_resolver = SlowMovingCatalogContextResolver(
+            workspace_id=connection.workspace_id,
+            source_key=f'ODOO:{connection.id}',
+            as_of=timezone.make_aware(
+                datetime.combine(reference_date, time.max), timezone.get_current_timezone(),
+            ),
+        )
         for mapping in mappings:
             inventory = inventory_by_sku.get(mapping.external_sku)
             if not inventory or inventory['on_hand'] <= 0:
                 coverage['excluded_without_on_hand'] += 1
                 continue
+            sku_first_metric = sku_first_seen.get(mapping.external_sku)
+            sku_observed_days = max(
+                0, min(LOOKBACK_DAYS, (reference_date - sku_first_metric).days + 1),
+            ) if sku_first_metric else 0
+            if (
+                source_coverage_days < MINIMUM_SOURCE_COVERAGE_DAYS
+                or sku_observed_days < MINIMUM_OBSERVED_DAYS
+            ):
+                coverage['excluded_insufficient_history'] += 1
+                continue
+            catalog_context = context_resolver.resolve(
+                canonical_sku=mapping.canonical_sku,
+            )
+            if catalog_context.status == 'DATA_NEEDED':
+                coverage['blocked_catalog_context'] += 1
+                continue
+            if catalog_context.status == 'NOT_SELLABLE':
+                coverage['excluded_not_sellable_context'] += 1
+                continue
             sales = sales_by_sku[mapping.external_sku]
             last_sale = sales['last_sale']
-            dsls = (reference_date - last_sale).days if last_sale else observed_days
-            zero_days = observed_days - sum(1 for quantity in sales['daily'].values() if quantity > 0)
-            zero_rate = max(0.0, min(1.0, zero_days / observed_days))
-            velocity_90d = sales['sold_90d'] / observed_days
-            velocity_30d = sales['sold_30d'] / min(30, observed_days)
+            dsls = (reference_date - last_sale).days if last_sale else sku_observed_days
+            zero_days = sku_observed_days - sum(1 for quantity in sales['daily'].values() if quantity > 0)
+            zero_rate = max(0.0, min(1.0, zero_days / sku_observed_days))
+            velocity_90d = sales['sold_90d'] / sku_observed_days
+            velocity_30d = sales['sold_30d'] / min(30, sku_observed_days)
             cost = inventory['unit_cost'] or _number(mapping.canonical_product.cost)
             if cost <= 0:
                 coverage['missing_unit_cost_skus'] += 1
@@ -197,16 +262,24 @@ class OdooOperationalAnalyticsService:
                 'product_name': mapping.canonical_product.product_name or mapping.external_name or mapping.external_sku,
                 'category': mapping.canonical_product.platform or 'ERP / Odoo',
                 'risk_class': risk_class,
-                'risk_probability': score / 100.0,
+                'risk_probability': None,
                 'risk_score': score,
+                'priority_score': score,
+                'sellable_stock_quantity': inventory['on_hand'],
+                'capital_exposure_vnd': capital,
+                'days_since_last_sale': int(dsls),
+                'eligibility_status': 'ELIGIBLE',
                 'primary_signals': primary,
                 'supporting_signals': supporting,
                 'evidence': {
                     'source': 'ODOO',
                     'source_data_as_of': reference_date.isoformat(),
-                    'lookback_days': observed_days,
+                    'lookback_days': sku_observed_days,
+                    'source_coverage_days': source_coverage_days,
+                    'sku_observed_days': sku_observed_days,
                     'sold_30d': round(sales['sold_30d'], 4),
                     'sold_90d': round(sales['sold_90d'], 4),
+                    'returned_90d': round(sales['returned_90d'], 4),
                     'sales_velocity_30d': round(velocity_30d, 4),
                     'sales_velocity_90d': round(velocity_90d, 4),
                     'zero_rate_90d': round(zero_rate, 6),
@@ -216,7 +289,17 @@ class OdooOperationalAnalyticsService:
                     'unit_cost': round(cost, 4),
                     'unit_price': round(inventory['unit_price'], 4),
                     'capital_exposure_vnd': round(capital, 2),
+                    'inventory_readiness': {
+                        'status': 'READY' if cost > 0 else 'INVENTORY_INCOMPLETE',
+                        'source': 'ODOO_VERIFIED_SYNC',
+                        'as_of': reference_date.isoformat(),
+                    },
+                    'catalog_context': {
+                        'status': catalog_context.status,
+                        'contexts': [catalog_context.as_evidence()],
+                    },
                     'risk_engine': 'odoo_operational_rules_v1',
+                    'score_semantics': 'RULE_PRIORITY_NOT_PROBABILITY',
                 },
             })
 
@@ -237,6 +320,13 @@ class OdooOperationalAnalyticsService:
                 IntegrationOperationalRiskAssessment(snapshot=snapshot, **record)
                 for record in records
             ], batch_size=1_000)
+            quality_run = cls._capture_quality_run(
+                connection=connection,
+                snapshot=snapshot,
+                reference_date=reference_date,
+                first_metric_date=first_metric_date,
+                coverage=coverage,
+            )
             capital = cls._replace_capital_analysis(connection, records, reference_date, coverage)
 
         return {
@@ -245,11 +335,351 @@ class OdooOperationalAnalyticsService:
             'scored_skus': len(records),
             'mapped_skus': len(mapped_skus),
             'capital_analysis_id': str(capital.analysis_id),
+            'quality_run_id': str(quality_run.id) if quality_run else None,
         }
 
     @classmethod
+    def _capture_quality_run(
+        cls,
+        *,
+        connection: IntegrationConnection,
+        snapshot: IntegrationOperationalRiskSnapshot,
+        reference_date,
+        first_metric_date,
+        coverage: dict,
+    ) -> SlowMovingAssessmentRun | None:
+        """Freeze a quality cohort before this Odoo snapshot is replaced.
+
+        The dashboard continues to use its compact Odoo read model. This
+        auxiliary run exists solely for reproducible alert quality evidence;
+        it never routes Odoo facts through the CSV order tables.
+        """
+        assessments = snapshot.assessments.order_by('external_sku')
+        if not assessments.exists():
+            return None
+        source_key = f'ODOO:{connection.id}'
+        source_scope = {
+            'scope_schema_version': 'slow-moving-odoo-source-scope-v1',
+            'source_type': SlowMovingAssessmentRun.SOURCE_ODOO,
+            'workspace_id': connection.workspace_id,
+            'integration_connection_id': str(connection.id),
+            'warehouse_ids': sorted({str(value) for value in connection.warehouse_ids or [] if str(value)}),
+            'sales_metric_warehouse_id': '',
+            'return_handling': 'NET_SALES_MINUS_RETURNS',
+            'source_range_start': first_metric_date.isoformat() if first_metric_date else None,
+            'source_range_end': reference_date.isoformat(),
+        }
+        source_scope_fingerprint = cls._source_scope_fingerprint(source_scope)
+        source_snapshot_fingerprint = cls._source_snapshot_fingerprint(
+            reference_date=reference_date,
+            source_scope_fingerprint=source_scope_fingerprint,
+            assessments=assessments,
+        )
+        existing = SlowMovingAssessmentRun.objects.filter(
+            workspace_id=connection.workspace_id,
+            source_key=source_key,
+            source_snapshot_fingerprint=source_snapshot_fingerprint,
+            status=SlowMovingAssessmentRun.STATUS_COMPLETED,
+        ).first()
+        if existing:
+            return existing
+
+        score_policy = {
+            'version': 'odoo_operational_rules_v1',
+            'lookback_days': LOOKBACK_DAYS,
+            'minimum_observed_days': MINIMUM_OBSERVED_DAYS,
+            'minimum_source_coverage_days': MINIMUM_SOURCE_COVERAGE_DAYS,
+            'score_semantics': 'RULE_PRIORITY_NOT_PROBABILITY',
+        }
+        score_policy_checksum = hashlib.sha256(
+            json.dumps(score_policy, sort_keys=True, separators=(',', ':')).encode('utf-8')
+        ).hexdigest()
+        analysis_as_of = timezone.make_aware(
+            datetime.combine(reference_date, time.max), timezone.get_current_timezone(),
+        )
+        run = SlowMovingAssessmentRun.objects.create(
+            workspace_id=connection.workspace_id,
+            source_type=SlowMovingAssessmentRun.SOURCE_ODOO,
+            source_key=source_key,
+            integration_connection=connection,
+            analysis_as_of=analysis_as_of,
+            source_freshness={
+                'source_type': 'ODOO',
+                'connection_id': str(connection.id),
+                'data_as_of': reference_date.isoformat(),
+                'last_successful_sync_at': (
+                    connection.last_successful_sync_at.isoformat()
+                    if connection.last_successful_sync_at else None
+                ),
+                'snapshot_fingerprint': source_snapshot_fingerprint,
+            },
+            source_scope=source_scope,
+            source_scope_fingerprint=source_scope_fingerprint,
+            source_snapshot_fingerprint=source_snapshot_fingerprint,
+            policy_version=score_policy['version'],
+            policy_checksum=score_policy_checksum,
+            summary={
+                'total_skus_considered': len(assessments),
+                'eligible_skus': len(assessments),
+                'coverage': coverage,
+            },
+        )
+        try:
+            from supplyforge.services.slow_moving_run_service import SlowMovingRunService
+
+            lifecycle_policy, _ = SlowMovingRunService.load_policy()
+            lifecycle = cls._sync_odoo_alert_lifecycle(
+                run, assessments,
+                confirmation_runs=int(lifecycle_policy['consecutive_runs_to_open']),
+            )
+            from supplyforge.services.slow_moving_outcomes import SlowMovingOutcomeService
+
+            outcome_cohorts = SlowMovingOutcomeService.capture_odoo_run(run, assessments)
+            run.summary = {
+                **run.summary,
+                'alert_lifecycle': lifecycle,
+                'outcome_cohorts': outcome_cohorts,
+            }
+            run.save(update_fields=['summary', 'updated_at'])
+            workspace = Workspace.objects.select_for_update().get(id=connection.workspace_id)
+            SlowMovingAssessmentRun.objects.filter(
+                workspace=workspace,
+                source_key=source_key,
+                is_current=True,
+            ).exclude(id=run.id).update(is_current=False)
+            run.status = SlowMovingAssessmentRun.STATUS_COMPLETED
+            run.is_current = True
+            run.completed_at = timezone.now()
+            run.save(update_fields=['status', 'is_current', 'completed_at', 'updated_at'])
+            return run
+        except Exception as exc:
+            run.status = SlowMovingAssessmentRun.STATUS_FAILED
+            run.failure_reason = str(exc)[:512]
+            run.save(update_fields=['status', 'failure_reason', 'updated_at'])
+            raise
+
+    @staticmethod
+    def _source_scope_fingerprint(scope: dict) -> str:
+        stable_scope = {
+            key: value for key, value in scope.items()
+            if key not in {'source_range_end'}
+        }
+        return hashlib.sha256(
+            json.dumps(stable_scope, sort_keys=True, separators=(',', ':')).encode('utf-8')
+        ).hexdigest()
+
+    @staticmethod
+    def _source_snapshot_fingerprint(*, reference_date, source_scope_fingerprint: str, assessments) -> str:
+        # Stream a deterministic digest instead of materialising a whole ERP
+        # portfolio. The order comes from the source query's external SKU
+        # ordering, so an unchanged retry gets the exact same run identity.
+        digest = hashlib.sha256()
+        digest.update(json.dumps({
+            'reference_date': reference_date.isoformat(),
+            'scope': source_scope_fingerprint,
+        }, sort_keys=True, separators=(',', ':')).encode('utf-8'))
+        for assessment in assessments.iterator(chunk_size=2_000):
+            evidence = assessment.evidence or {}
+            digest.update(json.dumps({
+                'external_sku': assessment.external_sku,
+                'canonical_sku': assessment.canonical_sku,
+                'risk_class': assessment.risk_class,
+                'risk_score': assessment.risk_score,
+                'sold_90d': evidence.get('sold_90d'),
+                'returned_90d': evidence.get('returned_90d'),
+                'stock_quantity': evidence.get('stock_quantity'),
+            }, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8'))
+        return digest.hexdigest()
+
+    @classmethod
+    def _sync_odoo_alert_lifecycle(cls, run, assessments, *, confirmation_runs: int) -> dict[str, int]:
+        """Apply the same two-observation confirmation rule as CSV alerts."""
+        threshold = max(1, confirmation_runs)
+        attention_policy, _ = SlowMovingAlertAttentionPolicy.load()
+        candidate_query = assessments.filter(risk_class__in=['CRITICAL', 'HIGH_RISK'])
+        candidate_skus: set[str] = set()
+        outcome = defaultdict(int)
+        now = timezone.now()
+        candidate_updates = []
+        for assessment in candidate_query.iterator(chunk_size=1_000):
+            # A broken legacy mapping must not make one canonical SKU satisfy
+            # the two-run confirmation rule twice in a single source run.
+            if assessment.canonical_sku in candidate_skus:
+                continue
+            candidate_skus.add(assessment.canonical_sku)
+            state, _ = SlowMovingAlertState.objects.select_for_update().get_or_create(
+                workspace_id=run.workspace_id,
+                source_key=run.source_key,
+                canonical_sku=assessment.canonical_sku,
+                defaults={
+                    'source_type': run.source_type,
+                    'status': SlowMovingAlertState.STATUS_CANDIDATE,
+                    'consecutive_eligible_runs': 0,
+                    'first_detected_at': now,
+                    'last_detected_at': now,
+                },
+            )
+            prior_status = state.status
+            prior_run_id = state.last_assessment_run_id
+            previous_facts = dict(state.last_signal_snapshot or {})
+            current_facts = SlowMovingAlertTrustService.snapshot_for_assessment(assessment, run)
+            changes = SlowMovingAlertTrustService.changed_facts(
+                previous_facts, current_facts, attention_policy,
+            )
+            material_change = SlowMovingAlertTrustService.has_material_change(changes)
+            consecutive = state.consecutive_eligible_runs + 1 if prior_run_id and prior_run_id != run.id else 1
+            if state.status == SlowMovingAlertState.STATUS_SNOOZED and state.snoozed_until and state.snoozed_until > now:
+                lifecycle_status = SlowMovingAlertState.STATUS_SNOOZED
+            elif state.status == SlowMovingAlertState.STATUS_ACKNOWLEDGED:
+                lifecycle_status = SlowMovingAlertState.STATUS_ACKNOWLEDGED
+            elif prior_status == SlowMovingAlertState.STATUS_RESOLVED and not material_change:
+                lifecycle_status = SlowMovingAlertState.STATUS_RESOLVED
+                consecutive = 0
+            elif prior_status == SlowMovingAlertState.STATUS_RESOLVED:
+                consecutive = 1
+                lifecycle_status = (
+                    SlowMovingAlertState.STATUS_OPEN
+                    if threshold <= 1 else SlowMovingAlertState.STATUS_CANDIDATE
+                )
+            else:
+                lifecycle_status = (
+                    SlowMovingAlertState.STATUS_OPEN
+                    if consecutive >= threshold else SlowMovingAlertState.STATUS_CANDIDATE
+                )
+            opened_now = (
+                prior_status != SlowMovingAlertState.STATUS_OPEN
+                and lifecycle_status == SlowMovingAlertState.STATUS_OPEN
+            )
+            event_type = SlowMovingAlertTrustService.event_type_for(
+                prior_status=prior_status, status=lifecycle_status,
+                changes=changes, opened_now=opened_now,
+            )
+            state.source_type = run.source_type
+            state.status = lifecycle_status
+            state.consecutive_eligible_runs = consecutive
+            state.last_assessment_run = run
+            state.last_detected_at = now
+            state.resolved_at = None if lifecycle_status != SlowMovingAlertState.STATUS_RESOLVED else state.resolved_at
+            state.last_signal_snapshot = current_facts
+            state.last_signal_fingerprint = SlowMovingAlertTrustService.fingerprint(current_facts)
+            state.last_material_change_at = now if material_change else state.last_material_change_at
+            state.next_review_at = (
+                SlowMovingAlertTrustService.next_review(now=now, policy=attention_policy)
+                if lifecycle_status != SlowMovingAlertState.STATUS_RESOLVED else None
+            )
+            state.save(update_fields=[
+                'source_type', 'status', 'consecutive_eligible_runs', 'last_assessment_run',
+                'last_detected_at', 'resolved_at', 'last_signal_snapshot',
+                'last_signal_fingerprint', 'last_material_change_at', 'next_review_at', 'updated_at',
+            ])
+            evidence = dict(assessment.evidence or {})
+            evidence.update({
+                'alert_lifecycle_status': lifecycle_status,
+                'alert_consecutive_runs': consecutive,
+                'alert_state_id': str(state.id),
+                'alert_opened_this_run': opened_now,
+                'alert_previous_facts': previous_facts,
+                'alert_changed_facts': changes,
+                'alert_event_type': event_type,
+            })
+            assessment.evidence = evidence
+            candidate_updates.append(assessment)
+            SlowMovingAlertTrustService.create_passport(
+                run=run, alert=state, assessment=assessment, event_type=event_type,
+                previous=previous_facts, current=current_facts, changes=changes,
+            )
+            outcome[lifecycle_status] += 1
+            if len(candidate_updates) >= 1_000:
+                IntegrationOperationalRiskAssessment.objects.bulk_update(
+                    candidate_updates, ['evidence'], batch_size=1_000,
+                )
+                candidate_updates.clear()
+
+        if candidate_updates:
+            IntegrationOperationalRiskAssessment.objects.bulk_update(
+                candidate_updates, ['evidence'], batch_size=1_000,
+            )
+        noncandidate_skus = set(
+            assessments.exclude(risk_class__in=['CRITICAL', 'HIGH_RISK'])
+            .values_list('canonical_sku', flat=True)
+        )
+        tracked = SlowMovingAlertState.objects.select_for_update().filter(
+            workspace_id=run.workspace_id,
+            source_key=run.source_key,
+            status__in=[
+                SlowMovingAlertState.STATUS_CANDIDATE,
+                SlowMovingAlertState.STATUS_OPEN,
+                SlowMovingAlertState.STATUS_ACKNOWLEDGED,
+                SlowMovingAlertState.STATUS_SNOOZED,
+            ],
+        )
+        current_by_sku = {
+            assessment.canonical_sku: assessment
+            for assessment in assessments.only('id', 'canonical_sku', 'risk_class', 'risk_score', 'evidence')
+        }
+        for state in tracked.iterator(chunk_size=1_000):
+            if state.canonical_sku in candidate_skus:
+                continue
+            assessment = current_by_sku.get(state.canonical_sku)
+            previous_facts = dict(state.last_signal_snapshot or {})
+            current_facts = (
+                SlowMovingAlertTrustService.snapshot_for_assessment(assessment, run)
+                if assessment else previous_facts
+            )
+            changes = SlowMovingAlertTrustService.changed_facts(
+                previous_facts, current_facts, attention_policy,
+            )
+            prior_status = state.status
+            state.last_assessment_run = run
+            state.last_detected_at = now
+            if state.canonical_sku in noncandidate_skus:
+                state.status = SlowMovingAlertState.STATUS_RESOLVED
+                state.resolved_at = now
+            else:
+                state.status = SlowMovingAlertState.STATUS_DATA_BLOCKED
+            state.consecutive_eligible_runs = 0
+            event_type = SlowMovingAlertTrustService.event_type_for(
+                prior_status=prior_status, status=state.status,
+                changes=changes, opened_now=False,
+            )
+            state.last_signal_snapshot = current_facts
+            state.last_signal_fingerprint = SlowMovingAlertTrustService.fingerprint(current_facts)
+            state.last_material_change_at = (
+                now if SlowMovingAlertTrustService.has_material_change(changes) else state.last_material_change_at
+            )
+            state.next_review_at = None if state.status == SlowMovingAlertState.STATUS_RESOLVED else SlowMovingAlertTrustService.next_review(now=now, policy=attention_policy)
+            state.save(update_fields=[
+                'status', 'consecutive_eligible_runs', 'last_assessment_run',
+                'last_detected_at', 'resolved_at', 'last_signal_snapshot',
+                'last_signal_fingerprint', 'last_material_change_at', 'next_review_at', 'updated_at',
+            ])
+            if assessment:
+                evidence = dict(assessment.evidence or {})
+                evidence.update({
+                    'alert_lifecycle_status': state.status,
+                    'alert_consecutive_runs': 0,
+                    'alert_state_id': str(state.id),
+                    'alert_opened_this_run': False,
+                    'alert_previous_facts': previous_facts,
+                    'alert_changed_facts': changes,
+                    'alert_event_type': event_type,
+                })
+                assessment.evidence = evidence
+                candidate_updates.append(assessment)
+            SlowMovingAlertTrustService.create_passport(
+                run=run, alert=state, assessment=assessment, event_type=event_type,
+                previous=previous_facts, current=current_facts, changes=changes,
+            )
+            outcome[state.status] += 1
+        if candidate_updates:
+            IntegrationOperationalRiskAssessment.objects.bulk_update(
+                candidate_updates, ['evidence'], batch_size=1_000,
+            )
+        return dict(sorted(outcome.items()))
+
+    @classmethod
     def _save_empty_snapshot(cls, connection, reference_date, coverage):
-        coverage['reason'] = 'NO_MAPPED_ERP_FACTS'
+        coverage['reason'] = coverage.get('reason') or 'NO_MAPPED_ERP_FACTS'
         with transaction.atomic():
             snapshot, _ = IntegrationOperationalRiskSnapshot.objects.select_for_update().get_or_create(connection=connection)
             snapshot.source_data_as_of = reference_date
@@ -258,11 +688,20 @@ class OdooOperationalAnalyticsService:
             snapshot.status = 'EMPTY'
             snapshot.save()
             snapshot.assessments.all().delete()
+            SlowMovingAssessmentRun.objects.filter(
+                workspace_id=connection.workspace_id,
+                source_key=f'ODOO:{connection.id}',
+                is_current=True,
+            ).update(is_current=False)
             CapitalExposureAnalysisRecord.objects.filter(
                 merchant_id=f'workspace:{connection.workspace_id}',
                 dataset_version=cls.capital_dataset_version(connection.id),
             ).delete()
-        return {'status': 'EMPTY', 'reason': coverage['reason'], 'mapped_skus': len(mapped_skus)}
+        return {
+            'status': 'EMPTY',
+            'reason': coverage['reason'],
+            'mapped_skus': int(coverage.get('mapped_skus') or 0),
+        }
 
     @staticmethod
     def _risk_score(*, sold_30d, sold_90d, dsls, zero_rate, on_hand, velocity) -> tuple[float, str]:
@@ -310,8 +749,11 @@ class OdooOperationalAnalyticsService:
         for record in records:
             evidence = record['evidence']
             inventory_value = float(evidence['capital_exposure_vnd'])
-            risk_probability = float(record['risk_probability'])
-            rwce = inventory_value * risk_probability
+            # The Odoo score is an attention rank, not a calibrated chance of
+            # stranded inventory. Keep financial exposure factual until a
+            # governed calibrated model passes its independent quality gates.
+            risk_probability = 0.0
+            rwce = 0.0
             opportunity = inventory_value * ANNUAL_OPPORTUNITY_RATE
             aging_bucket, priority = _aging(int(evidence['dsls']))
             total_inventory += inventory_value
@@ -340,12 +782,13 @@ class OdooOperationalAnalyticsService:
                 aging_flags=record['primary_signals'] + record['supporting_signals'],
             ))
         summary = {
-            'module_version': 'odoo_operational_capital_v1',
+            'module_version': 'odoo_operational_capital_v2',
             'summary': {
                 'sku_count': len(items),
                 'total_inventory_value': total_inventory,
                 'total_risk_weighted_exposure': total_rwce,
                 'total_probability_adjusted_exposure': total_rwce,
+                'risk_weighting_status': 'WITHHELD_RULE_PRIORITY_IS_NOT_PROBABILITY',
                 'total_opportunity_cost': total_opportunity,
                 'annual_opportunity_rate': ANNUAL_OPPORTUNITY_RATE,
             },
@@ -360,7 +803,7 @@ class OdooOperationalAnalyticsService:
             merchant_id=merchant_id,
             dataset_version=dataset_version,
             status='COMPLETED',
-            calculation_version='odoo_operational_capital_v1',
+            calculation_version='odoo_operational_capital_v2',
             total_skus=len(items),
             total_inventory_value=total_inventory,
             total_risk_weighted_exposure=total_rwce,

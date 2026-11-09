@@ -1,10 +1,17 @@
 # supplyforge/views package
 # Re-export all view functions for clean URL routing and external imports
 
-from .health import ping, check_data, health_live, health_ready, health_dependencies, health_celery
+from .health import ping, check_data, health_live, health_ready, health_dependencies, health_celery, model_readiness
+from .action_plan_views import ActionPlanTaskListView, ActionPlanTaskUpdateView, ActionPlanTaskEvidenceView
+from .operations_views import (
+    PricingScenarioView, ChannelCostProfileView, SupplierListCreateView,
+    SupplierTermListCreateView, ProcurementForecastView, ProcurementCashFlowView, ProcurementPortfolioView,
+    PurchaseOrderListCreateView, ProcurementBudgetListCreateView,
+    SupplierReturnRequestView, SupplierReturnApprovalView, ProcurementCsvImportView,
+)
 from .version import get_version_info
 from .auth import (
-    google_callback, verify_token, register_user, verify_email, resend_verification_email,
+    google_oauth_start, google_callback, verify_token, register_user, verify_email, resend_verification_email,
     login_user, refresh_token_api, logout_user, get_current_user, google_complete_phone,
     forgot_password, reset_password, update_user_profile, update_me_profile, check_object_ownership,
 )
@@ -13,17 +20,13 @@ from .leak_detector import refresh_dead_stock, get_dead_stock, get_aging
 from .recovery_copilot import get_portfolio_command, get_financial_analysis
 from .xai import get_sku_xai
 from .sku_tinder import get_candidates, merge_products, undo_merge, ignore_pair
-from .shopee import (
-    shopee_oauth_authorize_url, shopee_oauth_callback,
-    shopee_webhook, trigger_sync, get_sync_status,
-)
 from .dss_web import dss_upload, dss_summary, dss_sku_detail
 from .ingestion import (
     ingestion_upload, ingestion_session_detail, ingestion_session_list,
     analyze_file, process_file, clear_data, process_file_async, get_ingestion_progress,
     cancel_ingestion_session, get_record_lineage, get_error_matrix,
     get_post_import_quality_report, propagate_pipeline_health_score, verify_tenant_isolation,
-    tenant_delete_data, verify_tenant_context
+    tenant_delete_data, tenant_delete_data_preview, tenant_delete_data_confirm, verify_tenant_context
 )
 from .dataset_profiling import trigger_dataset_profiling, get_dataset_profile, get_sku_profiles
 from .column_mapping import trigger_column_mapping, submit_mapping_override, get_mapping_audit
@@ -69,7 +72,11 @@ from .slow_moving_analytics import (
 from .risk_assessment_api import (
     run_and_persist_assessments, list_risk_assessments,
     get_risk_assessment_detail, get_sku_risk_assessment,
-    get_global_risk_summary
+    get_global_risk_summary, list_slow_moving_alerts,
+    update_slow_moving_alert_state, get_slow_moving_quality, record_slow_moving_disposition,
+    get_slow_moving_alert_health, get_slow_moving_alert_passport,
+    slow_moving_catalog_contexts, list_slow_moving_remediations,
+    update_slow_moving_remediation,
 )
 from .risk_monitoring_api import (
     execute_risk_monitoring, list_monitoring_runs,
@@ -95,16 +102,22 @@ from .integration_views import (
     IntegrationRunView, IntegrationOverviewView, IntegrationSkuMappingView,
     IntegrationSkuCandidateView, IntegrationOperationalRiskView,
     IntegrationOperationalRiskSummaryView, IntegrationOperationalCapitalView,
-    IntegrationOperationalExecutiveSummaryView,
-    integration_webhook,
+    IntegrationOperationalExecutiveSummaryView, integration_webhook,
 )
 from .decision_views import (
     DecisionListCreateView,
+    DecisionRecommendationRefreshView,
+    DecisionPortfolioQueueView,
+    WeeklyActionPlanView,
     DecisionDetailView,
     DecisionStatusUpdateView,
     DecisionHistoryView,
     DecisionExplanationView,
-    DecisionSimulationView
+    DecisionSimulationView,
+    DecisionSummaryView,
+    DecisionDataStatusView,
+    DecisionLearningReportView,
+    DecisionRevalidationView,
 )
 from .action_plan_views import (
     ActionPlanAssigneeListView,
@@ -112,9 +125,11 @@ from .action_plan_views import (
     ActionPlanStatusUpdateView,
     ActionPlanOutcomeView,
     ActionPlanSummaryView,
+    ActionPlanOutcomeReportView,
     ActionPlanHistoryView,
     DecisionEffectivenessView,
 )
+from .inventory_readiness_views import InventoryReadinessReportView
 from .content_views import (
     about_us_api,
     services_api,
@@ -146,12 +161,17 @@ from .mlops_governance import (
 
 __all__ = [
     'about_us_api', 'services_api', 'blog_list_api', 'blog_detail_api',
-    'ping', 'check_data', 'health_live', 'health_ready', 'health_dependencies', 'health_celery', 'get_version_info',
-    'google_callback', 'verify_token', 'register_user', 'login_user', 'google_complete_phone',
+    'ping', 'check_data', 'health_live', 'health_ready', 'health_dependencies', 'health_celery', 'model_readiness', 'get_version_info',
+    'ActionPlanTaskListView', 'ActionPlanTaskUpdateView', 'ActionPlanTaskEvidenceView',
+    'PricingScenarioView', 'ChannelCostProfileView', 'SupplierListCreateView',
+    'SupplierTermListCreateView', 'ProcurementForecastView', 'ProcurementCashFlowView', 'ProcurementPortfolioView',
+    'PurchaseOrderListCreateView', 'ProcurementBudgetListCreateView',
+    'SupplierReturnRequestView', 'SupplierReturnApprovalView', 'ProcurementCsvImportView',
+    'google_oauth_start', 'google_callback', 'verify_token', 'register_user', 'login_user', 'google_complete_phone',
     'forgot_password', 'reset_password',
     'sync_products', 'sync_orders',
     'analyze_file', 'process_file', 'clear_data', 'process_file_async', 'get_ingestion_progress', 'cancel_ingestion_session', 'get_record_lineage', 'get_error_matrix',
-    'tenant_delete_data', 'verify_tenant_context',
+    'tenant_delete_data', 'tenant_delete_data_preview', 'tenant_delete_data_confirm', 'verify_tenant_context',
     'enqueue_upload_job', 'list_jobs', 'get_job_status', 'cancel_job', 'retry_job', 'delete_job',
     'initiate_s3_multipart_upload', 'complete_s3_multipart_upload',
     'get_cached_dashboard_summary', 'refresh_workspace_cache',
@@ -163,8 +183,6 @@ __all__ = [
     'get_portfolio_command', 'get_financial_analysis',
     'get_sku_xai',
     'get_candidates', 'merge_products', 'undo_merge', 'ignore_pair',
-    'shopee_oauth_authorize_url', 'shopee_oauth_callback',
-    'shopee_webhook', 'trigger_sync', 'get_sync_status',
     'dss_upload', 'dss_summary', 'dss_sku_detail',
     'ingestion_upload', 'ingestion_session_detail', 'ingestion_session_list',
     'trigger_dataset_profiling', 'get_dataset_profile', 'get_sku_profiles',
@@ -197,6 +215,10 @@ __all__ = [
     'run_and_persist_assessments', 'list_risk_assessments',
     'get_risk_assessment_detail', 'get_sku_risk_assessment',
     'get_global_risk_summary',
+    'get_slow_moving_quality', 'record_slow_moving_disposition',
+    'get_slow_moving_alert_health', 'get_slow_moving_alert_passport',
+    'slow_moving_catalog_contexts', 'list_slow_moving_remediations',
+    'update_slow_moving_remediation',
     'execute_risk_monitoring', 'list_monitoring_runs',
     'get_monitoring_run_detail', 'get_active_monitoring_alerts',
     'list_explanations_view', 'get_global_explanation_view',
@@ -206,12 +228,13 @@ __all__ = [
     'get_capital_exposure_summary', 'list_capital_exposure_items',
     'get_capital_exposure_sku_detail', 'get_capital_exposure_aging_distribution',
     'get_capital_exposure_risk_distribution',
-    'DecisionListCreateView', 'DecisionDetailView',
+    'DecisionListCreateView', 'DecisionRecommendationRefreshView', 'DecisionPortfolioQueueView', 'WeeklyActionPlanView', 'DecisionDetailView',
     'DecisionStatusUpdateView', 'DecisionHistoryView',
-    'DecisionExplanationView', 'DecisionSimulationView',
+    'DecisionExplanationView', 'DecisionSimulationView', 'DecisionSummaryView', 'DecisionDataStatusView', 'DecisionLearningReportView', 'DecisionRevalidationView',
     'ActionPlanAssigneeListView', 'ActionPlanListCreateView', 'ActionPlanStatusUpdateView', 'ActionPlanOutcomeView',
-    'ActionPlanSummaryView', 'ActionPlanHistoryView',
+    'ActionPlanSummaryView', 'ActionPlanOutcomeReportView', 'ActionPlanHistoryView',
     'DecisionEffectivenessView',
+    'InventoryReadinessReportView',
     'CopilotChatView',
     'list_notifications', 'mark_notifications_read', 'create_notification',
     'ExportRiskReportView', 'ExportCapitalReportView',

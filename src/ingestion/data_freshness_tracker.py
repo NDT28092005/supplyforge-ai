@@ -306,7 +306,7 @@ class DataFreshnessTracker:
                     "Hệ thống ghi nhận bạn vừa upload file gần đây, nhưng dữ liệu bán hàng bên trong "
                     f"chỉ dừng lại ở ngày {data_max_dt.strftime('%Y-%m-%d')}."
                 ),
-                'recommendation': "Kiểm tra lại khoảng thời gian xuất file báo cáo từ Shopee/Lazada.",
+                'recommendation': "Kiểm tra lại khoảng thời gian xuất file báo cáo từ hệ thống nguồn.",
             })
 
         if coverage_report.get('hasDisruptionGaps'):

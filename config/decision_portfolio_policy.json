@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "candidate_statuses": ["GENERATED", "RECOMMENDED", "NEEDS_REVIEW", "REVIEWED"],
+  "actionable_strategies": ["DISCOUNT", "CLEARANCE", "PROMOTION", "BUNDLE", "REPOSITION", "RETURN_TO_SUPPLIER", "STOP_REPLENISHMENT"],
+  "review_strategies": ["CLEARANCE", "STOP_REPLENISHMENT", "RETURN_TO_SUPPLIER"],
+  "campaign_cost_required_strategies": ["PROMOTION", "BUNDLE"],
+  "default_window_days": 7,
+  "sort_contract": ["urgency", "priority_tier", "capital_exposure", "risk_signal", "decision_id"],
+  "semantics": "Priority score is a rule-based ordering signal only. It is not a probability, ROI or expected outcome."
+}

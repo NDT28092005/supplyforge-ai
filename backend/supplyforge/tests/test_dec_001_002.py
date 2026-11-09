@@ -33,6 +33,8 @@ class DecisionEligibilityAndStrategyTestCase(TestCase):
         ctx_eligible["active_campaign"] = False
         ctx_eligible["data_confidence"] = "SUFFICIENT"
         ctx_eligible["data_health_score"] = 90
+        ctx_eligible["has_positive_recent_demand"] = True
+        ctx_eligible["observation_period_days"] = 90
 
         res_eligible = self.eligibility_engine.evaluate_sku_eligibility(ctx_eligible)
         self.assertIn("CLEARANCE", res_eligible["eligible_actions"])

@@ -108,7 +108,8 @@ class DecisionRecommendationEngine:
 
         ctx_status = decision_context.get("decision_status", "READY")
         el_status = eligibility_result.get("evaluation_status", "READY")
-        eligible_strats = eligibility_result.get("eligible_actions", [])
+        eligible_strats = list(eligibility_result.get("eligible_actions", []))
+        review_strats = list(eligibility_result.get("requires_review_actions", []))
 
         r_ctx = decision_context.get("risk_context", {})
         c_ctx = decision_context.get("capital_context", {})
@@ -133,8 +134,11 @@ class DecisionRecommendationEngine:
                 "generated_at": datetime.now(timezone.utc).isoformat()
             }
 
-        # Level 2 — Action Eligibility Check
-        if not eligible_strats or el_status == "BLOCKED_BY_CONTEXT":
+        # Level 2 — Action Eligibility Check. A strategy that requires a
+        # merchant approval is still a concrete recommendation: downgrade it
+        # to REVIEW and the approved action can never enter the plan queue.
+        # REVIEW is reserved for the true absence of a viable strategy.
+        if (not eligible_strats and not review_strats) or el_status == "BLOCKED_BY_CONTEXT":
             return {
                 "recommendation_id": rec_id,
                 "sku": sku,
@@ -182,6 +186,10 @@ class DecisionRecommendationEngine:
         elif strategy_result:
             action_type = strategy_result.get("recommended_strategy") or "MONITOR"
 
+        approval_required = bool(
+            strategy_result and strategy_result.get("requires_review")
+        ) or action_type in review_strats
+
         # Priority Payload
         prio_tier = priority_result.get("priority_tier", "P2") if priority_result else "P2"
         prio_rank = priority_result.get("rank", 1) if priority_result else 1
@@ -197,18 +205,40 @@ class DecisionRecommendationEngine:
         urgency = self._determine_urgency(r_class, prio_tier, cap_exp)
 
         # Decision Confidence Rating
-        confidence = DecisionConfidence.HIGH.value if (optimization_result and not decision_context.get("decision_warnings")) else DecisionConfidence.MEDIUM.value
+        confidence = (
+            DecisionConfidence.HIGH.value
+            if (optimization_result and not decision_context.get("decision_warnings") and not approval_required)
+            else DecisionConfidence.MEDIUM.value
+        )
 
-        # Expected Business Impact Payload
-        exp_rec_val = float(optimization_result.get("expected_recovery_value") if optimization_result else value_result.get("net_recovery_value", cap_exp * 0.75) if value_result else cap_exp * 0.70)
-        rec_rate = float(optimization_result.get("recovery_rate") if optimization_result else value_result.get("recovery_rate", 0.75) if value_result else 0.70)
-        residual_exp = float(optimization_result.get("residual_exposure") if optimization_result else value_result.get("residual_exposure", cap_exp - exp_rec_val) if value_result else cap_exp - exp_rec_val)
+        # Expected business impact may only come from a concrete scenario.  A
+        # former fallback (70% of capital exposure) made a missing scenario
+        # look like a financial forecast; withholding is safer and clearer.
+        if optimization_result and optimization_result.get("evaluation_status") == "READY":
+            exp_rec_val = float(optimization_result.get("projected_inventory_cost_rotation", optimization_result.get("expected_recovery_value", 0.0)) or 0.0)
+            rec_rate = float(optimization_result.get("inventory_cost_rotation_rate", optimization_result.get("recovery_rate", 0.0)) or 0.0)
+            residual_exp = float(optimization_result.get("remaining_inventory_cost_exposure", optimization_result.get("residual_exposure", cap_exp)) or 0.0)
+            projection_status = "SCENARIO_ESTIMATE"
+        elif value_result and value_result.get("evaluation_status") != "DATA_UNAVAILABLE":
+            exp_rec_val = float(value_result.get("projected_inventory_cost_rotation", 0.0) or 0.0)
+            rec_rate = float(value_result.get("inventory_cost_rotation_rate", 0.0) or 0.0)
+            residual_exp = float(value_result.get("remaining_inventory_cost_exposure", cap_exp) or cap_exp)
+            projection_status = "SCENARIO_ESTIMATE"
+        else:
+            exp_rec_val, rec_rate, residual_exp = 0.0, 0.0, cap_exp
+            projection_status = "UNAVAILABLE"
 
         expected_impact = {
             "capital_exposure": round(cap_exp, 2),
+            "projected_inventory_cost_rotation": round(exp_rec_val, 2),
+            "inventory_cost_rotation_rate": round(rec_rate, 4),
+            "remaining_inventory_cost_exposure": round(residual_exp, 2),
+            "projection_status": projection_status,
+            # Legacy aliases are a book-cost rotation, never a cash-flow or
+            # accounting recovery assertion.
             "expected_recovery_value": round(exp_rec_val, 2),
             "recovery_rate": round(rec_rate, 4),
-            "residual_exposure": round(residual_exp, 2)
+            "residual_exposure": round(residual_exp, 2),
         }
 
         # Consolidate Structured Reason Codes
@@ -220,14 +250,21 @@ class DecisionRecommendationEngine:
             "action": {
                 "type": action_type,
                 "discount_rate": discount_rate,
-                "parameters": {"strategy": action_type, "discount_rate": discount_rate}
+            "parameters": {
+                "strategy": action_type,
+                "discount_rate": discount_rate,
+                "approval_required": approval_required,
+            }
             },
             "priority": priority_obj,
             "urgency": urgency,
             "confidence": confidence,
             "expected_impact": expected_impact,
             "reason_codes": reason_codes,
-            "decision_status": RecommendationStatus.RECOMMENDED.value,
+            "decision_status": (
+                RecommendationStatus.NEEDS_REVIEW.value
+                if approval_required else RecommendationStatus.RECOMMENDED.value
+            ),
             "policy_version": self.policy.get("recommendation_policy_version", "1.0"),
             "engine_version": self.ENGINE_VERSION,
             "generated_at": datetime.now(timezone.utc).isoformat()

@@ -51,7 +51,15 @@ class ActionEligibilityEngine:
     6. Deliverable Artifact Generation (reports/decision/action_eligibility_summary.json).
     """
 
-    ENGINE_VERSION = "6.0"
+    ENGINE_VERSION = "6.1"
+    AGING_ORDER = {
+        "RECENT": 0,
+        "AGING": 1,
+        "STALE": 2,
+        "SEVERELY_STALE": 3,
+        "EXTREMELY_STALE": 4,
+        "NO_OBSERVED_SALE": 5,
+    }
 
     def __init__(self, policy_path: Optional[str] = None):
         self.policy_path = policy_path or os.path.join(PROJECT_ROOT, 'config', 'action_eligibility_policy.json')
@@ -83,11 +91,9 @@ class ActionEligibilityEngine:
         a_ctx = decision_context.get("aging_context", {})
 
         r_class = r_ctx.get("risk_class", "UNKNOWN")
-        r_prob = r_ctx.get("risk_probability", 0.0)
         cap_exp = c_ctx.get("capital_exposure", 0.0)
         aging_bucket = a_ctx.get("aging_bucket", "RECENT")
         aging_days = a_ctx.get("aging_days") or 0
-
         action_evaluations = []
         eligible_actions = []
         blocked_actions = []
@@ -129,7 +135,6 @@ class ActionEligibilityEngine:
             st, reasons = self._evaluate_strategy_rule(
                 strat_id=strat_id,
                 risk_class=r_class,
-                risk_prob=r_prob,
                 cap_exp=cap_exp,
                 aging_bucket=aging_bucket,
                 aging_days=aging_days,
@@ -164,7 +169,6 @@ class ActionEligibilityEngine:
         self,
         strat_id: str,
         risk_class: str,
-        risk_prob: float,
         cap_exp: float,
         aging_bucket: str,
         aging_days: int,
@@ -172,9 +176,29 @@ class ActionEligibilityEngine:
     ) -> Tuple[ActionStatus, List[Dict[str, Any]]]:
         """Evaluates policy rules and generates structured reason traces for a specific strategy."""
         reasons = []
+        has_positive_recent_demand = bool(
+            decision_context.get("has_positive_recent_demand", False)
+        )
+        rule_config = (self.policy.get("rules") or {}).get(strat_id)
+        if not rule_config or not rule_config.get("enabled", False):
+            return ActionStatus.BLOCKED, [{
+                "signal": "policy", "value": strat_id, "rule": "ACTION_DISABLED_BY_POLICY",
+                "message": "Phương án chưa được bật trong chính sách vận hành hiện hành.",
+            }]
+
+        allowed_risks = rule_config.get("allowed_risk_classes", [])
+        min_capital = float(rule_config.get("min_capital_exposure", 0.0))
+        min_aging = rule_config.get("min_aging_bucket")
+        max_aging = rule_config.get("max_aging_bucket")
+
+        def meets_min_aging() -> bool:
+            return not min_aging or self.AGING_ORDER.get(aging_bucket, -1) >= self.AGING_ORDER.get(min_aging, 0)
+
+        def meets_max_aging() -> bool:
+            return not max_aging or self.AGING_ORDER.get(aging_bucket, 99) <= self.AGING_ORDER.get(max_aging, 99)
 
         if strat_id == "HOLD":
-            if risk_class == "LOW_RISK" and aging_bucket in ["RECENT", "AGING"]:
+            if risk_class in allowed_risks and meets_max_aging():
                 reasons.append({"signal": "risk_class", "value": risk_class, "rule": "LOW_RISK_RULE", "message": "SKU có rủi ro bán chậm thấp."})
                 reasons.append({"signal": "aging_bucket", "value": aging_bucket, "rule": "RECENT_AGING", "message": "Tuổi tồn kho chưa thuộc nhóm trễ."})
                 return ActionStatus.ELIGIBLE, reasons
@@ -183,7 +207,7 @@ class ActionEligibilityEngine:
                 return ActionStatus.INELIGIBLE, reasons
 
         elif strat_id == "MONITOR":
-            if risk_class in ["LOW_RISK", "MEDIUM_RISK"] and aging_bucket in ["RECENT", "AGING", "STALE"]:
+            if risk_class in allowed_risks and meets_max_aging():
                 reasons.append({"signal": "risk_class", "value": risk_class, "rule": "MEDIUM_RISK_MONITOR", "message": "SKU có rủi ro trung bình, cần theo dõi biến động."})
                 return ActionStatus.ELIGIBLE, reasons
             else:
@@ -191,32 +215,42 @@ class ActionEligibilityEngine:
                 return ActionStatus.INELIGIBLE, reasons
 
         elif strat_id == "PROMOTION":
-            if risk_class in ["MEDIUM_RISK", "HIGH_RISK"] and cap_exp >= 1000000.0:
+            if risk_class in allowed_risks and cap_exp >= min_capital and meets_min_aging():
                 reasons.append({"signal": "risk_class", "value": risk_class, "rule": "PROMO_RISK_MATCH", "message": "Phù hợp kích cầu chương trình khuyến mãi."})
-                reasons.append({"signal": "capital_exposure", "value": cap_exp, "rule": "MIN_CAPITAL_EXPOSURE", "message": "Vốn phơi nhiễm đạt ngưỡng 1M VND."})
+                reasons.append({"signal": "capital_exposure", "value": cap_exp, "rule": "MIN_CAPITAL_EXPOSURE", "message": f"Vốn phơi nhiễm đạt ngưỡng {min_capital:,.0f} VND."})
                 return ActionStatus.ELIGIBLE, reasons
             else:
                 reasons.append({"signal": "capital_exposure", "value": cap_exp, "rule": "PROMO_INELIGIBLE", "message": "Vốn phơi nhiễm chưa đạt ngưỡng hoặc rủi ro quá cao/thấp."})
                 return ActionStatus.INELIGIBLE, reasons
 
         elif strat_id == "BUNDLE":
-            if risk_class in ["MEDIUM_RISK", "HIGH_RISK"] and aging_bucket in ["AGING", "STALE", "SEVERELY_STALE"] and cap_exp >= 2000000.0:
+            if risk_class in allowed_risks and meets_min_aging() and cap_exp >= min_capital:
                 reasons.append({"signal": "risk_class", "value": risk_class, "rule": "BUNDLE_RISK_MATCH", "message": "Đủ điều kiện đóng combo với hàng bán chạy."})
                 reasons.append({"signal": "aging_bucket", "value": aging_bucket, "rule": "AGING_MATCH", "message": "Độ tuổi tích tụ thích hợp đóng combo."})
+                if rule_config.get("requires_bundle_partner", False) and decision_context.get("bundle_partner_available") is not True:
+                    reasons.append({"signal": "bundle_partner_available", "value": decision_context.get("bundle_partner_available"), "rule": "BUNDLE_PARTNER_REVIEW", "message": "Cần xác nhận SKU bán kèm phù hợp trước khi triển khai."})
+                    return ActionStatus.REQUIRES_REVIEW, reasons
                 return ActionStatus.ELIGIBLE, reasons
             else:
                 reasons.append({"signal": "aging_bucket", "value": aging_bucket, "rule": "BUNDLE_INELIGIBLE", "message": "Không đạt điều kiện đóng combo."})
                 return ActionStatus.INELIGIBLE, reasons
 
         elif strat_id == "DISCOUNT":
-            if risk_class in ["HIGH_RISK", "CRITICAL"] and aging_bucket in ["AGING", "STALE", "SEVERELY_STALE", "EXTREMELY_STALE"] and cap_exp >= 3000000.0:
+            if (
+                risk_class in allowed_risks
+                and meets_min_aging()
+                and cap_exp >= min_capital
+                and has_positive_recent_demand
+            ):
                 reasons.append({"signal": "risk_class", "value": risk_class, "rule": "HIGH_RISK_DISCOUNT", "message": "Rủi ro bán chậm cao, cần giảm giá theo bậc."})
                 reasons.append({"signal": "capital_exposure", "value": cap_exp, "rule": "HIGH_CAPITAL", "message": "Mức vốn phơi nhiễm lớn."})
-                if cap_exp >= 15000000.0:
+                if cap_exp >= float(rule_config.get("review_if_capital_exposure_at_least", float("inf"))):
                     reasons.append({"signal": "capital_exposure", "value": cap_exp, "rule": "REQUIRES_MERCHANT_APPROVAL", "message": "Vốn quá 15M VND cần Merchant duyệt trước."})
                     return ActionStatus.REQUIRES_REVIEW, reasons
                 return ActionStatus.ELIGIBLE, reasons
             else:
+                if not has_positive_recent_demand:
+                    reasons.append({"signal": "recent_demand", "value": "ZERO_OR_UNAVAILABLE", "rule": "DISCOUNT_REQUIRES_POSITIVE_DEMAND", "message": "Không có nhu cầu bán gần đây để ước lượng hiệu quả điều chỉnh giá."})
                 reasons.append({"signal": "risk_class", "value": risk_class, "rule": "DISCOUNT_INELIGIBLE", "message": "Không thuộc nhóm chiết khấu."})
                 return ActionStatus.INELIGIBLE, reasons
 
@@ -227,20 +261,23 @@ class ActionEligibilityEngine:
             # 3. Enough historical demand (obs_days >= 30 or not no_observed_sales)
             # 4. No active campaign (active_campaign == False)
             # 5. Data confidence sufficient (data_confidence != 'INSUFFICIENT' and data_health_score >= 40)
-            has_high_risk = risk_class in ["HIGH_RISK", "CRITICAL"]
-            has_capital = cap_exp >= 5000000.0
-            has_demand_history = decision_context.get("has_enough_demand", True) and (aging_days >= 30 or decision_context.get("observation_period_days", 90) >= 30 or not decision_context.get("no_observed_sales_history", False))
-            no_campaign = not decision_context.get("active_campaign", decision_context.get("has_active_campaign", False))
-            data_sufficient = decision_context.get("data_confidence", "SUFFICIENT") not in ["INSUFFICIENT", "LOW_QUALITY"] and decision_context.get("data_health_score", 100) >= 40
+            has_high_risk = risk_class in allowed_risks
+            has_capital = cap_exp >= min_capital
+            has_demand_history = (not rule_config.get("requires_observed_demand", False)) or (
+                has_positive_recent_demand
+                and (aging_days >= 30 or decision_context.get("observation_period_days", 0) >= 30)
+            )
+            no_campaign = not rule_config.get("requires_no_active_campaign", False) or not decision_context.get("active_campaign", decision_context.get("has_active_campaign", False))
+            data_sufficient = decision_context.get("data_confidence", "SUFFICIENT") not in ["INSUFFICIENT", "LOW_QUALITY"] and decision_context.get("data_health_score", 100) >= float(rule_config.get("min_data_health_score", 0))
 
-            if has_high_risk and has_capital and has_demand_history and no_campaign and data_sufficient:
+            if has_high_risk and has_capital and meets_min_aging() and has_demand_history and no_campaign and data_sufficient:
                 reasons.append({"signal": "risk_class", "value": risk_class, "rule": "CRITICAL_CLEARANCE", "message": "Rủi ro cao/nghiêm trọng, đạt điều kiện xả hàng clearance."})
                 reasons.append({"signal": "capital_exposure", "value": cap_exp, "rule": "HIGH_CAPITAL", "message": "Mức vốn phơi nhiễm đủ ngưỡng thanh lý."})
                 reasons.append({"signal": "historical_demand", "value": "SUFFICIENT", "rule": "ENOUGH_DEMAND", "message": "Đủ lịch sử giao dịch và nhu cầu."})
                 reasons.append({"signal": "active_campaign", "value": False, "rule": "NO_ACTIVE_CAMPAIGN", "message": "Không có chiến dịch hoạt động trùng lặp."})
                 reasons.append({"signal": "data_confidence", "value": "SUFFICIENT", "rule": "DATA_CONFIDENCE_OK", "message": "Độ tin cậy dữ liệu đạt tiêu chuẩn."})
 
-                if cap_exp >= 20000000.0:
+                if cap_exp >= float(rule_config.get("review_if_capital_exposure_at_least", float("inf"))):
                     reasons.append({"signal": "capital_exposure", "value": cap_exp, "rule": "REQUIRES_EXECUTIVE_REVIEW", "message": "Vốn bị khóa > 20M VND cần duyệt cấp quản lý."})
                     return ActionStatus.REQUIRES_REVIEW, reasons
                 return ActionStatus.ELIGIBLE, reasons
@@ -258,7 +295,7 @@ class ActionEligibilityEngine:
                 return ActionStatus.INELIGIBLE, reasons
 
         elif strat_id == "REPOSITION":
-            if risk_class in ["MEDIUM_RISK", "HIGH_RISK"] and aging_bucket in ["RECENT", "AGING", "STALE"]:
+            if risk_class in allowed_risks and meets_min_aging() and meets_max_aging():
                 reasons.append({"signal": "risk_class", "value": risk_class, "rule": "REPOSITION_RISK_MATCH", "message": "Phù hợp tái định vị sản phẩm hoặc chuyển đổi kênh bán."})
                 return ActionStatus.ELIGIBLE, reasons
             else:
@@ -266,11 +303,17 @@ class ActionEligibilityEngine:
                 return ActionStatus.INELIGIBLE, reasons
 
         elif strat_id == "STOP_REPLENISHMENT":
-            if risk_class in ["HIGH_RISK", "CRITICAL"] and risk_prob >= 0.70:
-                reasons.append({"signal": "risk_probability", "value": risk_prob, "rule": "HIGH_RISK_PROBABILITY", "message": "Xác suất rủi ro > 70%, dừng tái nhập kho ngay lập tức."})
+            # This is a deterministic operating guard, not a probability
+            # threshold.  The slow-moving class has already been created from
+            # scope-matched observed demand and inventory evidence.
+            if risk_class in allowed_risks:
+                reasons.append({"signal": "risk_class", "value": risk_class, "rule": "HIGH_RISK_STOP_REPLENISHMENT", "message": "Rủi ro bán chậm cao cần rà soát việc mua thêm để tránh chôn thêm vốn."})
+                if decision_context.get("open_purchase_order_quantity") is None:
+                    reasons.append({"signal": "open_purchase_order_quantity", "value": None, "rule": "PO_REVIEW_REQUIRED", "message": "Cần đối chiếu đơn mua đang mở trước khi tạm dừng tái nhập."})
+                    return ActionStatus.REQUIRES_REVIEW, reasons
                 return ActionStatus.ELIGIBLE, reasons
             else:
-                reasons.append({"signal": "risk_probability", "value": risk_prob, "rule": "STOP_INELIGIBLE", "message": "Chưa đủ bằng chứng dừng nhập hàng."})
+                reasons.append({"signal": "risk_class", "value": risk_class, "rule": "STOP_INELIGIBLE", "message": "SKU chưa thuộc nhóm cần rà soát dừng tái nhập."})
                 return ActionStatus.INELIGIBLE, reasons
 
         return ActionStatus.INELIGIBLE, [{"signal": "strategy_id", "value": strat_id, "rule": "UNKNOWN_STRATEGY", "message": "Chiến lược không xác định."}]

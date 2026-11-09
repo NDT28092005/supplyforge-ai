@@ -11,6 +11,7 @@ Verifies AC-01 through AC-17 requirements:
 import json
 import os
 import sys
+from unittest.mock import patch
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
@@ -68,6 +69,12 @@ class TestDecisionAPIPersistence(TestCase):
                 "aging_bucket": "SEVERELY_STALE"
             }
         )
+        self.ctx.update({
+            "demand_context": {"sales_velocity_30d": 1.0},
+            "has_enough_demand": True,
+            "has_positive_recent_demand": True,
+            "observation_period_days": 30,
+        })
         self.el = self.el_engine.evaluate_sku_eligibility(self.ctx)
         self.st = self.strat_engine.evaluate_sku_strategy(self.ctx, self.el)
         self.sim = self.sim_engine.simulate_sku_discount(self.ctx, self.st)
@@ -133,7 +140,8 @@ class TestDecisionAPIPersistence(TestCase):
         self.assertEqual(detail_res.json()["decision_id"], dec_id)
 
         # 2. GET /api/v1/decisions/?risk_class=CRITICAL&priority=P1
-        list_res = self.client.get(reverse('decision_list_create_v1') + '?risk_class=CRITICAL&priority=P1')
+        priority_tier = self.rec['priority']['tier']
+        list_res = self.client.get(reverse('decision_list_create_v1') + f'?risk_class=CRITICAL&priority={priority_tier}')
         self.assertEqual(list_res.status_code, status.HTTP_200_OK)
         self.assertGreater(len(list_res.json()), 0)
 
@@ -141,6 +149,49 @@ class TestDecisionAPIPersistence(TestCase):
         self.assertEqual(paged_res.status_code, status.HTTP_200_OK)
         self.assertEqual(len(paged_res.json()['items']), 1)
         self.assertEqual(paged_res.json()['pagination']['total_items'], 1)
+
+        DecisionRecord.objects.create(
+            decision_id='DECISION-MISSING-PROJECTION',
+            sku='SKU_MISSING_PROJECTION',
+            priority_tier='P2',
+            status='RECOMMENDED',
+            action_parameters={'projection': {'status': 'UNAVAILABLE'}},
+        )
+        inbox_res = self.client.get(
+            reverse('decision_list_create_v1')
+            + '?page=1&page_size=20&priority=P1,P2&status=GENERATED,RECOMMENDED,REVIEWED&projection_status=UNAVAILABLE'
+        )
+        self.assertEqual(inbox_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(inbox_res.json()['pagination']['total_items'], 1)
+        self.assertEqual(inbox_res.json()['items'][0]['sku'], 'SKU_MISSING_PROJECTION')
+
+    def test_detail_exposes_localized_merchant_option_snapshot(self):
+        decision = DecisionRecord.objects.create(
+            decision_id='DECISION-MERCHANT-OPTIONS',
+            sku='SKU-OPTIONS',
+            workspace_id=1,
+            action_parameters={
+                'merchant_option_set': {
+                    'version': 'MERCHANT_DECISION_OPTIONS_V1',
+                    'options': [{
+                        'option_key': 'CONTROLLED_DISCOUNT',
+                        'label': 'Giảm giá có kiểm soát',
+                        'status': 'DATA_NEEDED',
+                        'status_label': 'Cần bổ sung dữ liệu',
+                    }],
+                },
+            },
+        )
+
+        response = self.client.get(
+            reverse('decision_detail_v1', kwargs={'decision_id': decision.decision_id})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        option_set = response.json()['decision']['options']
+        self.assertEqual(option_set['version'], 'MERCHANT_DECISION_OPTIONS_V1')
+        self.assertEqual(option_set['options'][0]['label'], 'Giảm giá có kiểm soát')
+        self.assertNotIn('action', option_set['options'][0])
 
     def test_patch_status_transition_and_audit(self):
         """AC-06, AC-07, AC-08: Tests status lifecycle transitions and immutable audit event logging."""
@@ -183,3 +234,48 @@ class TestDecisionAPIPersistence(TestCase):
         exp_res = self.client.get(reverse('decision_explanation_v1', kwargs={'decision_id': dec_id}))
         self.assertEqual(exp_res.status_code, status.HTTP_200_OK)
         self.assertIn("risk_explanation", exp_res.json())
+
+    def test_rejection_records_plain_merchant_reason_as_structured_audit_data(self):
+        decision = DecisionRecord.objects.create(
+            decision_id='DECISION-FEEDBACK', sku='SKU-FEEDBACK', status='RECOMMENDED',
+        )
+        response = self.client.patch(
+            reverse('decision_status_update_v1', kwargs={'decision_id': decision.decision_id}),
+            data=json.dumps({
+                'status': 'REJECTED', 'actor': 'merchant',
+                'feedback_reason': 'DATA_DOES_NOT_MATCH',
+                'feedback_note': 'Tồn thực tế chưa khớp với hệ thống.',
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        event = DecisionAuditEventRecord.objects.filter(
+            decision=decision, event_type='DECISION_REJECTED',
+        ).latest('timestamp')
+        self.assertEqual(event.metadata['merchant_feedback']['reason'], 'DATA_DOES_NOT_MATCH')
+
+    @patch('supplyforge.services.model_runtime_guard.ModelLoaderService.runtime_status')
+    def test_model_backed_decision_cannot_execute_when_runtime_is_not_ready(self, runtime_status):
+        runtime_status.return_value = {
+            'state': 'DEGRADED',
+            'model_version': 'risk-v1',
+            'explainability': 'UNAVAILABLE',
+            'decision_actions_allowed': False,
+        }
+        decision = DecisionRecord.objects.create(
+            decision_id='MODEL-RUNTIME-GUARD',
+            sku='SKU-MODEL-GUARD',
+            status='ACCEPTED',
+            action_parameters={'model_runtime_required': True},
+        )
+
+        response = self.client.patch(
+            reverse('decision_status_update_v1', kwargs={'decision_id': decision.decision_id}),
+            data=json.dumps({'status': 'EXECUTED'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.json()['error']['code'], 'MODEL_RUNTIME_NOT_READY')
+        decision.refresh_from_db()
+        self.assertEqual(decision.status, 'ACCEPTED')

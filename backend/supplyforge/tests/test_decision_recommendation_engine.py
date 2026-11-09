@@ -57,6 +57,12 @@ class TestDecisionRecommendationEngine(TestCase):
                 "aging_bucket": "SEVERELY_STALE"
             }
         )
+        self.ctx_critical.update({
+            "demand_context": {"sales_velocity_30d": 1.0},
+            "has_enough_demand": True,
+            "has_positive_recent_demand": True,
+            "observation_period_days": 30,
+        })
         self.el_critical = self.el_engine.evaluate_sku_eligibility(self.ctx_critical)
         self.st_critical = self.strat_engine.evaluate_sku_strategy(self.ctx_critical, self.el_critical)
         self.sim_critical = self.sim_engine.simulate_sku_discount(self.ctx_critical, self.st_critical)
@@ -88,7 +94,7 @@ class TestDecisionRecommendationEngine(TestCase):
         self.assertEqual(rec["decision_status"], RecommendationStatus.RECOMMENDED.value)
         self.assertIn(rec["action"]["type"], ["DISCOUNT", "CLEARANCE"])
 
-        self.assertEqual(rec["urgency"], DecisionUrgency.IMMEDIATE.value)
+        self.assertEqual(rec["urgency"], DecisionUrgency.HIGH.value)
         self.assertIn("expected_impact", rec)
         self.assertEqual(rec["expected_impact"]["capital_exposure"], 10500000.0)
         self.assertGreater(rec["expected_impact"]["expected_recovery_value"], 0.0)

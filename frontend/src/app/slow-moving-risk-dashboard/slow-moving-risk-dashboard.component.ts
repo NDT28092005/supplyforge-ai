@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../api.service';
 import { DashboardStateService } from '../core/state/dashboard-state.service';
 import { PageMotionDirective } from '../core/motion/page-motion.directive';
-import { forkJoin } from 'rxjs';
+import { catchError, forkJoin, of } from 'rxjs';
 
 export interface ShapFactorItem {
   label: string;
@@ -17,23 +17,27 @@ export interface ShapFactorItem {
 }
 
 export interface SkuRiskItem {
+  assessmentId?: string;
   sku: string;
   name: string;
   category?: string;
   riskClass: 'CRITICAL' | 'HIGH_RISK' | 'MEDIUM_RISK' | 'LOW_RISK';
-  probabilityPct: string;
-  probabilityValue: number;
+  priorityDisplay: string;
+  priorityValue: number;
   velocity: number;
   dslsDays: number;
   capitalExposure: string;
   capitalExposureVal?: number;
   rwceVal?: number;
   priorityScore?: number;
+  alertId?: string;
+  alertStatus?: string;
+  alertPassport?: any;
+  catalogContext?: any;
 
   sales30d: number;
   sales90d: number;
   zeroRatePct: string;
-  demandProb: number;
   demandPattern: string;
 
   // LightGBM Tweedie Demand Forecast Fields
@@ -66,12 +70,20 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   odooConnections: any[] = [];
   selectedOdooConnectionId = '';
   sourceMetadata: any = null;
+  qualityReport: any = null;
+  alertHealth: any = null;
+  remediations: any[] = [];
+  remediationsLoading = false;
+  remediationsLoadedFor = '';
+  showRemediationQueue = false;
+  selectedFeedbackReason = '';
+  alertNote = '';
 
   categoryFilter: string = '';
   capitalFilter: string = ''; // ALL, LOW (<10M), MID (10M-50M), HIGH (>50M)
   agingFilter: string = '';   // ALL, FRESH (<=30d), AGING (31-60d), AT_RISK (61-90d), CRITICAL (>90d)
   demandPatternFilter: string = ''; // ALL, Smooth, Intermittent, Erratic, Lumpy
-  sortField: string = 'probabilityValue'; // probabilityValue, capitalExposureVal, rwceVal, dslsDays, priorityScore
+  sortField: string = 'priorityScore'; // priorityScore, capitalExposureVal, dslsDays
   sortDirection: 'desc' | 'asc' = 'desc';
 
   drawerOpen: boolean = false;
@@ -84,7 +96,13 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   tableLoading = false;
   pageSize = 50;
   page = 1;
-  totalItems = 0;
+  // Cursor pagination prevents a deep database scan when the catalogue is
+  // large.  History is kept only for the pages this browser has visited.
+  riskCursor: string | null = null;
+  riskCursorHistory: Array<string | null> = [null];
+  nextRiskCursor: string | null = null;
+  hasNextRiskPage = false;
+  totalItems: number | null = 0;
   riskSummary = {
     total_skus: 0,
     critical: 0,
@@ -120,18 +138,33 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void { }
 
-  loadRealAssessments(resetPage: boolean = false): void {
-    if (resetPage) this.page = 1;
+  loadRealAssessments(
+    resetPage: boolean = false,
+    cursor: string | null = this.riskCursor,
+    requestedPage: number = this.page,
+  ): void {
+    if (resetPage) {
+      this.page = 1;
+      requestedPage = 1;
+      cursor = null;
+      this.riskCursor = null;
+      this.riskCursorHistory = [null];
+      this.nextRiskCursor = null;
+      this.hasNextRiskPage = false;
+    }
     const isInitialLoad = this.dataState === 'loading';
     if (isInitialLoad) this.dataState = 'loading';
     else this.tableLoading = true;
     this.loadError = '';
-    const params = this.buildListParams();
+    const params = this.buildListParams(cursor);
     if (this.sourceMode === 'ODOO' && !this.selectedOdooConnectionId) {
       this.items = [];
       this.totalItems = 0;
+      this.nextRiskCursor = null;
+      this.hasNextRiskPage = false;
       this.riskSummary = { total_skus: 0, critical: 0, high_risk: 0, medium_risk: 0, low_risk: 0 };
       this.sourceMetadata = null;
+      this.qualityReport = null;
       this.dataState = 'empty';
       this.tableLoading = false;
       return;
@@ -140,15 +173,21 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
       ? {
           list: this.apiService.getOperationalRiskAssessments(this.selectedOdooConnectionId, params),
           summary: this.apiService.getOperationalRiskSummary(this.selectedOdooConnectionId),
+          quality: this.apiService.getSlowMovingQuality(`ODOO:${this.selectedOdooConnectionId}`).pipe(catchError(() => of(null))),
+          health: this.apiService.getSlowMovingAlertHealth(`ODOO:${this.selectedOdooConnectionId}`).pipe(catchError(() => of(null))),
         }
       : {
           list: this.apiService.getM3RiskAssessments(params),
-          summary: this.apiService.getM3RiskSummary(this.sessionId || undefined),
+          summary: this.apiService.getM3RiskSummary(),
+          quality: this.apiService.getSlowMovingQuality('CSV').pipe(catchError(() => of(null))),
+          health: this.apiService.getSlowMovingAlertHealth('CSV').pipe(catchError(() => of(null))),
         };
     forkJoin(requests).subscribe({
-      next: ({ list, summary }: any) => {
+      next: ({ list, summary, quality, health }: any) => {
         const res = list;
         this.sourceMetadata = summary?.source || res?.source || null;
+        this.qualityReport = quality || null;
+        this.alertHealth = health || null;
         this.riskSummary = {
           total_skus: Number(summary?.total_skus || 0),
           critical: Number(summary?.critical || 0),
@@ -156,7 +195,15 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
           medium_risk: Number(summary?.medium_risk || 0),
           low_risk: Number(summary?.low_risk || 0),
         };
-        this.totalItems = Number(res?.total_count || 0);
+        const totalFromList = res?.total_count;
+        this.totalItems = totalFromList === null || totalFromList === undefined
+          ? (this.hasActiveFilters() ? null : this.riskSummary.total_skus)
+          : Number(totalFromList);
+        this.page = requestedPage;
+        this.riskCursor = cursor;
+        this.riskCursorHistory[requestedPage - 1] = cursor;
+        this.hasNextRiskPage = Boolean(res?.pagination?.has_next);
+        this.nextRiskCursor = res?.pagination?.next_cursor || null;
         if (res && Array.isArray(res.assessments) && res.assessments.length > 0) {
           this.items = res.assessments.map((a: any) => this.mapAssessmentToSkuRiskItem(a));
           if (this.skuId) {
@@ -198,6 +245,11 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
     this.selectedRiskFilter = '';
     this.searchTerm = '';
     this.sourceMetadata = null;
+    this.qualityReport = null;
+    this.alertHealth = null;
+    this.remediations = [];
+    this.remediationsLoadedFor = '';
+    this.showRemediationQueue = false;
     this.loadRealAssessments(true);
   }
 
@@ -205,13 +257,59 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
     return this.odooConnections.find(connection => connection.id === this.selectedOdooConnectionId)?.display_name || 'Odoo';
   }
 
-  private buildListParams(): Record<string, string | number> {
+  get qualityStateLabel(): string {
+    const state = this.qualityReport?.state || this.sourceMetadata?.quality?.state;
+    if (state === 'NOTIFICATION_ELIGIBLE') return 'Đã đủ bằng chứng để gửi nhắc việc';
+    if (state === 'QUEUE_ONLY') return 'Đủ mẫu để theo dõi, chưa bật nhắc việc';
+    if (state === 'ROLLBACK_REQUIRED') return 'Đang tắt nhắc việc để kiểm tra dữ liệu';
+    if (state === 'QUALITY_UNAVAILABLE') return 'Chưa tải được trạng thái kiểm chứng';
+    return 'Đang theo dõi, chưa đủ mẫu kiểm chứng';
+  }
+
+  get qualityStateDetail(): string {
+    const metrics = this.qualityReport?.metrics || this.sourceMetadata?.quality?.metrics || {};
+    const matured = Number(metrics.matured_eligible_skus || 0);
+    const alerts = Number(metrics.opened_high_risk_alert_count || 0);
+    if (matured === 0 && alerts === 0) {
+      return 'Mức độ phù hợp với nhu cầu bán sau 60 ngày chỉ được công bố khi đã có đủ dữ liệu theo dõi; điểm ưu tiên hiện tại không phải xác suất.';
+    }
+    return `Đã có ${matured} SKU và ${alerts} cảnh báo cần xử lý được theo dõi theo nhu cầu bán 60 ngày. Điểm ưu tiên không phải xác suất.`;
+  }
+
+  get qualityMetrics(): any {
+    return this.qualityReport?.metrics || {};
+  }
+
+  get isQualityPublishable(): boolean {
+    return this.qualityMetrics?.accuracy_visibility !== 'WITHHELD_INSUFFICIENT_EVIDENCE';
+  }
+
+  get failedQualityGates(): any[] {
+    return (this.qualityReport?.gates || []).filter((gate: any) => !gate?.passed);
+  }
+
+  get qualityCohorts(): any[] {
+    return (this.qualityReport?.cohorts || []).slice(-4).reverse();
+  }
+
+  formatQualityPercent(value: unknown): string {
+    const numberValue = Number(value);
+    return Number.isFinite(numberValue) ? `${(numberValue * 100).toFixed(1)}%` : 'Chưa công bố';
+  }
+
+  formatVnd(value: unknown): string {
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue)) return 'Chưa đủ dữ liệu';
+    return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(numberValue) + ' VND';
+  }
+
+  private buildListParams(cursor: string | null): Record<string, string | number> {
     const params: Record<string, string | number> = {
       limit: this.pageSize,
-      offset: (this.page - 1) * this.pageSize,
       sort_by: this.serverSort(),
+      pagination: 'cursor',
     };
-    if (this.sessionId) params['session_id'] = this.sessionId;
+    if (cursor) params['cursor'] = cursor;
     if (this.selectedRiskFilter) params['risk_class'] = this.selectedRiskFilter;
     if (this.searchTerm.trim()) params['sku'] = this.searchTerm.trim();
     if (this.categoryFilter) params['category'] = this.categoryFilter;
@@ -222,13 +320,13 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
 
   private serverSort(): string {
     const fields: Record<string, string> = {
-      probabilityValue: 'risk_probability',
+      priorityValue: 'risk_score',
       capitalExposureVal: 'capital_exposure',
       rwceVal: 'risk_score',
       dslsDays: 'dsls',
       priorityScore: 'risk_score',
     };
-    const field = fields[this.sortField] || 'risk_probability';
+    const field = fields[this.sortField] || 'risk_score';
     return this.sortDirection === 'desc' ? `-${field}` : field;
   }
 
@@ -258,12 +356,12 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
       riskClass = 'LOW_RISK';
     }
 
-    // 2. Extract the risk probability from the classifier response.
-    const rawProb = a.risk?.probability ?? a.risk_probability ?? a.slow_moving_probability ?? (a.risk?.score ? (a.risk.score / 100.0) : undefined);
-    const probVal = rawProb !== undefined && rawProb !== null
-      ? (Number(rawProb) > 1.0 ? Number(rawProb) / 100.0 : Number(rawProb))
-      : 0;
-    const probPct = `${(probVal * 100).toFixed(1)}%`;
+    // Operational rules rank attention. This is deliberately not presented
+    // as a probability unless an approved calibrated model supplies one.
+    const rawPriority = a.risk?.priority_score ?? a.risk?.score ?? a.risk_score ?? 0;
+    const priorityScore = Math.max(0, Math.min(100, Number(rawPriority) || 0));
+    const priorityValue = priorityScore;
+    const priorityDisplay = `${priorityScore.toFixed(0)}/100`;
 
     // 3. Extract evidence metrics
     const ev = a.evidence || {};
@@ -275,8 +373,11 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
     const zeroRateVal = ev.zero_rate_90d ?? a.zero_sales_rate ?? 0;
     const zeroRatePct = `${(zeroRateVal * 100).toFixed(1)}%`;
 
-    const capVal = Number(a.capital_exposure_vnd ?? 0);
+    const rawCapital = a.capital_exposure_vnd ?? ev.capital_exposure_vnd;
+    const hasObservedCapital = rawCapital !== null && rawCapital !== undefined && rawCapital !== '';
+    const capVal = hasObservedCapital ? Number(rawCapital) : 0;
     const formatCap = (val: number) => {
+      if (!hasObservedCapital) return 'Chưa đủ dữ liệu';
       if (!val || val === 0) return '0';
       if (val >= 1000000000) return `${(val / 1000000000).toFixed(2)}B`;
       if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
@@ -294,29 +395,36 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
     );
 
     const rec = a.recommendation || a.conclusion;
-    const conclusion = rec || (riskClass === 'CRITICAL' || riskClass === 'HIGH_RISK'
+    const alertStatus = ev.alert_lifecycle_status;
+    const conclusion = rec || (alertStatus === 'CANDIDATE'
+      ? 'Tín hiệu này cần được xác nhận ở lần phân tích kế tiếp trước khi hệ thống mở cảnh báo chính thức.'
+      : (riskClass === 'CRITICAL' || riskClass === 'HIGH_RISK'
       ? 'Sản phẩm thuộc nhóm nguy cơ đọng vốn cao hoặc rất cao. Cần lập phương án khuyến mãi hoặc xử lý tồn kho ưu tiên.'
       : (riskClass === 'MEDIUM_RISK'
         ? 'Sản phẩm thuộc nhóm cần theo dõi sát. Tốc độ xuất kho đang chậm lại.'
-        : 'Sản phẩm an toàn, tốc độ lưu chuyển hàng tốt.'));
+        : 'Sản phẩm an toàn, tốc độ lưu chuyển hàng tốt.')));
 
     return {
+      assessmentId: a.assessment_id || a.id || undefined,
       sku: a.sku || 'SKU_UNSET',
       name: a.product_name || a.sku || 'Sản phẩm',
       riskClass: riskClass,
-      probabilityPct: probPct,
-      probabilityValue: probVal,
+      priorityDisplay: priorityDisplay,
+      priorityValue: priorityValue,
       category: a.category || a.product_category || 'Thiết bị & Phụ kiện',
       velocity: velocity,
       dslsDays: dslsDays,
       capitalExposure: formatCap(capVal),
-      capitalExposureVal: capVal,
-      rwceVal: capVal * probVal,
-      priorityScore: Math.round(probVal * 100),
+      capitalExposureVal: hasObservedCapital ? capVal : undefined,
+      rwceVal: undefined,
+      priorityScore: Math.round(priorityScore),
+      alertId: ev.alert_state_id || undefined,
+      alertStatus: ev.alert_lifecycle_status || undefined,
+      alertPassport: a.alert_passport || ev.alert_passport || undefined,
+      catalogContext: ev.catalog_context || undefined,
       sales30d: sales30d,
       sales90d: sales90d,
       zeroRatePct: zeroRatePct,
-      demandProb: probVal,
       demandPattern: a.demand_pattern || ev.demand_pattern || 'Chưa xác định',
 
       // LightGBM Tweedie Demand Forecast Fields
@@ -365,6 +473,26 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
         subDesc: 'Odoo chưa ghi nhận sản lượng bán trong 30 ngày gần nhất.',
         impactText: 'Quy tắc vận hành', severity: 'red'
       },
+      NO_QUALIFIED_SALES_LAST_30_DAYS: {
+        label: 'Không có đơn bán hợp lệ trong 30 ngày',
+        subDesc: 'Chỉ tính đơn hoàn tất, không hoàn trả và đã được nguồn dữ liệu xác minh.',
+        impactText: 'Tín hiệu chính', severity: 'red'
+      },
+      LONG_TIME_SINCE_LAST_QUALIFIED_SALE: {
+        label: 'Lần bán hợp lệ gần nhất đã lâu',
+        subDesc: `Đã ${dslsDays} ngày chưa phát sinh đơn bán hợp lệ.`,
+        impactText: 'Tín hiệu chính', severity: 'red'
+      },
+      INTERMITTENT_QUALIFIED_DEMAND: {
+        label: 'Nhu cầu bán không đều',
+        subDesc: `Tỷ lệ ngày không có đơn trong cửa sổ quan sát: ${(Number(evidence.zero_rate_90d || 0) * 100).toFixed(1)}%.`,
+        impactText: 'Tín hiệu hỗ trợ', severity: 'amber'
+      },
+      LOW_QUALIFIED_SALES_VELOCITY: {
+        label: 'Tốc độ bán hợp lệ thấp',
+        subDesc: `Tốc độ ghi nhận: ${velocity} sản phẩm/ngày.`,
+        impactText: 'Tín hiệu hỗ trợ', severity: 'amber'
+      },
       LONG_TIME_SINCE_LAST_SALE: {
         label: 'Khoảng cách từ lần bán gần nhất kéo dài',
         subDesc: `Đã ${dslsDays} ngày kể từ lần bán gần nhất theo dữ liệu Odoo.`,
@@ -393,15 +521,15 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   }
 
   exportReport(format: 'csv' | 'excel' = 'csv'): void {
-    const headers = ['Mã sản phẩm', 'Tên sản phẩm', 'Danh mục', 'Mức rủi ro', 'Xác suất rủi ro (%)', 'Số ngày tồn kho (DSLS)', 'Giá trị vốn tồn đọng (VND)', 'Tín hiệu tiêu thụ', 'Đánh giá mô hình'];
+    const headers = ['Mã sản phẩm', 'Tên sản phẩm', 'Danh mục', 'Mức rủi ro', 'Điểm ưu tiên (0-100)', 'Số ngày chưa có đơn', 'Giá trị vốn tồn kho (VND)', 'Tín hiệu tiêu thụ', 'Đánh giá'];
     const rows = this.filteredItems.map(item => [
       item.sku,
       `"${item.name.replace(/"/g, '""')}"`,
       `"${(item.category || 'Thiết bị & Phụ kiện').replace(/"/g, '""')}"`,
       item.riskClass === 'CRITICAL' ? 'Rủi ro rất cao' : (item.riskClass === 'HIGH_RISK' ? 'Rủi ro cao' : (item.riskClass === 'MEDIUM_RISK' ? 'Cần theo dõi' : 'Rủi ro thấp')),
-      item.probabilityPct,
+      item.priorityDisplay,
       item.dslsDays,
-      item.capitalExposureVal || 0,
+      item.capitalExposureVal ?? 'Chưa đủ dữ liệu',
       this.getPatternLabel(item.demandPattern),
       `"${item.conclusion.replace(/"/g, '""')}"`
     ]);
@@ -445,6 +573,34 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
     return this.lowRiskCount;
   }
 
+  toggleRemediationQueue(): void {
+    this.showRemediationQueue = !this.showRemediationQueue;
+    if (this.showRemediationQueue) this.loadRemediationQueue();
+  }
+
+  private loadRemediationQueue(): void {
+    const source = this.sourceMode === 'ODOO'
+      ? `ODOO:${this.selectedOdooConnectionId}`
+      : 'CSV';
+    if (this.remediationsLoadedFor === source || this.remediationsLoading) return;
+    this.remediationsLoading = true;
+    this.apiService.listSlowMovingRemediations({ source }).pipe(
+      catchError(() => of({ remediations: [] })),
+    ).subscribe((response: any) => {
+      this.remediations = Array.isArray(response?.remediations) ? response.remediations : [];
+      this.remediationsLoadedFor = source;
+      this.remediationsLoading = false;
+    });
+  }
+
+  formatDateTime(value: unknown): string {
+    if (!value) return 'Chưa có hạn';
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime())
+      ? 'Chưa có hạn'
+      : new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium' }).format(date);
+  }
+
   setFilter(filter: string): void {
     this.selectedRiskFilter = filter;
     this.loadRealAssessments(true);
@@ -455,21 +611,28 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
   }
 
   changePage(nextPage: number): void {
-    if (nextPage < 1 || nextPage > this.totalPages || nextPage === this.page) return;
-    this.page = nextPage;
-    this.loadRealAssessments();
-  }
-
-  get totalPages(): number {
-    return Math.max(1, Math.ceil(this.totalItems / this.pageSize));
+    if (nextPage < 1 || nextPage === this.page || this.tableLoading) return;
+    if (nextPage < this.page) {
+      const cursor = this.riskCursorHistory[nextPage - 1];
+      if (cursor === undefined) return;
+      this.loadRealAssessments(false, cursor, nextPage);
+      return;
+    }
+    if (nextPage === this.page + 1 && this.hasNextRiskPage && this.nextRiskCursor) {
+      this.loadRealAssessments(false, this.nextRiskCursor, nextPage);
+    }
   }
 
   get pageStart(): number {
-    return this.totalItems === 0 ? 0 : (this.page - 1) * this.pageSize + 1;
+    return this.items.length === 0 ? 0 : (this.page - 1) * this.pageSize + 1;
   }
 
   get pageEnd(): number {
-    return Math.min(this.page * this.pageSize, this.totalItems);
+    return this.items.length === 0 ? 0 : this.pageStart + this.items.length - 1;
+  }
+
+  get hasKnownTotalItems(): boolean {
+    return this.totalItems !== null;
   }
 
   trackBySku(_: number, item: SkuRiskItem): string {
@@ -502,10 +665,56 @@ export class SlowMovingRiskDashboardComponent implements OnInit, OnDestroy {
     this.router.navigate(['/app/decisions'], { queryParams: targetSku ? { sku: targetSku } : {} });
   }
 
+  updateAlert(action: 'ACKNOWLEDGE' | 'SNOOZE' | 'RESOLVE' | 'REOPEN'): void {
+    const item = this.selectedSku;
+    if (!item?.alertId) return;
+    const note = this.alertNote.trim() || (action === 'RESOLVE' ? 'Đã xử lý theo phương án vận hành.' : '');
+    this.apiService.updateSlowMovingAlert(
+      item.alertId,
+      action,
+      note,
+      action === 'SNOOZE' ? 7 : undefined,
+      this.selectedFeedbackReason || undefined,
+    ).subscribe({
+      next: (response: any) => {
+        item.alertStatus = response?.alert?.status || item.alertStatus;
+        this.alertNote = '';
+        this.loadRealAssessments();
+      },
+      error: (error: any) => {
+        this.loadError = error?.error?.error || 'Không thể cập nhật trạng thái cảnh báo.';
+      },
+    });
+  }
+
   openDrawer(item: SkuRiskItem): void {
     this.selectedSku = item;
+    this.selectedFeedbackReason = '';
+    this.alertNote = '';
     this.drawerOpen = true;
     this.dashboardState.setSelectedSkuId(item.sku);
+    if (item.alertId) {
+      this.apiService.getSlowMovingAlertPassport(item.alertId).pipe(catchError(() => of(null))).subscribe((response: any) => {
+        if (this.selectedSku?.alertId === item.alertId && response?.passport) {
+          this.selectedSku.alertPassport = response.passport;
+        }
+      });
+    }
+  }
+
+  alertStatusLabel(status?: string): string {
+    const labels: Record<string, string> = {
+      CANDIDATE: 'Chờ xác nhận', OPEN: 'Cần xem', ACKNOWLEDGED: 'Đã tiếp nhận',
+      SNOOZED: 'Tạm ẩn', RESOLVED: 'Đã xử lý', DATA_BLOCKED: 'Cần bổ sung dữ liệu',
+    };
+    return labels[status || ''] || 'Cần kiểm tra';
+  }
+
+  contextSummary(context: any): string {
+    if (!context) return 'Chưa có ghi chú đặc biệt về tình trạng hàng.';
+    if (context.status === 'DATA_NEEDED') return 'Cần xác nhận tình trạng hàng hoặc quan hệ SKU trước khi hành động.';
+    if (context.status === 'NOT_SELLABLE') return 'Tồn kho này hiện chưa được xác nhận là có thể bán.';
+    return 'Tồn kho đang được xem là có thể bán trong phạm vi dữ liệu hiện tại.';
   }
 
   closeDrawer(): void {

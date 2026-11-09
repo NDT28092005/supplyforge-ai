@@ -14,8 +14,10 @@ import { CapitalExposureDashboardComponent } from './capital-exposure-dashboard/
 import { DecisionSupportDashboardComponent } from './decision-support-dashboard/decision-support-dashboard.component';
 import { JobQueueComponent } from './job-queue/job-queue.component';
 import { IntegrationSettingsComponent } from './integration-settings/integration-settings.component';
+import { ProcurementDashboardComponent } from './procurement-dashboard/procurement-dashboard.component';
 import { NotFoundPageComponent } from './not-found-page/not-found-page.component';
 import { dataReadyGuard } from './core/guards/data-ready.guard';
+import { authGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
   // ── Public Pages ──
@@ -26,18 +28,19 @@ export const routes: Routes = [
   { path: 'blog', component: BlogPageComponent, title: 'Blog — SupplyForge AI' },
 
   // ── Ingestion Wizard Routes ──
-  { path: 'app/import', component: CsvUploadComponent, title: 'Nạp dữ liệu — SupplyForge AI' },
-  { path: 'app/import/processing', component: ProcessingScreenComponent, title: 'Đang xử lý — SupplyForge AI' },
-  { path: 'app/import/mapping', component: DataMappingConfirmComponent, title: 'Xác nhận cột — SupplyForge AI' },
-  { path: 'app/import/profile/:sessionId', component: DatasetProfileDashboardComponent, title: 'Tổng quan Dataset — SupplyForge AI' },
-  { path: 'app/queue', component: JobQueueComponent, title: 'Hàng chờ xử lý ngầm — SupplyForge AI' },
+  { path: 'app/import', component: CsvUploadComponent, canActivate: [authGuard], title: 'Nạp dữ liệu — SupplyForge AI' },
+  { path: 'app/import/processing', component: ProcessingScreenComponent, canActivate: [authGuard], title: 'Đang xử lý — SupplyForge AI' },
+  { path: 'app/import/mapping', component: DataMappingConfirmComponent, canActivate: [authGuard], title: 'Xác nhận cột — SupplyForge AI' },
+  { path: 'app/import/profile/:sessionId', component: DatasetProfileDashboardComponent, canActivate: [authGuard], title: 'Tổng quan Dataset — SupplyForge AI' },
+  { path: 'app/queue', component: JobQueueComponent, canActivate: [authGuard], title: 'Hàng chờ xử lý ngầm — SupplyForge AI' },
 
   // ── Dashboard Routes ──
-  { path: 'app/dashboard', component: ExecutiveDashboardComponent, canActivate: [dataReadyGuard], title: 'Tổng quan — SupplyForge AI' },
-  { path: 'app/risk', component: SlowMovingRiskDashboardComponent, canActivate: [dataReadyGuard], title: 'Phân tích Rủi ro — SupplyForge AI' },
-  { path: 'app/capital', component: CapitalExposureDashboardComponent, canActivate: [dataReadyGuard], title: 'Phơi nhiễm Vốn — SupplyForge AI' },
-  { path: 'app/decisions', component: DecisionSupportDashboardComponent, canActivate: [dataReadyGuard], title: 'Hỗ trợ Quyết định — SupplyForge AI' },
-  { path: 'app/integrations', component: IntegrationSettingsComponent, title: 'Nguồn dữ liệu ERP — SupplyForge AI' },
+  { path: 'app/dashboard', component: ExecutiveDashboardComponent, canActivate: [authGuard, dataReadyGuard], title: 'Tổng quan — SupplyForge AI' },
+  { path: 'app/risk', component: SlowMovingRiskDashboardComponent, canActivate: [authGuard, dataReadyGuard], title: 'Phân tích Rủi ro — SupplyForge AI' },
+  { path: 'app/capital', component: CapitalExposureDashboardComponent, canActivate: [authGuard, dataReadyGuard], title: 'Phơi nhiễm Vốn — SupplyForge AI' },
+  { path: 'app/decisions', component: DecisionSupportDashboardComponent, canActivate: [authGuard, dataReadyGuard], title: 'Hỗ trợ Quyết định — SupplyForge AI' },
+  { path: 'app/integrations', component: IntegrationSettingsComponent, canActivate: [authGuard], title: 'Nguồn dữ liệu — SupplyForge AI' },
+  { path: 'app/procurement', component: ProcurementDashboardComponent, canActivate: [authGuard], title: 'Kế hoạch mua hàng — SupplyForge AI' },
 
   // ── Fallback ──
   { path: '**', component: NotFoundPageComponent, title: 'Không tìm thấy trang — SupplyForge AI' }

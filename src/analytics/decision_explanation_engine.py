@@ -108,13 +108,25 @@ class DecisionExplanationEngine:
             "urgency": recommendation.get("urgency", "MONITOR")
         }
 
-        # 2. Risk Explanation (M3/M4)
+        # 2. Risk Explanation (M3/M4). A rule priority score is not silently
+        # converted into a probability.
+        probability_status = str(r_ctx.get("probability_status") or "UNAVAILABLE")
+        approved_probability = (
+            float(r_ctx.get("risk_probability"))
+            if probability_status == "CALIBRATED_APPROVED" and r_ctx.get("risk_probability") is not None
+            else None
+        )
         risk_explanation = {
             "risk_class": r_ctx.get("risk_class", "UNKNOWN"),
             "risk_score": float(r_ctx.get("risk_score") or 0.0),
-            "risk_probability": float(r_ctx.get("risk_probability") or 0.0),
+            "risk_probability": approved_probability,
+            "probability_status": probability_status,
             "diagnostic_signals": x_ctx.get("diagnostic_signals", []),
-            "summary": f"SKU được xác định ở mức rủi ro {r_ctx.get('risk_class', 'UNKNOWN')} với xác suất bán chậm {float(r_ctx.get('risk_probability') or 0.0) * 100:.1f}%."
+            "summary": (
+                f"SKU được xác định ở mức rủi ro {r_ctx.get('risk_class', 'UNKNOWN')} với xác suất đã hiệu chỉnh {approved_probability * 100:.1f}%."
+                if approved_probability is not None
+                else f"SKU được xếp mức rủi ro {r_ctx.get('risk_class', 'UNKNOWN')} theo các tín hiệu quan sát; điểm ưu tiên không phải xác suất."
+            )
         }
 
         # 3. Capital Explanation (M5)
@@ -133,12 +145,25 @@ class DecisionExplanationEngine:
             "summary": f"Hàng tồn đã nằm kho {a_ctx.get('aging_days') or 0} ngày, xếp loại nhóm tuổi {a_ctx.get('aging_bucket', 'RECENT')}."
         }
 
-        # 5. Recovery Explanation (M6-03 to M6-06)
+        # 5. Scenario explanation. Distinguish book-cost rotation from gross
+        # revenue, cash receipts and accounting capital release.
+        projected_rotation = float(impact_obj.get("projected_inventory_cost_rotation", impact_obj.get("expected_recovery_value", 0.0)) or 0.0)
+        rotation_rate = float(impact_obj.get("inventory_cost_rotation_rate", impact_obj.get("recovery_rate", 0.0)) or 0.0)
+        remaining_cost = float(impact_obj.get("remaining_inventory_cost_exposure", impact_obj.get("residual_exposure", 0.0)) or 0.0)
+        projection_status = str(impact_obj.get("projection_status") or "UNAVAILABLE")
         recovery_explanation = {
-            "expected_recovery_value": float(impact_obj.get("expected_recovery_value") or 0.0),
-            "recovery_rate": float(impact_obj.get("recovery_rate") or 0.0),
-            "residual_exposure": float(impact_obj.get("residual_exposure") or 0.0),
-            "summary": f"Phương án khuyến nghị dự kiến giải phóng được {float(impact_obj.get('expected_recovery_value') or 0.0):,.0f} VNĐ vốn thu hồi ròng (tỷ lệ thu hồi {float(impact_obj.get('recovery_rate') or 0.0) * 100:.1f}%)."
+            "projected_inventory_cost_rotation": projected_rotation,
+            "inventory_cost_rotation_rate": rotation_rate,
+            "remaining_inventory_cost_exposure": remaining_cost,
+            "projection_status": projection_status,
+            "expected_recovery_value": projected_rotation,
+            "recovery_rate": rotation_rate,
+            "residual_exposure": remaining_cost,
+            "summary": (
+                f"Kịch bản dự kiến quay vòng {projected_rotation:,.0f} VNĐ giá vốn tồn ({rotation_rate * 100:.1f}%). Đây không phải tiền thực nhận hoặc vốn đã giải phóng thực tế."
+                if projection_status == "SCENARIO_ESTIMATE"
+                else "Chưa có kịch bản tài chính đủ dữ liệu; hệ thống không ước lượng doanh thu hoặc vốn quay vòng."
+            )
         }
 
         # 6. Priority Explanation (M6-07)
@@ -170,10 +195,10 @@ class DecisionExplanationEngine:
                 "interpretation": "Số ngày tồn kho thực tế chưa giải phóng được."
             },
             {
-                "metric": "expected_recovery_value",
-                "value": float(impact_obj.get("expected_recovery_value") or 0.0),
+                "metric": "projected_inventory_cost_rotation",
+                "value": projected_rotation,
                 "source": "M6-05",
-                "interpretation": "Ước tính giá trị tài chính ròng có thể thu hồi."
+                "interpretation": "Giá vốn của lượng hàng dự kiến bán trong kịch bản; không phải tiền thực nhận hoặc giá trị kế toán đã xác nhận."
             },
             {
                 "metric": "priority_score",
@@ -200,7 +225,7 @@ class DecisionExplanationEngine:
             alternative_analysis = {
                 "selected_scenario": rec_scen_id,
                 "alternative_count": len(alt_list),
-                "comparative_summary": f"Kịch bản {rec_scen_id} được chọn vì đạt điểm tối ưu hóa {float(optimization_result.get('optimization_score') or 0.0):.2f}, tạo thu hồi vốn cao nhất trong các kịch bản đáp ứng ràng buộc tài chính."
+                "comparative_summary": f"Kịch bản {rec_scen_id} được chọn vì đạt điểm ưu tiên phương án {float(optimization_result.get('optimization_score') or 0.0):.2f}, với giá vốn tồn dự kiến quay vòng và hàng rào lợi nhuận phù hợp."
             }
 
         # 9. Consolidated Reason Codes

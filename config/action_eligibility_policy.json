@@ -1,17 +1,17 @@
 {
-  "policy_version": "1.0",
+  "policy_version": "1.1",
   "policy_name": "SupplyForge Standard Action Eligibility Policy",
   "rules": {
     "HOLD": {
       "enabled": true,
-      "max_risk_class": "LOW_RISK",
+      "allowed_risk_classes": ["LOW_RISK"],
       "max_aging_bucket": "RECENT",
       "description": "Giữ nguyên trạng thái khi SKU có rủi ro thấp và tuổi tồn kho mới."
     },
     "MONITOR": {
       "enabled": true,
       "allowed_risk_classes": ["LOW_RISK", "MEDIUM_RISK"],
-      "max_aging_bucket": "AGING",
+      "max_aging_bucket": "STALE",
       "description": "Theo dõi biến động nhu cầu khi SKU ở mức rủi ro trung bình."
     },
     "PROMOTION": {
@@ -25,6 +25,7 @@
       "allowed_risk_classes": ["MEDIUM_RISK", "HIGH_RISK"],
       "min_aging_bucket": "AGING",
       "min_capital_exposure": 2000000.0,
+      "requires_bundle_partner": true,
       "description": "Bán kèm SKU bán chậm với các sản phẩm bán chạy tương thích."
     },
     "DISCOUNT": {
@@ -32,20 +33,31 @@
       "allowed_risk_classes": ["HIGH_RISK", "CRITICAL"],
       "min_aging_bucket": "AGING",
       "min_capital_exposure": 3000000.0,
+      "review_if_capital_exposure_at_least": 15000000.0,
       "description": "Áp dụng chiết khấu giảm giá theo bậc để xả hàng tồn kho chậm."
     },
     "CLEARANCE": {
       "enabled": true,
-      "min_risk_class": "CRITICAL",
+      "allowed_risk_classes": ["HIGH_RISK", "CRITICAL"],
       "min_aging_bucket": "STALE",
       "min_capital_exposure": 5000000.0,
+      "requires_observed_demand": true,
+      "requires_no_active_campaign": true,
+      "min_data_health_score": 40,
+      "review_if_capital_exposure_at_least": 20000000.0,
       "description": "Giải phóng tồn kho hàng sâu cho SKU có rủi ro bán chậm nghiêm trọng."
     },
     "STOP_REPLENISHMENT": {
       "enabled": true,
       "allowed_risk_classes": ["HIGH_RISK", "CRITICAL"],
-      "min_risk_probability": 0.70,
-      "description": "Ngừng đặt hàng tái nhập kho cho SKU có nguy cơ ứ đọng dai dẳng."
+      "description": "Rà soát tạm dừng tái nhập cho SKU bán chậm sau khi đối chiếu đơn mua đang mở."
+    },
+    "REPOSITION": {
+      "enabled": true,
+      "allowed_risk_classes": ["MEDIUM_RISK", "HIGH_RISK"],
+      "min_aging_bucket": "RECENT",
+      "max_aging_bucket": "STALE",
+      "description": "Rà soát chuyển kênh hoặc phân bổ lại khi nhu cầu khác nhau giữa các điểm bán."
     }
   }
 }

@@ -24,6 +24,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project files
 COPY backend/ /app/
 COPY src/ /app/src/
+COPY models/ /app/models/
 
 # Do not run the application as root inside the container.
 RUN addgroup --system supplyforge && \

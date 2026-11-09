@@ -5,7 +5,7 @@ ACT-001 Requirements:
 Merchant creates Action Plan with fields:
 - Campaign: "Clearance CRIT-024"
 - Duration: "14 days"
-- Strategy: "15% discount"
+- Strategy: `DISCOUNT` with an explicit 15% execution parameter
 - Owner: "Merchant"
 - Start: "2026-09-28"
 
@@ -35,7 +35,8 @@ class TestActionPlanACT001ACT002(TestCase):
             "campaign": "Clearance CRIT-024",
             "sku": "CRIT-024",
             "duration": 14,
-            "strategy": "15% discount",
+            "strategy": "DISCOUNT",
+            "execution_parameters": {"discount_rate": 0.15},
             "owner": "Merchant",
             "start": "2026-09-28",
             "status": "DRAFT"
@@ -49,7 +50,9 @@ class TestActionPlanACT001ACT002(TestCase):
         self.assertEqual(data["campaign"], "Clearance CRIT-024")
         self.assertEqual(data["sku"], "CRIT-024")
         self.assertEqual(data["duration_days"], 14)
-        self.assertEqual(data["strategy"], "15% discount")
+        self.assertEqual(data["strategy"], "DISCOUNT")
+        self.assertEqual(data["strategy_label"], "Điều chỉnh giá có kiểm soát")
+        self.assertEqual(data["action_parameters"]["discount_rate"], 0.15)
         self.assertEqual(data["owner"], "Merchant")
         self.assertEqual(data["start_date"], "2026-09-28")
         self.assertEqual(data["status"], "DRAFT")
@@ -60,7 +63,7 @@ class TestActionPlanACT001ACT002(TestCase):
             campaign_name="Clearance CRIT-024",
             sku="CRIT-024",
             duration_days=14,
-            strategy="15% discount",
+            strategy="DISCOUNT",
             owner="Merchant",
             start_date=datetime.date(2026, 9, 28),
             status="DRAFT"
@@ -101,7 +104,7 @@ class TestActionPlanACT001ACT002(TestCase):
             campaign_name="Clearance TEST",
             sku="TEST-SKU",
             duration_days=7,
-            strategy="20% discount",
+            strategy="DISCOUNT",
             owner="Merchant",
             start_date=datetime.date(2026, 9, 28),
             status="DRAFT"

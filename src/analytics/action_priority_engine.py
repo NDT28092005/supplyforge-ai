@@ -151,15 +151,21 @@ class ActionPriorityScoringEngine:
         rec_eff = 0.0
         opt_score = 0.0
 
+        def numeric_or_zero(value):
+            try:
+                return float(value) if value is not None else 0.0
+            except (TypeError, ValueError):
+                return 0.0
+
         if optimization_result and optimization_result.get("recommended_scenario"):
             action = optimization_result["recommended_scenario"]
-            exp_recovery = float(optimization_result.get("expected_recovery_value", 0.0))
-            rec_eff = float(optimization_result.get("recovery_rate", 0.0))
-            opt_score = float(optimization_result.get("optimization_score", 0.0))
+            exp_recovery = numeric_or_zero(optimization_result.get("expected_recovery_value"))
+            rec_eff = numeric_or_zero(optimization_result.get("recovery_rate"))
+            opt_score = numeric_or_zero(optimization_result.get("optimization_score"))
         elif value_result:
             action = value_result.get("strategy") or "DISCOUNT"
-            exp_recovery = float(value_result.get("net_recovery_value", 0.0))
-            rec_eff = float(value_result.get("recovery_rate", 0.0))
+            exp_recovery = numeric_or_zero(value_result.get("net_recovery_value"))
+            rec_eff = numeric_or_zero(value_result.get("recovery_rate"))
         elif strategy_result:
             action = strategy_result.get("recommended_strategy") or "MONITOR"
 

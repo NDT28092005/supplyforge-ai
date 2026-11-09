@@ -18,7 +18,10 @@ from supplyforge.models import (
     IntegrationSkuMapping,
     IntegrationSkuMappingAudit,
     IntegrationOperationalRiskAssessment,
+    IntegrationOperationalRiskSnapshot,
     Product,
+    SlowMovingAssessmentRun,
+    SlowMovingOutcomeCohort,
     User,
     Workspace,
     WorkspaceEntitlement,
@@ -59,11 +62,19 @@ class ERPIntegrationApiTests(TestCase):
             }),
         )
 
-    def test_feature_entitlement_is_required(self):
+    def test_unentitled_workspace_cannot_access_odoo_connections(self):
         WorkspaceEntitlement.objects.filter(workspace=self.workspace).update(is_enabled=False)
         response = self.client.get('/api/v1/integrations/connections/')
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data['error']['code'], 'FEATURE_NOT_ENTITLED')
+
+    def test_rejects_retired_marketplace_provider(self):
+        response = self.client.post('/api/v1/integrations/connections/', {
+            'provider': 'HARAVAN',
+            'display_name': 'Legacy provider',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['error']['code'], 'UNSUPPORTED_PROVIDER')
 
     def test_owner_can_create_connection_without_exposing_credentials(self):
         response = self.client.post('/api/v1/integrations/connections/', {
@@ -211,6 +222,9 @@ class ERPIntegrationApiTests(TestCase):
     def test_operational_source_uses_only_linked_odoo_skus_and_replaces_capital_snapshot(self):
         """Live Odoo facts must not leak into CSV results or include unmapped SKUs."""
         connection = self._connection(active=True)
+        connection.warehouse_ids = ['10']
+        connection.warehouse_names = ['Main warehouse']
+        connection.save(update_fields=['warehouse_ids', 'warehouse_names'])
         critical_product = self._product('CAN-CRITICAL', 'Critical product')
         moving_product = self._product('CAN-MOVING', 'Moving product')
         critical = IntegrationSkuMapping.objects.create(
@@ -222,13 +236,33 @@ class ERPIntegrationApiTests(TestCase):
             canonical_sku=moving_product.item_sku, status=IntegrationSkuMapping.STATUS_AUTO,
         )
         today = timezone.localdate()
-        IntegrationSkuDailyMetric.objects.bulk_create([
-            IntegrationSkuDailyMetric(connection=connection, external_sku='ODOO-CRITICAL', warehouse_id='10', metric_date=today, on_hand_quantity=10, unit_cost=25),
-            IntegrationSkuDailyMetric(connection=connection, external_sku='ODOO-MOVING', warehouse_id='', metric_date=today, sales_quantity=20),
-            IntegrationSkuDailyMetric(connection=connection, external_sku='ODOO-MOVING', warehouse_id='10', metric_date=today, on_hand_quantity=1, unit_cost=20),
+        metrics = []
+        # Both products are observed for the required 60 days. The critical
+        # SKU has no sales; the moving SKU proves returns reduce net demand.
+        for offset in range(60):
+            metric_date = today - timedelta(days=59 - offset)
+            metrics.extend([
+                IntegrationSkuDailyMetric(
+                    connection=connection, external_sku='ODOO-CRITICAL', warehouse_id='10',
+                    metric_date=metric_date, on_hand_quantity=10, unit_cost=25,
+                ),
+                IntegrationSkuDailyMetric(
+                    connection=connection, external_sku='ODOO-MOVING', warehouse_id='',
+                    metric_date=metric_date, sales_quantity=3, returned_quantity=2,
+                ),
+                IntegrationSkuDailyMetric(
+                    connection=connection, external_sku='ODOO-MOVING', warehouse_id='10',
+                    metric_date=metric_date, on_hand_quantity=1, unit_cost=20,
+                ),
+            ])
+        metrics.append(
             # This source SKU deliberately has facts but no approved mapping.
-            IntegrationSkuDailyMetric(connection=connection, external_sku='ODOO-UNMAPPED', warehouse_id='10', metric_date=today, on_hand_quantity=999, unit_cost=99),
-        ])
+            IntegrationSkuDailyMetric(
+                connection=connection, external_sku='ODOO-UNMAPPED', warehouse_id='10',
+                metric_date=today, on_hand_quantity=999, unit_cost=99,
+            )
+        )
+        IntegrationSkuDailyMetric.objects.bulk_create(metrics)
 
         result = OdooOperationalAnalyticsService.refresh(connection)
         self.assertEqual(result['status'], 'READY')
@@ -241,6 +275,19 @@ class ERPIntegrationApiTests(TestCase):
             IntegrationOperationalRiskAssessment.objects.get(mapping=moving).risk_class,
             'LOW_RISK',
         )
+        moving_assessment = IntegrationOperationalRiskAssessment.objects.get(mapping=moving)
+        self.assertIsNone(moving_assessment.risk_probability)
+        self.assertEqual(moving_assessment.evidence['score_semantics'], 'RULE_PRIORITY_NOT_PROBABILITY')
+        self.assertEqual(moving_assessment.evidence['sold_90d'], 60.0)
+        self.assertEqual(moving_assessment.evidence['returned_90d'], 120.0)
+        self.assertEqual(
+            SlowMovingAssessmentRun.objects.filter(
+                workspace=self.workspace, source_key=f'ODOO:{connection.id}',
+                status=SlowMovingAssessmentRun.STATUS_COMPLETED,
+            ).count(),
+            1,
+        )
+        self.assertEqual(SlowMovingOutcomeCohort.objects.filter(source_key=f'ODOO:{connection.id}').count(), 2)
         # A retry replaces the same materialised source instead of creating a
         # second capital dataset or double-counting the warehouse inventory.
         retry = OdooOperationalAnalyticsService.refresh(connection)
@@ -252,6 +299,7 @@ class ERPIntegrationApiTests(TestCase):
         dashboard = self.client.get(f'/api/v1/integrations/connections/{connection.id}/operational-dashboard/summary/')
         self.assertEqual(risk.status_code, 200)
         self.assertEqual(risk.data['total_count'], 2)
+        self.assertEqual(risk.data['source']['quality']['state'], 'INSUFFICIENT_EVIDENCE')
         self.assertEqual(summary.data['critical'], 1)
         self.assertEqual(risk.data['source']['coverage']['scored_skus'], 2)
         self.assertEqual(capital.status_code, 200)
@@ -263,6 +311,74 @@ class ERPIntegrationApiTests(TestCase):
             'MEDIUM_RISK': 0.0,
             'LOW_RISK': 20.0,
         })
+
+    def test_short_odoo_history_is_data_limited_not_critical(self):
+        connection = self._connection(active=True)
+        connection.warehouse_ids = ['10']
+        connection.save(update_fields=['warehouse_ids'])
+        product = self._product('CAN-NEW', 'New product')
+        IntegrationSkuMapping.objects.create(
+            connection=connection, external_sku='ODOO-NEW', canonical_product=product,
+            canonical_sku=product.item_sku, status=IntegrationSkuMapping.STATUS_CONFIRMED,
+        )
+        IntegrationSkuDailyMetric.objects.create(
+            connection=connection, external_sku='ODOO-NEW', warehouse_id='10',
+            metric_date=timezone.localdate(), on_hand_quantity=20, unit_cost=10,
+        )
+
+        result = OdooOperationalAnalyticsService.refresh(connection)
+
+        self.assertEqual(result['status'], 'READY')
+        self.assertEqual(result['scored_skus'], 0)
+        source = self.client.get(
+            f'/api/v1/integrations/connections/{connection.id}/operational-risk/'
+        ).data['source']
+        self.assertEqual(source['coverage']['excluded_insufficient_history'], 1)
+
+    def test_operational_risk_queue_uses_typed_cursor_projection(self):
+        connection = self._connection(active=True)
+        snapshot = IntegrationOperationalRiskSnapshot.objects.create(
+            connection=connection,
+            status='READY',
+            risk_engine_version='test-rules',
+        )
+        IntegrationOperationalRiskAssessment.objects.bulk_create([
+            IntegrationOperationalRiskAssessment(
+                snapshot=snapshot,
+                external_sku='ODOO-CURSOR-A', canonical_sku='CAN-CURSOR-A',
+                product_name='Cursor A', risk_class='CRITICAL', risk_score=90,
+                priority_score=90, sellable_stock_quantity=10,
+                capital_exposure_vnd=500_000, days_since_last_sale=120,
+                eligibility_status='ELIGIBLE', evidence={'stock_quantity': 10},
+            ),
+            IntegrationOperationalRiskAssessment(
+                snapshot=snapshot,
+                external_sku='ODOO-CURSOR-B', canonical_sku='CAN-CURSOR-B',
+                product_name='Cursor B', risk_class='HIGH_RISK', risk_score=80,
+                priority_score=80, sellable_stock_quantity=5,
+                capital_exposure_vnd=300_000, days_since_last_sale=90,
+                eligibility_status='ELIGIBLE', evidence={'stock_quantity': 5},
+            ),
+        ])
+        first = self.client.get(
+            f'/api/v1/integrations/connections/{connection.id}/operational-risk/',
+            {'pagination': 'cursor', 'limit': 1, 'sort_by': '-risk_score'},
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertIsNone(first.data['total_count'])
+        self.assertTrue(first.data['pagination']['has_next'])
+        self.assertEqual(first.data['assessments'][0]['sku'], 'CAN-CURSOR-A')
+        self.assertEqual(first.data['assessments'][0]['stock_quantity'], 10.0)
+
+        second = self.client.get(
+            f'/api/v1/integrations/connections/{connection.id}/operational-risk/',
+            {
+                'pagination': 'cursor', 'limit': 1, 'sort_by': '-risk_score',
+                'cursor': first.data['pagination']['next_cursor'],
+            },
+        )
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.data['assessments'][0]['sku'], 'CAN-CURSOR-B')
 
     @patch('supplyforge.tasks.process_integration_event.delay')
     def test_signed_webhook_is_idempotent(self, mock_delay):

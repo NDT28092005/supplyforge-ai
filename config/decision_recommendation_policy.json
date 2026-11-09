@@ -7,7 +7,7 @@
     "MEDIUM": { "min_priority_tier": "P3", "allowed_risk_classes": ["MEDIUM_RISK", "HIGH_RISK"] },
     "LOW": { "min_priority_tier": "P4", "allowed_risk_classes": ["LOW_RISK", "MEDIUM_RISK"] }
   },
-  "controlled_vocabulary": ["HOLD", "MONITOR", "PROMOTION", "BUNDLE", "DISCOUNT", "CLEARANCE", "STOP_REPLENISHMENT", "REVIEW", "NO_ACTION"],
+  "controlled_vocabulary": ["HOLD", "MONITOR", "PROMOTION", "BUNDLE", "DISCOUNT", "CLEARANCE", "REPOSITION", "STOP_REPLENISHMENT", "REVIEW", "NO_ACTION"],
   "fallback_policy": {
     "no_eligible_action": "REVIEW",
     "insufficient_data": "NO_ACTION",

@@ -1853,29 +1853,54 @@ def get_risk_model_predictions(request, session_id):
 
 @api_view(['GET'])
 def get_risk_model_status(request, session_id):
-    """Retrieve XGBoost Risk Model Traceability & Status Metadata."""
+    """Retrieve legacy traceability plus governed temporal-candidate status."""
     reports_dir = os.path.join(PROJECT_ROOT, 'reports')
     sum_path = os.path.join(reports_dir, 'risk_model_inference_summary.json')
+    try:
+        from supplyforge.services.temporal_candidate_model import TemporalCandidateModelService
+        temporal = TemporalCandidateModelService().status()
+        temporal_status = {
+            'available': temporal.available,
+            'code': temporal.code,
+            'detail': temporal.detail,
+            'model_name': temporal.model_name,
+            'model_version': temporal.model_version,
+        }
+    except Exception:
+        temporal_status = {
+            'available': False,
+            'code': 'CANDIDATE_STATUS_UNAVAILABLE',
+            'detail': 'Unable to determine temporal candidate readiness.',
+        }
 
     if os.path.exists(sum_path):
         try:
             with open(sum_path, 'r', encoding='utf-8') as f:
                 summary = json.load(f)
+            summary['temporal_demand_candidate'] = temporal_status
             return Response(summary)
         except Exception:
             pass
 
     return Response({
-        'model_version': 'xgboost_exp03_v1',
-        'experiment_version': 'EXP-03',
-        'feature_schema_version': 'M2-FEATURE-v1.0',
-        'status': 'READY_FOR_INFERENCE'
+        'model_version': 'legacy-model-artifact',
+        'experiment_version': 'LEGACY_COMPATIBILITY_PATH',
+        'feature_schema_version': 'legacy-risk-features-v1',
+        'status': 'LEGACY_ARTIFACT_UNAVAILABLE',
+        'temporal_demand_candidate': temporal_status,
     })
 
 
 @api_view(['GET'])
 def get_risk_model_contract(request, session_id):
-    """Retrieve Downstream Handoff Contract for Risk Model (EXP-03)."""
+    """Retrieve the active temporal feature contract when available."""
+    temporal_contract = os.path.join(PROJECT_ROOT, 'config', 'temporal_demand_risk_feature_contract.json')
+    if os.path.exists(temporal_contract):
+        try:
+            with open(temporal_contract, 'r', encoding='utf-8') as f:
+                return Response(json.load(f))
+        except Exception:
+            pass
     contract_dir = os.path.join(PROJECT_ROOT, 'contracts')
     c_path = os.path.join(contract_dir, 'risk_model_feature_contract_v1.json')
 

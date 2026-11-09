@@ -7,6 +7,13 @@ from config.logging_config import build_logging_config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BASE_DIR.parent
+
+# The deterministic analytics engines live in the repository-level ``src``
+# package.  Django is often launched from ``backend/`` locally, while Docker
+# starts it from the repository root; keep imports identical in both modes.
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Determine environment (development | staging | production)
 APP_ENV = os.getenv('APP_ENV', os.getenv('ENVIRONMENT', 'development')).lower()
@@ -232,7 +239,7 @@ CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
         'CORS_ALLOWED_ORIGINS',
-        '' if IS_DEPLOYED else 'http://localhost:3000',
+        '' if IS_DEPLOYED else 'http://localhost:4200,http://localhost:3000',
     ).split(',')
     if origin.strip()
 ]
@@ -240,7 +247,34 @@ if IS_DEPLOYED and not CORS_ALLOWED_ORIGINS:
     raise ImproperlyConfigured(
         'CORS_ALLOWED_ORIGINS is required for staging/production.'
     )
-CORS_ALLOW_CREDENTIALS = False
+CORS_ALLOW_CREDENTIALS = True
+
+AUTH_REFRESH_COOKIE_NAME = os.getenv('AUTH_REFRESH_COOKIE_NAME', 'sf_refresh')
+AUTH_COOKIE_SAMESITE = os.getenv(
+    'AUTH_COOKIE_SAMESITE',
+    'None' if IS_DEPLOYED else 'Lax',
+).strip().title()
+if AUTH_COOKIE_SAMESITE not in {'Lax', 'Strict', 'None'}:
+    raise ImproperlyConfigured('AUTH_COOKIE_SAMESITE must be Lax, Strict, or None.')
+AUTH_COOKIE_SECURE = os.getenv(
+    'AUTH_COOKIE_SECURE',
+    'true' if IS_DEPLOYED else 'false',
+).lower() in {'1', 'true', 'yes'}
+if IS_DEPLOYED and not AUTH_COOKIE_SECURE:
+    raise ImproperlyConfigured('AUTH_COOKIE_SECURE must be true in staging/production.')
+if AUTH_COOKIE_SAMESITE == 'None' and not AUTH_COOKIE_SECURE:
+    raise ImproperlyConfigured('AUTH_COOKIE_SAMESITE=None requires AUTH_COOKIE_SECURE=true.')
+AUTH_FRONTEND_ORIGIN = os.getenv(
+    'AUTH_FRONTEND_ORIGIN',
+    CORS_ALLOWED_ORIGINS[0] if CORS_ALLOWED_ORIGINS else 'http://localhost:4200',
+).rstrip('/')
+
+# Destructive tenant deletion is deliberately opt-in. The two-step preview /
+# confirm endpoints remain available to owners, but execution stays closed
+# until an environment has reviewed the retention and backup runbook.
+TENANT_DATA_DELETION_ENABLED = os.getenv('TENANT_DATA_DELETION_ENABLED', 'false').lower() in {
+    '1', 'true', 'yes',
+}
 
 # Custom SupplyForge settings (mapped from application.yml)
 SUPPLYFORGE = {
@@ -267,6 +301,7 @@ SUPPLYFORGE = {
         'enabled': os.getenv('GOOGLE_OAUTH_ENABLED', 'false').lower() in {'1', 'true', 'yes'},
         'client_id': os.getenv('GOOGLE_CLIENT_ID', '').strip(),
         'client_secret': os.getenv('GOOGLE_CLIENT_SECRET', ''),
+        'redirect_uri': os.getenv('GOOGLE_OAUTH_REDIRECT_URI', '').strip(),
     },
     'odoo': {
         'enabled': os.getenv('ODOO_ENABLED', 'false').lower() in {'1', 'true', 'yes'},
@@ -277,12 +312,6 @@ SUPPLYFORGE = {
         'db': os.getenv('ODOO_DB', ''),
         'username': os.getenv('ODOO_USERNAME', ''),
         'password': os.getenv('ODOO_PASSWORD', ''),
-    },
-    'shopee': {
-        'partner_id': os.getenv('SHOPEE_PARTNER_ID', '0'),
-        'partner_key': os.getenv('SHOPEE_PARTNER_KEY', ''),
-        'api_host': os.getenv('SHOPEE_API_HOST', 'https://partner.shopeemobile.com'),
-        'redirect_url': os.getenv('SHOPEE_REDIRECT_URL', 'http://localhost:8080/api/v1/shopee/oauth/callback'),
     },
 }
 
@@ -299,7 +328,7 @@ if IS_DEPLOYED and SUPPLYFORGE['gemini']['enabled'] and not SUPPLYFORGE['gemini'
     )
 
 if IS_DEPLOYED and SUPPLYFORGE['google_oauth']['enabled']:
-    for _name in ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'):
+    for _name in ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_OAUTH_REDIRECT_URI'):
         if not os.getenv(_name, '').strip():
             raise ImproperlyConfigured(
                 f'{_name} is required when GOOGLE_OAUTH_ENABLED is true.'
@@ -350,6 +379,7 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = int(
 if CELERY_WORKER_PREFETCH_MULTIPLIER < 1:
     raise ImproperlyConfigured('CELERY_WORKER_PREFETCH_MULTIPLIER must be positive.')
 
+from celery.schedules import crontab
 from kombu import Queue
 
 CELERY_TASK_DEFAULT_QUEUE = 'celery'
@@ -366,6 +396,23 @@ CELERY_BEAT_SCHEDULE = {
     'supplyforge-erp-incremental-pull': {
         'task': 'supplyforge.tasks.enqueue_due_integration_syncs',
         'schedule': 900.0,
+    },
+    # Metrics are emitted only after a candidate's complete 60-day label
+    # window. This schedule cannot promote, retrain, or change a model.
+    'supplyforge-temporal-shadow-monitoring': {
+        'task': 'supplyforge.tasks.mature_temporal_shadow_predictions',
+        'schedule': crontab(hour=2, minute=20),
+    },
+    # This only matures future-demand labels for previously frozen slow-moving
+    # decisions. It cannot change a priority score or enable notifications.
+    'supplyforge-slow-moving-outcome-maturation': {
+        'task': 'supplyforge.tasks.mature_slow_moving_outcomes',
+        'schedule': crontab(hour=2, minute=35),
+    },
+    # Idempotent delivery ledger prevents duplicate alerts across Beat ticks.
+    'supplyforge-action-plan-reminders': {
+        'task': 'supplyforge.tasks.send_due_action_plan_reminders',
+        'schedule': crontab(minute='*/30'),
     },
 }
 

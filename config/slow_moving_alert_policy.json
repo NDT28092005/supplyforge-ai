@@ -1,0 +1,15 @@
+{
+  "version": "slow_moving_operational_v4",
+  "lookback_days": 90,
+  "minimum_observed_days": 60,
+  "minimum_source_coverage_days": 45,
+  "consecutive_runs_to_open": 2,
+  "require_verified_sellable_start_for_zero_sales": true,
+  "source_scope": {
+    "csv_order_platforms": ["sales_import"],
+    "warehouse_scope": "ALL_VERIFIED_WAREHOUSES",
+    "return_handling": "NET_SALES_MINUS_RETURN_EVENTS"
+  },
+  "accepted_order_statuses": ["COMPLETED", "SHIPPED"],
+  "active_lifecycle_statuses": ["ACTIVE"]
+}

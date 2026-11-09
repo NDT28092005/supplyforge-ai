@@ -63,7 +63,7 @@ class DataReadinessGate:
         dataset_version_data = self._load_json(os.path.join(output_dir, 'dataset_version.json'))
         sku_mapping_data = self._load_json(os.path.join(output_dir, 'sku_mapping.json'))
 
-        dataset_id = dataset_version_data.get('datasetId', 'Shopee_Default_Dataset')
+        dataset_id = dataset_version_data.get('datasetId', 'Default_Sales_Dataset')
         dataset_ver = dataset_version_data.get('datasetVersion', 'v1.0')
 
         # 2. Evaluate Criterion A: Schema Readiness

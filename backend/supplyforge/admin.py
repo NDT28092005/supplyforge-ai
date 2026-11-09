@@ -5,6 +5,8 @@ from supplyforge.models import (
     Order, OrderItem,
     DataSource,
     InsightAnomaly,
+    ActionPlanOutcomeObservation,
+    TemporalCandidatePromotionApproval,
 )
 
 admin.site.register(User)
@@ -19,3 +21,5 @@ admin.site.register(Order)
 admin.site.register(OrderItem)
 admin.site.register(DataSource)
 admin.site.register(InsightAnomaly)
+admin.site.register(ActionPlanOutcomeObservation)
+admin.site.register(TemporalCandidatePromotionApproval)

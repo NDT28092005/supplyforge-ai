@@ -237,7 +237,14 @@ class TestCapitalExposureApiPersistence(TestCase):
             evidence={
                 'stock_quantity': 12,
                 'unit_cost': 100_000,
+                'unit_price': 150_000,
+                'capital_exposure_vnd': 1_200_000,
                 'dsls': 91,
+                'inventory_readiness': {
+                    'status': 'READY',
+                    'record_date': '2026-10-29',
+                    'warehouse_count': 1,
+                },
             },
         )
 

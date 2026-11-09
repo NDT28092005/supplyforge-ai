@@ -49,11 +49,18 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
   const token = authService.getToken();
   const isPublic = isPublicRequest(request.url);
 
-  if (!token || isPublic || !request.url.includes('/api/')) {
+  if (!request.url.includes('/api/')) {
     return next(request);
   }
 
+  // The HttpOnly refresh cookie is sent only to the API. Presigned object
+  // storage URLs bypass HttpClient and never receive application credentials.
+  if (!token || isPublic) {
+    return next(request.clone({ withCredentials: true }));
+  }
+
   const authorizedRequest = request.clone({
+    withCredentials: true,
     setHeaders: { Authorization: `Bearer ${token}` }
   });
 
@@ -64,7 +71,7 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
       // A restarted backend can reject an old access token before its client-side
       // expiry. The refresh token remains the authoritative way to recover a session.
       const isRefreshableSession = error.status === 401 && ['EXPIRED_TOKEN', 'INVALID_TOKEN'].includes(code);
-      const canRefresh = isRefreshableSession && !wasRetried && !!authService.getRefreshToken();
+      const canRefresh = isRefreshableSession && !wasRetried;
 
       if (!isRefreshableSession || wasRetried) {
         return throwError(() => error);
@@ -82,16 +89,15 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
       }
 
       if (!refreshRequest$) {
-        const refreshToken = authService.getRefreshToken()!;
-        refreshRequest$ = rawHttp.post<any>(`${apiBaseUrl()}/api/v1/auth/refresh`, {
-          refresh_token: refreshToken
+        refreshRequest$ = rawHttp.post<any>(`${apiBaseUrl()}/api/v1/auth/refresh`, {}, {
+          withCredentials: true
         }).pipe(
           map((response) => {
             const accessToken = response?.access_token || response?.token;
             if (!accessToken) {
               throw new Error('Không nhận được access token mới.');
             }
-            authService.setSession(accessToken, response?.refresh_token || refreshToken);
+            authService.setSession(accessToken, response?.user);
             return accessToken;
           }),
           finalize(() => { refreshRequest$ = null; }),
@@ -111,6 +117,7 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
           return throwError(() => refreshError);
         }),
         switchMap((accessToken) => next(request.clone({
+          withCredentials: true,
           setHeaders: {
             Authorization: `Bearer ${accessToken}`,
             'X-SupplyForge-Session-Retry': '1'

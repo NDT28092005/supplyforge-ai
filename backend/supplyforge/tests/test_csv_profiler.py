@@ -3,7 +3,7 @@ import tempfile
 from django.test import TestCase
 from supplyforge.services.csv_profiler import StreamingCSVProfiler
 from supplyforge.models import IngestionSession, Workspace
-from supplyforge.tests.fixture_builders import create_large_shopee_orders_fixture
+from supplyforge.tests.fixture_builders import create_large_sales_orders_fixture
 
 
 class StreamingCSVProfilerTestCase(TestCase):
@@ -13,7 +13,7 @@ class StreamingCSVProfilerTestCase(TestCase):
         self.workspace = Workspace.objects.create(name="Test Workspace", slug="test-ws")
         self.fixture_dir = tempfile.TemporaryDirectory(prefix='supplyforge-streaming-')
         self.addCleanup(self.fixture_dir.cleanup)
-        self.test_csv_path = create_large_shopee_orders_fixture(self.fixture_dir.name)
+        self.test_csv_path = create_large_sales_orders_fixture(self.fixture_dir.name)
 
     def test_streaming_csv_profiling(self):
         """Verify streaming profiling on a 50,000 row CSV file."""

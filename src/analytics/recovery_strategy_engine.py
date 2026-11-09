@@ -74,7 +74,9 @@ class RecoveryStrategyEngine:
         sku = decision_context["sku"]
         eligible_strats = list(eligibility_result.get("eligible_actions", []))
         review_strats = list(eligibility_result.get("requires_review_actions", []))
-        candidate_strats = list(set(eligible_strats + review_strats))
+        # Stable ordering makes both the recommendation and its audit trace
+        # repeatable when two actions receive the same suitability score.
+        candidate_strats = sorted(set(eligible_strats + review_strats))
 
         # Hard constraint check: No eligible actions -> NO_ELIGIBLE_STRATEGY
         if not candidate_strats or eligibility_result.get("evaluation_status") == "BLOCKED_BY_CONTEXT":
@@ -108,7 +110,6 @@ class RecoveryStrategyEngine:
         a_ctx = decision_context.get("aging_context", {})
 
         r_class = r_ctx.get("risk_class", "UNKNOWN")
-        r_prob = r_ctx.get("risk_probability", 0.0)
         cap_exp = c_ctx.get("capital_exposure", 0.0)
         aging_bucket = a_ctx.get("aging_bucket", "RECENT")
         aging_days = a_ctx.get("aging_days") or 0
@@ -122,7 +123,6 @@ class RecoveryStrategyEngine:
                 profile=prof,
                 weights=weights,
                 risk_class=r_class,
-                risk_prob=r_prob,
                 cap_exp=cap_exp,
                 aging_bucket=aging_bucket,
                 aging_days=aging_days
@@ -137,7 +137,7 @@ class RecoveryStrategyEngine:
         alternative_strategies = [s["strategy"] for s in ranked_strategies[1:]]
 
         # Tie & Ambiguity Handling
-        requires_review = (strat_id in review_strats)
+        requires_review = recommended_strategy in review_strats
         if len(ranked_strategies) > 1:
             diff = abs(ranked_strategies[0]["score"] - ranked_strategies[1]["score"])
             if diff <= ambiguity_thresh:
@@ -147,7 +147,6 @@ class RecoveryStrategyEngine:
         rationale = self._generate_structured_rationale(
             recommended_strategy=recommended_strategy,
             risk_class=r_class,
-            risk_prob=r_prob,
             cap_exp=cap_exp,
             aging_bucket=aging_bucket,
             aging_days=aging_days
@@ -172,7 +171,6 @@ class RecoveryStrategyEngine:
         profile: Dict[str, Any],
         weights: Dict[str, float],
         risk_class: str,
-        risk_prob: float,
         cap_exp: float,
         aging_bucket: str,
         aging_days: int
@@ -196,9 +194,11 @@ class RecoveryStrategyEngine:
         if cap_exp >= 10000000.0 and strat_id in ["CLEARANCE", "DISCOUNT"]:
             cap_fit = min(1.0, cap_fit + 0.15)
 
-        # Demand Fit
+        # Demand fit is derived from the eligible risk class and observed
+        # evidence.  It must not use a deterministic rule score disguised as
+        # a probability.
         demand_fit = profile.get("demand_fit_score", 0.70)
-        if risk_prob >= 0.85 and strat_id in ["CLEARANCE", "STOP_REPLENISHMENT"]:
+        if risk_class == "CRITICAL" and strat_id in ["CLEARANCE", "STOP_REPLENISHMENT"]:
             demand_fit = min(1.0, demand_fit + 0.15)
 
         total_score = (w_r * risk_fit) + (w_a * aging_fit) + (w_c * cap_fit) + (w_d * demand_fit)
@@ -208,7 +208,6 @@ class RecoveryStrategyEngine:
         self,
         recommended_strategy: str,
         risk_class: str,
-        risk_prob: float,
         cap_exp: float,
         aging_bucket: str,
         aging_days: int

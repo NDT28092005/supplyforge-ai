@@ -92,15 +92,6 @@ class OdooMetricProjectionService:
         if not selected_warehouses:
             raise OdooConnectorError('Các kho đã chọn không còn tồn tại hoặc không thuộc công ty Odoo đã chọn.')
 
-        if run_type == 'RECONCILIATION':
-            reconciliation = self._reconcile(selected_warehouses)
-            return {
-                'validation': validation,
-                'mode': 'READ_ONLY',
-                'reconciliation': reconciliation,
-                'selected_warehouse_count': len(selected_warehouses),
-            }
-
         today = timezone.localdate()
         since_date = self._window_start(run_type, today)
         since_dt = timezone.make_aware(datetime.combine(since_date, datetime.min.time()))
@@ -383,25 +374,3 @@ class OdooMetricProjectionService:
             IntegrationSkuDailyMetric.objects.filter(connection=self.connection, metric_date__gte=since_date).delete()
             IntegrationSkuDailyMetric.objects.bulk_create(rows, batch_size=1_000)
         return len(rows)
-
-    def _reconcile(self, selected_warehouses: list[dict]) -> dict:
-        products = self.connector.read_products(self.connection.external_company_id, max_records=MAX_RECORDS_PER_RUN)
-        product_by_id = {str(item['id']): item for item in products}
-        inventory = self.connector.read_inventory(selected_warehouses, max_records=MAX_RECORDS_PER_RUN)
-        observed = Decimal('0')
-        for quant in inventory:
-            observed += _decimal(quant.get('quantity')) - _decimal(quant.get('reserved_quantity'))
-        projected = IntegrationSkuDailyMetric.objects.filter(
-            connection=self.connection,
-            metric_date=timezone.localdate(),
-            on_hand_quantity__isnull=False,
-        )
-        projected_total = sum((item.on_hand_quantity or Decimal('0') for item in projected), Decimal('0'))
-        return {
-            'inventory_quants_read': len(inventory),
-            'product_count': len(product_by_id),
-            'odoo_on_hand_quantity': float(observed),
-            'projected_on_hand_quantity': float(projected_total),
-            'quantity_variance': float(observed - projected_total),
-            'status': 'MATCHED' if observed == projected_total else 'VARIANCE_DETECTED',
-        }

@@ -2,8 +2,8 @@
 Task M6-05 — Recovery Value Estimation Engine
 Module 06: Decision Support & Capital Recovery Engine
 
-Quantifies recoverable capital values, recovery costs, net recovery values, recovery rates, residual capital exposure,
-and recovery gaps across recovery strategies and discount scenarios.
+Normalises price-scenario metrics without confusing gross sales, margin and
+inventory-cost rotation with accounting cash or realised capital release.
 Preserves explicit data type provenance (OBSERVED, CALCULATED, ESTIMATED, SIMULATED, ASSUMED) and 0 LLM calculations.
 """
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class RecoveryConfidenceLevel(str, Enum):
-    """Confidence level ratings for estimated recovery value."""
+    """Confidence level ratings for scenario evidence, not cash forecasts."""
     HIGH = "HIGH"
     MEDIUM = "MEDIUM"
     LOW = "LOW"
@@ -82,7 +82,9 @@ class RecoveryValueEstimationEngine:
         simulation_result: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Estimates recovery values, net recovery, residual exposure, and recovery gap for a single SKU.
+        Normalise a selected price scenario into merchant-readable financial
+        metrics.  This layer never adds policy-default marketplace fees: every
+        fee must already be carried by the immutable scenario input.
         """
         if not decision_context or "sku" not in decision_context:
             raise RecoveryValueEstimationError("Invalid or missing DecisionContext object.")
@@ -93,91 +95,98 @@ class RecoveryValueEstimationEngine:
         r_ctx = decision_context.get("risk_context", {})
         cap_exp = float(c_ctx.get("capital_exposure", 0.0))
 
-        # Retrieve unit price, cost, and stock quantity
-        raw_price = decision_context.get("unit_price") or decision_context.get("price") or r_ctx.get("unit_price")
-        raw_cost = decision_context.get("unit_cost") or decision_context.get("cost") or c_ctx.get("unit_cost")
-        raw_qty = decision_context.get("stock_on_hand") or decision_context.get("quantity") or r_ctx.get("stock_on_hand")
-
-        stock_qty = float(raw_qty) if raw_qty is not None else (cap_exp / max(1.0, float(raw_cost or 70000.0)))
-        unit_price = float(raw_price) if raw_price is not None else (cap_exp / max(1.0, stock_qty))
-        unit_cost = float(raw_cost) if raw_cost is not None else (unit_price * 0.70)
-
-        cost_params = self.policy.get("cost_parameters", {"platform_fee_rate": 0.05, "promotion_cost_per_unit": 2000.0, "liquidation_cost_rate": 0.08})
-        targets = self.policy.get("recovery_targets", {"default_target_recovery_rate": 0.85})
-        defaults = self.policy.get("strategy_recovery_defaults", {})
-
-        target_rate = float(targets.get("default_target_recovery_rate", 0.85))
-        platform_fee_rate = float(cost_params.get("platform_fee_rate", 0.05))
-        promo_cost_per_unit = float(cost_params.get("promotion_cost_per_unit", 2000.0))
-        liq_cost_rate = float(cost_params.get("liquidation_cost_rate", 0.08))
-
-        scenario_id = None
-        gross_recovery = 0.0
-        recovered_qty = 0.0
-        data_source_type = "ESTIMATED"
-
-        # Check if Discount Simulation result is available for DISCOUNT / CLEARANCE
+        # A financial scenario must never synthesize price, cost, stock, or a
+        # strategy outcome when observed input is unavailable.
+        raw_price = decision_context.get("unit_price") if decision_context.get("unit_price") is not None else decision_context.get("price")
+        raw_cost = decision_context.get("unit_cost") if decision_context.get("unit_cost") is not None else decision_context.get("cost")
+        raw_qty = decision_context.get("stock_on_hand") if decision_context.get("stock_on_hand") is not None else decision_context.get("quantity")
+        missing = [label for value, label in ((raw_price, "giá bán"), (raw_cost, "giá vốn"), (raw_qty, "tồn kho")) if value is None]
         scenarios = simulation_result.get("scenarios", []) if simulation_result else []
         feasible_scenarios = [s for s in scenarios if s.get("status") in ["FEASIBLE", "REQUIRES_REVIEW"]]
+        if missing or not feasible_scenarios:
+            return {
+                "sku": sku, "strategy": strat_id, "evaluation_status": "DATA_UNAVAILABLE",
+                "missing_inputs": [*missing, *([] if feasible_scenarios else ["kịch bản giá hợp lệ"])],
+                "capital_exposure": round(cap_exp, 2), "projected_gross_sales": None,
+                "projected_variable_and_fixed_cost": None, "projected_net_contribution": None,
+                "projected_inventory_cost_rotation": None, "inventory_cost_rotation_rate": None,
+                "remaining_inventory_cost_exposure": None,
+                # Legacy field names remain null for callers that have not
+                # migrated; they are never an accounting claim.
+                "gross_recovery_value": None, "recovery_cost": None,
+                "net_recovery_value": None, "recovery_rate": None,
+                "residual_exposure": None, "recovery_gap": None,
+                "recovery_confidence": RecoveryConfidenceLevel.LOW.value,
+                "assumptions": {}, "calculation_trace": [],
+                "value_policy_version": self.policy.get("value_policy_version", "1.0"),
+                "evaluated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        try:
+            stock_qty, unit_price, unit_cost = float(raw_qty), float(raw_price), float(raw_cost)
+        except (TypeError, ValueError) as exc:
+            raise RecoveryValueEstimationError("Giá bán, giá vốn và tồn kho phải là số hợp lệ.") from exc
 
-        if feasible_scenarios:
-            # Use top feasible scenario (e.g. DISC_20 or first feasible)
-            scen = feasible_scenarios[0]
-            scenario_id = scen["scenario_id"]
-            gross_recovery = float(scen["simulated_revenue"])
-            recovered_qty = float(scen["simulated_quantity"])
-            data_source_type = "SIMULATED"
-        else:
-            # Use Strategy Profile Defaults
-            strat_def = defaults.get(strat_id, {"quantity_recovery_factor": 0.70, "price_factor": 0.85})
-            qty_factor = float(strat_def.get("quantity_recovery_factor", 0.70))
-            price_factor = float(strat_def.get("price_factor", 0.85))
+        targets = self.policy.get("recovery_targets", {"default_target_recovery_rate": 0.85})
 
-            recovered_qty = round(stock_qty * qty_factor, 2)
-            eff_price = unit_price * price_factor
-            gross_recovery = round(eff_price * recovered_qty, 2)
-            data_source_type = "ESTIMATED"
-
-        # Economic Upper Boundary Check: Gross Recovery cannot exceed maximum economic potential
-        max_possible = unit_price * stock_qty * 1.5
-        gross_recovery = min(gross_recovery, max_possible)
-
-        # Calculate Recovery Costs
-        platform_fee = round(gross_recovery * platform_fee_rate, 2)
-        additional_cost = round(recovered_qty * promo_cost_per_unit, 2) if strat_id in ["PROMOTION", "BUNDLE", "DISCOUNT"] else round(gross_recovery * liq_cost_rate, 2) if strat_id == "CLEARANCE" else 0.0
-        total_recovery_cost = round(platform_fee + additional_cost, 2)
-
-        # Calculate Net Recovery, Recovery Rate, Residual Exposure, Recovery Gap
-        net_recovery = round(max(0.0, gross_recovery - total_recovery_cost), 2)
-        rec_rate = round(net_recovery / cap_exp, 4) if cap_exp > 0 else 0.0
-        residual_exp = round(max(0.0, cap_exp - net_recovery), 2)
-        target_val = round(cap_exp * target_rate, 2)
-        rec_gap = round(max(0.0, target_val - net_recovery), 2)
+        target_rate = float(targets.get("default_target_recovery_rate", 0.85))
+        # A deterministic scenario selects a specific rate/duration.  Use the
+        # first feasible scenario only as an explicit compatibility rule; the
+        # optimiser makes ranking separate and exposes its selected scenario.
+        scen = feasible_scenarios[0]
+        scenario_id = scen["scenario_id"]
+        recovered_qty = float(scen.get("simulated_quantity") or 0.0)
+        gross_sales = float(scen.get("simulated_revenue") or 0.0)
+        variable_fees = float(scen.get("projected_variable_fees") or 0.0)
+        fixed_cost = float(scen.get("projected_fixed_cost") or 0.0)
+        inventory_cost_rotation = float(
+            scen.get("projected_inventory_cost_rotation", scen.get("capital_recovery") or 0.0)
+        )
+        net_contribution = scen.get("projected_net_contribution")
+        if net_contribution is None:
+            # Legacy simulation payloads did not include fees.  We can still
+            # derive the contribution from its explicit price/cost quantities;
+            # we must not add hidden config fees.
+            net_contribution = gross_sales - (unit_cost * recovered_qty) - variable_fees - fixed_cost
+        net_contribution = float(net_contribution)
+        inventory_cost_rotation = min(max(0.0, inventory_cost_rotation), cap_exp)
+        rotation_rate = round(inventory_cost_rotation / cap_exp, 4) if cap_exp > 0 else 0.0
+        remaining_inventory_cost_exposure = round(max(0.0, cap_exp - inventory_cost_rotation), 2)
+        target_rotation = round(cap_exp * target_rate, 2)
+        rotation_gap = round(max(0.0, target_rotation - inventory_cost_rotation), 2)
+        fee_aware = bool(
+            (scen.get("data_types") or {}).get("projected_net_contribution")
+            or (scen.get("input_provenance") or {}).get("channel_cost_profile") == "APPROVED_PROFILE"
+        )
 
         # Evaluate Recovery Confidence
         if decision_context.get("decision_status") == "NOT_READY" or cap_exp == 0.0:
             confidence = RecoveryConfidenceLevel.LOW.value
-        elif data_source_type == "SIMULATED":
+        elif fee_aware:
             confidence = RecoveryConfidenceLevel.MEDIUM.value
         else:
-            confidence = RecoveryConfidenceLevel.MEDIUM.value
+            confidence = RecoveryConfidenceLevel.LOW.value
 
         # Build Assumption Registry & Provenance
         assumptions = {
             "selling_price": {"value": round(unit_price, 2), "type": "OBSERVED", "source": "M01_M05_Data"},
             "unit_cost": {"value": round(unit_cost, 2), "type": "OBSERVED", "source": "M01_M05_Data"},
-            "recovered_quantity": {"value": round(recovered_qty, 2), "type": data_source_type, "source": "M6_04_Simulation" if scenario_id else "M6_05_PolicyDefaults"},
-            "gross_recovery_value": {"value": round(gross_recovery, 2), "type": data_source_type, "source": "FinancialEngine"},
-            "platform_fee_rate": {"value": platform_fee_rate, "type": "ASSUMED", "source": "config/recovery_value_policy.json"}
+            "recovered_quantity": {"value": round(recovered_qty, 2), "type": "SIMULATED", "source": "DiscountSimulationEngine"},
+            "projected_gross_sales": {"value": round(gross_sales, 2), "type": "SIMULATED_GROSS_SALES", "source": "DiscountSimulationEngine"},
+            # Compatibility entry; renamed field above is preferred.
+            "gross_recovery_value": {"value": round(gross_sales, 2), "type": "SIMULATED", "source": "Legacy alias for projected gross sales"},
+            "projected_variable_fees": {"value": round(variable_fees, 2), "type": "SIMULATED", "source": "Approved channel profile when available"},
+            "projected_fixed_cost": {"value": round(fixed_cost, 2), "type": "SIMULATED", "source": "Approved channel profile when available"},
+            "projected_inventory_cost_rotation": {"value": round(inventory_cost_rotation, 2), "type": "CALCULATED", "source": "unit_cost * simulated_units"},
         }
 
         # Build Step-by-Step Calculation Trace
         trace = [
-            f"Step 1: Gross Recovery = {recovered_qty:,.2f} units * SellingPrice = {gross_recovery:,.2f} VNĐ ({data_source_type})",
-            f"Step 2: Platform Fee (5%) = {platform_fee:,.2f} VNĐ, Additional Costs = {additional_cost:,.2f} VNĐ",
-            f"Step 3: Total Recovery Cost = {total_recovery_cost:,.2f} VNĐ",
-            f"Step 4: Net Recovery Value = {net_recovery:,.2f} VNĐ (Rate: {rec_rate * 100:.1f}%)",
-            f"Step 5: Residual Exposure = {residual_exp:,.2f} VNĐ, Recovery Gap vs 85% Target = {rec_gap:,.2f} VNĐ"
+            f"Bước 1: Doanh thu gộp kịch bản = {gross_sales:,.2f} VNĐ từ {recovered_qty:,.2f} đơn vị.",
+            f"Bước 2: Phí biến đổi = {variable_fees:,.2f} VNĐ; chi phí cố định theo đơn vị = {fixed_cost:,.2f} VNĐ.",
+            f"Bước 3: Lợi nhuận đóng góp dự kiến = {net_contribution:,.2f} VNĐ.",
+            f"Bước 4: Giá vốn tồn dự kiến quay vòng = {inventory_cost_rotation:,.2f} VNĐ ({rotation_rate * 100:.1f}% vốn tồn theo sổ).",
+            f"Bước 5: Vốn tồn còn lại theo sổ = {remaining_inventory_cost_exposure:,.2f} VNĐ; chênh lệch so với mục tiêu quay vòng = {rotation_gap:,.2f} VNĐ.",
+            "Các giá trị trên là kịch bản, không phải tiền thực nhận, bút toán kế toán hoặc bằng chứng tác động nhân quả."
         ]
 
         return {
@@ -185,18 +194,28 @@ class RecoveryValueEstimationEngine:
             "strategy": strat_id,
             "scenario_id": scenario_id,
             "capital_exposure": round(cap_exp, 2),
-            "gross_recovery_value": gross_recovery,
-            "recovery_cost": total_recovery_cost,
-            "net_recovery_value": net_recovery,
-            "recovery_rate": rec_rate,
-            "residual_exposure": residual_exp,
-            "recovery_gap": rec_gap,
+            "projected_gross_sales": round(gross_sales, 2),
+            "projected_variable_and_fixed_cost": round(variable_fees + fixed_cost, 2),
+            "projected_net_contribution": round(net_contribution, 2),
+            "projected_inventory_cost_rotation": round(inventory_cost_rotation, 2),
+            "inventory_cost_rotation_rate": rotation_rate,
+            "remaining_inventory_cost_exposure": remaining_inventory_cost_exposure,
+            "inventory_cost_rotation_gap": rotation_gap,
+            # Compatibility aliases. They retain response compatibility but
+            # every caller should migrate to the provenance-aware fields.
+            "gross_recovery_value": round(gross_sales, 2),
+            "recovery_cost": round(variable_fees + fixed_cost, 2),
+            "net_recovery_value": round(net_contribution, 2),
+            "recovery_rate": rotation_rate,
+            "residual_exposure": remaining_inventory_cost_exposure,
+            "recovery_gap": rotation_gap,
             "target_recovery_rate": target_rate,
             "recovery_confidence": confidence,
             "assumptions": assumptions,
             "calculation_trace": trace,
             "value_policy_version": self.policy.get("value_policy_version", "1.0"),
-            "evaluated_at": datetime.now(timezone.utc).isoformat()
+            "evaluated_at": datetime.now(timezone.utc).isoformat(),
+            "interpretation": "Mô phỏng thương mại, không phải dự báo dòng tiền hoặc giá trị vốn đã giải phóng thực tế.",
         }
 
     def estimate_portfolio_recovery_values(
@@ -213,7 +232,8 @@ class RecoveryValueEstimationEngine:
 
         estimations = []
         total_exposure = 0.0
-        total_net_recovery = 0.0
+        total_net_contribution = 0.0
+        total_inventory_cost_rotation = 0.0
         total_residual = 0.0
 
         for ctx in decision_contexts:
@@ -225,10 +245,11 @@ class RecoveryValueEstimationEngine:
             estimations.append(est_res)
 
             total_exposure += est_res["capital_exposure"]
-            total_net_recovery += est_res["net_recovery_value"]
-            total_residual += est_res["residual_exposure"]
+            total_net_contribution += float(est_res.get("projected_net_contribution") or 0.0)
+            total_inventory_cost_rotation += float(est_res.get("projected_inventory_cost_rotation") or 0.0)
+            total_residual += float(est_res.get("remaining_inventory_cost_exposure") or 0.0)
 
-        portfolio_rate = round(total_net_recovery / total_exposure, 4) if total_exposure > 0 else 0.0
+        portfolio_rate = round(total_inventory_cost_rotation / total_exposure, 4) if total_exposure > 0 else 0.0
 
         summary = {
             "task": "M6-05",
@@ -237,9 +258,15 @@ class RecoveryValueEstimationEngine:
             "summary": {
                 "total_skus": len(estimations),
                 "total_capital_exposure": round(total_exposure, 2),
-                "total_net_recovery_value": round(total_net_recovery, 2),
+                "total_projected_net_contribution": round(total_net_contribution, 2),
+                "total_projected_inventory_cost_rotation": round(total_inventory_cost_rotation, 2),
+                "total_remaining_inventory_cost_exposure": round(total_residual, 2),
+                "portfolio_inventory_cost_rotation_rate": portfolio_rate,
+                # Legacy summary aliases; values should not be presented as
+                # realised recovery or cash flow.
+                "total_net_recovery_value": round(total_net_contribution, 2),
                 "total_residual_exposure": round(total_residual, 2),
-                "portfolio_recovery_rate": portfolio_rate
+                "portfolio_recovery_rate": portfolio_rate,
             },
             "recovery_value_estimations": estimations,
             "generated_at": datetime.now(timezone.utc).isoformat()

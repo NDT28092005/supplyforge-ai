@@ -1,6 +1,6 @@
 <!-- Header Navbar (hidden on auth page) -->
 <app-header *ngIf="!isAuthRoute" [user]="authService.currentUser$ | async" (openLogin)="openLoginModal()"
-  (logout)="performLogout()" (demoLogin)="performDemoLogin()">
+  (logout)="performLogout()">
 </app-header>
 
 <!-- Main Container (hidden on auth page) -->

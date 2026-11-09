@@ -50,7 +50,9 @@
     <p class="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
       {{ sourceMode === 'ODOO'
         ? 'Chưa có SKU Odoo đủ điều kiện. Hãy đồng bộ dữ liệu, xác nhận liên kết SKU và bảo đảm SKU còn tồn khả dụng.'
-        : 'Hiện chưa có bản ghi sản phẩm nào. Vui lòng nạp tệp CSV lịch sử đơn hàng để hệ thống đánh giá tốc độ bán và phân tích rủi ro.' }}
+        : (sourceMetadata?.status === 'NO_COMPLETED_RUN'
+          ? 'Bộ dữ liệu đang được phân tích. Kết quả sẽ xuất hiện sau khi worker công bố lần đánh giá hoàn tất.'
+          : 'Hiện chưa có SKU nào đủ điều kiện. Hãy nạp lịch sử đơn hàng hợp lệ và ảnh chụp tồn kho đã xác minh.') }}
     </p>
     <button *ngIf="sourceMode === 'CSV'" (click)="goToImport()"
       class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition-all cursor-pointer inline-block">
@@ -63,12 +65,130 @@
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <div *ngIf="dataState === 'ready'" data-motion="table" class="bg-white border border-slate-200 p-6 rounded-2xl space-y-5">
 
+    <div *ngIf="sourceMode === 'CSV' && sourceMetadata" class="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-sky-800">
+      <strong class="shrink-0 text-sky-950">CSV đang dùng</strong>
+      <span class="min-w-0 flex-1 truncate">{{ sourceMetadata.dataset_version || 'Chưa có phiên bản' }} · Dữ liệu đến {{ sourceMetadata.analysis_as_of || 'chưa xác định' }} · {{ sourceMetadata.summary?.eligible_skus || 0 }}/{{ sourceMetadata.summary?.total_skus_considered || 0 }} SKU đủ điều kiện đánh giá.</span>
+      <span *ngIf="sourceMetadata.status !== 'COMPLETED'" class="ml-auto shrink-0 font-semibold text-amber-800">Chờ phân tích hoàn tất</span>
+      <p class="w-full pt-1 text-sky-700">Chỉ dùng đơn hoàn tất, đã trừ hoàn trả theo SKU và tồn kho đã xác minh; kết quả là điểm ưu tiên xử lý, không phải xác suất dự báo.</p>
+      <p class="w-full border-t border-sky-200 pt-2 text-sky-800"><strong>Trạng thái kiểm chứng:</strong> {{ qualityStateLabel }}. {{ qualityStateDetail }}</p>
+    </div>
+
     <div *ngIf="sourceMode === 'ODOO' && sourceMetadata" class="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-sky-800">
       <strong class="shrink-0 text-sky-950">Odoo</strong>
       <span class="min-w-0 flex-1 truncate">{{ selectedOdooConnectionName }} · Dữ liệu đến {{ sourceMetadata.data_as_of || 'chưa xác định' }} · {{ sourceMetadata.coverage?.scored_skus || 0 }}/{{ sourceMetadata.coverage?.total_source_skus || 0 }} SKU được chấm.</span>
       <span *ngIf="sourceMetadata.is_stale" class="ml-auto shrink-0 font-semibold text-amber-800">Cần đồng bộ</span>
       <p class="w-full pt-1 text-sky-700">Dữ liệu Odoo phản ánh tình hình bán hàng gần đây; dùng mức rủi ro và giá trị vốn để ưu tiên xử lý.</p>
+      <p class="w-full border-t border-sky-200 pt-2 text-sky-800"><strong>Trạng thái kiểm chứng:</strong> {{ qualityStateLabel }}. {{ qualityStateDetail }}</p>
     </div>
+
+    <section *ngIf="qualityReport" class="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4" aria-label="Chất lượng cảnh báo bán chậm">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p class="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Kiểm chứng cảnh báo</p>
+          <h2 class="mt-1 text-sm font-bold text-slate-900">{{ qualityStateLabel }}</h2>
+          <p class="mt-1 text-xs leading-5 text-slate-600">Đo trên nhu cầu bán ròng 60 ngày sau thời điểm cảnh báo. Đây không phải kết luận về vốn còn bị đọng hoặc hiệu quả của một hành động.</p>
+        </div>
+        <span class="shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold"
+          [ngClass]="qualityReport.state === 'NOTIFICATION_ELIGIBLE' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : qualityReport.state === 'ROLLBACK_REQUIRED' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-amber-200 bg-amber-50 text-amber-800'">
+          {{ qualityReport.notification?.delivery_mode === 'PROACTIVE' ? 'Có thể gửi nhắc việc' : 'Chỉ hiển thị trong hàng đợi' }}
+        </span>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div class="rounded-lg border border-slate-200 bg-white p-3">
+          <p class="text-[11px] text-slate-500">SKU outcome sạch</p>
+          <p class="mt-1 font-mono text-base font-bold text-slate-900">{{ qualityMetrics.matured_eligible_skus || 0 }}</p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-white p-3">
+          <p class="text-[11px] text-slate-500">Đang chờ đủ 60 ngày</p>
+          <p class="mt-1 font-mono text-base font-bold text-slate-900">{{ qualityMetrics.pending_outcome_count || 0 }}</p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-white p-3">
+          <p class="text-[11px] text-slate-500">Bị chặn do dữ liệu</p>
+          <p class="mt-1 font-mono text-base font-bold text-amber-800">{{ qualityMetrics.blocked_outcome_count || 0 }}</p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-white p-3">
+          <p class="text-[11px] text-slate-500">Bị nhiễu bởi vận hành</p>
+          <p class="mt-1 font-mono text-base font-bold text-slate-900">{{ qualityMetrics.confounded_outcome_count || 0 }}</p>
+        </div>
+      </div>
+
+      <div *ngIf="isQualityPublishable" class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div class="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3">
+          <p class="text-[11px] text-indigo-700">Cảnh báo cần xử lý phù hợp</p>
+          <p class="mt-1 font-mono text-base font-bold text-indigo-950">{{ formatQualityPercent(qualityMetrics.high_risk_precision) }}</p>
+          <p class="mt-1 text-[11px] text-indigo-700">Mức thận trọng tối thiểu: {{ formatQualityPercent(qualityMetrics.high_risk_precision_wilson_lower) }}</p>
+        </div>
+        <div class="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3">
+          <p class="text-[11px] text-indigo-700">Sản phẩm bán chậm đã được nhận diện</p>
+          <p class="mt-1 font-mono text-base font-bold text-indigo-950">{{ formatQualityPercent(qualityMetrics.high_risk_recall) }}</p>
+          <p class="mt-1 text-[11px] text-indigo-700">Chỉ tính cohort đủ dữ liệu, không bị nhiễu.</p>
+        </div>
+        <div class="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3">
+          <p class="text-[11px] text-indigo-700">Vốn ban đầu nằm trong cảnh báo phù hợp</p>
+          <p class="mt-1 font-mono text-base font-bold text-indigo-950">{{ formatQualityPercent(qualityMetrics.capital_weighted_high_risk_precision) }}</p>
+          <p class="mt-1 text-[11px] text-indigo-700">Vốn có dữ liệu: {{ formatQualityPercent(qualityMetrics.opening_capital_coverage) }}</p>
+          <p class="mt-1 text-[11px] text-indigo-700">Vốn C+H: {{ formatVnd(qualityMetrics.opened_high_risk_capital) }}; nhãn đúng: {{ formatVnd(qualityMetrics.true_positive_high_risk_capital) }}</p>
+        </div>
+      </div>
+
+      <div *ngIf="!isQualityPublishable" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+        Chưa công bố phần trăm chất lượng vì chưa đủ tối thiểu 100 SKU outcome sạch, 30 cảnh báo cao/rất cao và 3 đợt quyết định. Điểm ưu tiên hiện tại không phải xác suất.
+      </div>
+
+      <div *ngIf="failedQualityGates.length" class="border-t border-slate-200 pt-3">
+        <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Điều kiện chưa đạt</p>
+        <p class="mt-1 text-xs text-slate-600">{{ failedQualityGates.length }} điều kiện chưa đạt. Hệ thống vẫn giữ cảnh báo trong hàng đợi và không tự gửi nhắc việc.</p>
+      </div>
+
+      <div *ngIf="qualityCohorts.length" class="border-t border-slate-200 pt-3">
+        <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Xu hướng cohort gần đây</p>
+        <div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div *ngFor="let cohort of qualityCohorts" class="rounded-lg border border-slate-200 bg-white p-2.5">
+            <p class="font-mono text-[11px] text-slate-500">{{ cohort.decision_cutoff_date }}</p>
+            <p class="mt-1 text-xs font-semibold text-slate-800">{{ cohort.matured_eligible_skus }} SKU</p>
+            <p class="mt-1 text-[11px] text-slate-600">Tỷ lệ cảnh báo phù hợp: {{ formatQualityPercent(cohort.high_risk_precision) }}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section *ngIf="alertHealth" class="rounded-xl border border-slate-200 bg-white p-4" aria-label="Sức khỏe cảnh báo">
+      <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Sức khỏe cảnh báo</p>
+          <p class="mt-1 text-sm font-bold text-slate-900">Dữ liệu và việc cần xử lý</p>
+          <p class="mt-1 text-xs text-slate-600">Giúp đội ngũ biết cần bổ sung dữ liệu hay giao việc trước; không phải kết luận về doanh thu.</p>
+        </div>
+        <p class="text-[11px] font-semibold text-slate-500">Dữ liệu đến {{ alertHealth.source?.data_as_of || 'chưa xác định' }}</p>
+      </div>
+      <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-3"><p class="text-[11px] text-slate-500">Đang cần xem</p><p class="mt-1 font-mono text-base font-bold text-slate-900">{{ alertHealth.alerts?.total_active || 0 }}</p></div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-3"><p class="text-[11px] text-slate-500">Chưa giao người phụ trách</p><p class="mt-1 font-mono text-base font-bold text-amber-800">{{ alertHealth.alerts?.needs_owner || 0 }}</p></div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-3"><p class="text-[11px] text-slate-500">Cần xem lại quá hạn</p><p class="mt-1 font-mono text-base font-bold text-rose-800">{{ alertHealth.alerts?.overdue_review || 0 }}</p></div>
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-3"><p class="text-[11px] text-slate-500">Việc dữ liệu quá hạn</p><p class="mt-1 font-mono text-base font-bold text-amber-800">{{ alertHealth.remediation?.overdue || 0 }}</p></div>
+      </div>
+      <div class="mt-3 border-t border-slate-100 pt-3">
+        <button type="button" (click)="toggleRemediationQueue()"
+          class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50">
+          {{ showRemediationQueue ? 'Ẩn việc cần xử lý' : 'Xem việc cần xử lý' }}
+        </button>
+        <div *ngIf="showRemediationQueue" class="mt-3 space-y-2" aria-live="polite">
+          <p *ngIf="remediationsLoading" class="text-xs text-slate-500">Đang tải các việc cần xử lý…</p>
+          <p *ngIf="!remediationsLoading && remediations.length === 0" class="text-xs text-slate-500">Không có việc sửa dữ liệu hoặc quy trình nào đang mở cho nguồn này.</p>
+          <div *ngFor="let remediation of remediations" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p class="text-xs font-bold text-slate-900">{{ remediation.sku }} · {{ remediation.title }}</p>
+                <p class="mt-1 text-[11px] leading-4 text-slate-600">{{ remediation.detail }}</p>
+              </div>
+              <span class="shrink-0 text-[11px] font-semibold text-slate-600">{{ remediation.status_label }}</span>
+            </div>
+            <p class="mt-2 text-[11px] text-slate-500">Phụ trách: {{ remediation.owner_label || 'Chưa giao' }} · Hạn: {{ formatDateTime(remediation.due_at) }}</p>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- Bộ lọc & Công cụ tìm kiếm nâng cao (SEARCH-001, FILTER-001, SORT-001, EXPORT-001) -->
     <div class="space-y-4 border-b border-slate-100 pb-4">
@@ -154,11 +274,9 @@
         <div>
           <select [(ngModel)]="sortField" (ngModelChange)="onFiltersChanged()"
             class="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-3 py-2 outline-none focus:border-slate-400">
-            <option value="probabilityValue">Sắp xếp: Xác suất rủi ro</option>
+            <option value="priorityScore">Sắp xếp: Điểm ưu tiên</option>
             <option value="capitalExposureVal">Sắp xếp: Vốn đọng (VND)</option>
-            <option value="rwceVal">Sắp xếp: Vốn chịu rủi ro (RWCE)</option>
-            <option value="dslsDays">Sắp xếp: Số ngày tồn (DSLS)</option>
-            <option value="priorityScore">Sắp xếp: Mức độ ưu tiên</option>
+            <option value="dslsDays">Sắp xếp: Số ngày chưa có đơn</option>
           </select>
         </div>
       </div>
@@ -172,7 +290,7 @@
           <tr class="bg-slate-50 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200">
             <th class="py-3.5 px-4 whitespace-nowrap">Sản phẩm</th>
             <th class="py-3.5 px-4 text-center whitespace-nowrap">Tình trạng bán</th>
-            <th class="py-3.5 px-4 text-right whitespace-nowrap">Mức rủi ro</th>
+            <th class="py-3.5 px-4 text-right whitespace-nowrap">Điểm ưu tiên</th>
             <th class="py-3.5 px-4 text-right whitespace-nowrap">Sản lượng bán / ngày</th>
             <th class="py-3.5 px-4 text-right whitespace-nowrap">Số ngày chưa phát sinh đơn</th>
           </tr>
@@ -207,7 +325,7 @@
 
             <td class="py-3.5 px-4 text-right font-mono font-bold text-sm"
               [ngClass]="item.riskClass === 'CRITICAL' ? 'text-rose-900' : item.riskClass === 'HIGH_RISK' ? 'text-red-700' : item.riskClass === 'MEDIUM_RISK' ? 'text-amber-700' : 'text-emerald-700'">
-              {{ item.probabilityPct }}
+              {{ item.priorityDisplay }}
             </td>
 
             <td class="py-3.5 px-4 text-right font-mono text-slate-900 font-semibold text-sm whitespace-nowrap">
@@ -229,14 +347,14 @@
     </div>
 
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500">
-      <span>Hiển thị {{ pageStart }}-{{ pageEnd }} trên {{ totalItems }} SKU</span>
+      <span>Hiển thị {{ pageStart }}-{{ pageEnd }}<ng-container *ngIf="hasKnownTotalItems"> trên {{ totalItems }}</ng-container> SKU</span>
       <div class="flex items-center gap-2">
         <button type="button" (click)="changePage(page - 1)" [disabled]="page === 1 || tableLoading"
           class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors">
           Trang trước
         </button>
-        <span class="font-mono text-slate-700">{{ page }} / {{ totalPages }}</span>
-        <button type="button" (click)="changePage(page + 1)" [disabled]="page >= totalPages || tableLoading"
+        <span class="font-mono text-slate-700">Trang {{ page }}</span>
+        <button type="button" (click)="changePage(page + 1)" [disabled]="!hasNextRiskPage || tableLoading"
           class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors">
           Trang sau
         </button>
@@ -261,6 +379,7 @@
           <h2 id="risk-sku-dialog-title" class="text-base font-bold text-slate-900 mt-0.5">
             {{ selectedSku?.sku }} - {{ selectedSku?.name }}
           </h2>
+          <p *ngIf="selectedSku?.alertStatus" class="mt-1 text-[11px] font-semibold text-slate-500">Trạng thái cảnh báo: {{ alertStatusLabel(selectedSku?.alertStatus) }}</p>
         </div>
 
         <button (click)="closeDrawer()"
@@ -272,10 +391,32 @@
       <!-- Modal Body -->
       <div class="p-5 overflow-y-auto space-y-5 flex-1 custom-scrollbar">
 
+        <section *ngIf="selectedSku?.alertPassport" class="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3">
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-indigo-700">Lý do cần xem hôm nay</p>
+            <h3 class="mt-1 text-sm font-bold text-indigo-950">{{ selectedSku?.alertPassport?.title }}</h3>
+            <p class="mt-1 text-xs leading-5 text-slate-700">{{ selectedSku?.alertPassport?.summary }}</p>
+          </div>
+          <div *ngIf="selectedSku?.alertPassport?.changes?.length" class="space-y-1.5">
+            <div *ngFor="let change of selectedSku?.alertPassport?.changes" class="rounded-lg border border-indigo-100 bg-white px-3 py-2 text-xs text-slate-700">
+              {{ change.label }}<span *ngIf="change.before !== undefined && change.after !== undefined" class="font-mono text-slate-500">: {{ change.before }} → {{ change.after }}</span>
+            </div>
+          </div>
+          <div class="grid gap-2 sm:grid-cols-2 text-xs">
+            <div class="rounded-lg border border-indigo-100 bg-white p-2.5"><p class="font-semibold text-slate-800">Việc nên làm trước</p><p class="mt-1 text-slate-600">{{ selectedSku?.alertPassport?.safe_next_step }}</p></div>
+            <div class="rounded-lg border border-indigo-100 bg-white p-2.5"><p class="font-semibold text-slate-800">Khi nào kiểm tra lại</p><p class="mt-1 text-slate-600">{{ selectedSku?.alertPassport?.recheck_condition }}</p></div>
+          </div>
+        </section>
+
+        <section class="rounded-xl border border-slate-200 bg-white p-4">
+          <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Tình trạng hàng hóa</p>
+          <p class="mt-1 text-xs leading-5 text-slate-700">{{ contextSummary(selectedSku?.catalogContext) }}</p>
+        </section>
+
         <!-- Nguyên nhân bán chậm -->
         <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
           <div class="flex items-center justify-between">
-          <h3 class="font-bold text-sm text-slate-900">Tín hiệu đánh giá của mô hình</h3>
+          <h3 class="font-bold text-sm text-slate-900">Dữ liệu dùng để đánh giá</h3>
             <button (click)="openShapCalcModal()" class="text-slate-600 hover:text-slate-900 underline font-semibold">
               Xem cách tính toán
             </button>
@@ -363,10 +504,48 @@
           </div>
         </div>
 
+        <section *ngIf="selectedSku?.alertId" class="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
+          <div>
+            <h3 class="font-bold text-sm text-slate-900">Phản hồi để hệ thống theo dõi đúng hơn</h3>
+            <p class="mt-1 text-xs text-slate-600">Nếu cảnh báo chưa phù hợp, chọn lý do. Hệ thống sẽ tạo việc xác minh dữ liệu hoặc danh mục, không tự thay đổi cách đánh giá.</p>
+          </div>
+          <select [(ngModel)]="selectedFeedbackReason" class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-400">
+            <option value="">Không chọn lý do bổ sung</option>
+            <option value="DATA_INCORRECT">Số liệu bán hoặc tồn kho chưa đúng</option>
+            <option value="STOCK_ALREADY_MOVED">Hàng đã được chuyển hoặc điều chỉnh</option>
+            <option value="SEASONAL_ITEM">Sản phẩm bán theo mùa</option>
+            <option value="PLANNED_CAMPAIGN">Đã có chương trình bán sắp chạy</option>
+            <option value="REPLACEMENT_SKU">Có SKU thay thế</option>
+            <option value="DISPLAY_STOCK">Hàng trưng bày hoặc không bán</option>
+            <option value="BUNDLE_COMPONENT">Là gói hàng hoặc linh kiện</option>
+            <option value="NON_SELLABLE_STOCK">Tồn kho hiện chưa thể bán</option>
+            <option value="PREORDER_OR_CONSIGNMENT">Hàng đặt trước hoặc ký gửi</option>
+            <option value="MAPPING_ISSUE">Liên kết SKU, kho hoặc kênh chưa đúng</option>
+          </select>
+          <input [(ngModel)]="alertNote" type="text" maxlength="500" placeholder="Ghi chú hoặc liên kết bằng chứng (nếu có)"
+            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-400" />
+        </section>
+
       </div>
 
       <!-- Modal Footer -->
       <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3 shrink-0">
+        <button *ngIf="selectedSku?.alertId && selectedSku?.alertStatus === 'OPEN'" (click)="updateAlert('ACKNOWLEDGE')"
+          class="bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 font-semibold py-2 px-3 rounded-xl transition-all text-center cursor-pointer">
+          Đã tiếp nhận
+        </button>
+        <button *ngIf="selectedSku?.alertId && (selectedSku?.alertStatus === 'OPEN' || selectedSku?.alertStatus === 'ACKNOWLEDGED')" (click)="updateAlert('SNOOZE')"
+          class="bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 font-semibold py-2 px-3 rounded-xl transition-all text-center cursor-pointer">
+          Tạm ẩn 7 ngày
+        </button>
+        <button *ngIf="selectedSku?.alertId && selectedSku?.alertStatus === 'ACKNOWLEDGED'" (click)="updateAlert('RESOLVE')"
+          class="bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 font-semibold py-2 px-3 rounded-xl transition-all text-center cursor-pointer">
+          Đã xử lý
+        </button>
+        <button *ngIf="selectedSku?.alertId && selectedSku?.alertStatus === 'RESOLVED'" (click)="updateAlert('REOPEN')"
+          class="bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 font-semibold py-2 px-3 rounded-xl transition-all text-center cursor-pointer">
+          Mở lại để xem xét
+        </button>
         <button (click)="navigateToCapitalExposure()"
           class="flex-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 font-semibold py-2 px-3 rounded-xl transition-all text-center cursor-pointer">
           Xem định giá vốn đọng &rarr;
@@ -403,8 +582,8 @@
         </div>
 
         <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-          <strong class="text-slate-900 block">3. Xác suất có người mua tiếp:</strong>
-          <span>Ước tính khả năng sản phẩm tiếp tục phát sinh đơn hàng mới trong chu kỳ kinh doanh tiếp theo.</span>
+          <strong class="text-slate-900 block">3. Điểm ưu tiên xử lý:</strong>
+          <span>Điểm tổng hợp thời gian chưa có đơn, mức độ bán không đều, doanh số gần đây và lượng tồn khả dụng. Đây không phải xác suất dự báo.</span>
         </div>
       </div>
 

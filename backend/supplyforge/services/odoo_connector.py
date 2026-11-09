@@ -119,6 +119,22 @@ class OdooConnector:
         except (OSError, socket.timeout, xmlrpc.client.Error) as exc:
             raise OdooConnectorError(f'Không thể đọc mô hình Odoo {model}.') from exc
 
+    def execute_supplier_return_write(self, model: str, method: str, args: list | None = None, kwargs: dict | None = None):
+        """Narrow write surface for an approved supplier-return wizard only."""
+        allowed = {
+            ('stock.return.picking', 'create'),
+            ('stock.return.picking', 'create_returns'),
+        }
+        if (model, method) not in allowed:
+            raise OdooConnectorError('Thao tác ghi Odoo không thuộc quy trình hoàn trả được phê duyệt.')
+        uid = self._uid or self._authenticate()
+        try:
+            return self._proxy('object').execute_kw(
+                self.database, uid, self.api_key, model, method, args or [], kwargs or {},
+            )
+        except (OSError, socket.timeout, xmlrpc.client.Error) as exc:
+            raise OdooConnectorError('Không thể tạo phiếu hoàn trả nhà cung cấp trên Odoo.') from exc
+
     def search_read(self, model: str, domain: list, fields: list[str], *, limit: int = PAGE_SIZE, offset: int = 0, order: str = 'id asc') -> list[dict]:
         return self.execute_kw(
             model,

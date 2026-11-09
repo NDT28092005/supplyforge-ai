@@ -153,7 +153,7 @@ thiếu `DJANGO_SECRET_KEY`.
 | M7 | Frontend build process `|| true` bỏ qua lỗi build | Silent broken deployments |
 | M8 | Không có structured logging (JSON format) | Log analysis difficulty |
 | M9 | `time.sleep()` trong production code | Wasted resources |
-| M10 | Không có circuit breaker cho external services (Gemini, Shopee, Odoo) | Cascading failures |
+| M10 | Không có circuit breaker cho external services (Gemini, Odoo) | Cascading failures |
 | M11 | Không có health check cho Celery workers chi tiết | Blind spots |
 | M12 | Grafana admin password từ env var nhưng không enforce rotation | Credential staleness |
 
@@ -798,7 +798,7 @@ class S3StorageBackend:
 
 ```python
 """
-Circuit Breaker pattern for external API calls (Gemini, Shopee, Odoo).
+Circuit Breaker pattern for external API calls (Gemini, Odoo).
 Prevents cascading failures when downstream services are unavailable.
 """
 import time
@@ -859,7 +859,6 @@ class CircuitBreakerOpenError(Exception):
 
 # Pre-configured circuit breakers
 gemini_breaker = CircuitBreaker('gemini', failure_threshold=3, recovery_timeout=120)
-shopee_breaker = CircuitBreaker('shopee', failure_threshold=5, recovery_timeout=60)
 odoo_breaker = CircuitBreaker('odoo', failure_threshold=5, recovery_timeout=300)
 ```
 

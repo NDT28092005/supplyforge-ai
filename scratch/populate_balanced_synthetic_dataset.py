@@ -39,8 +39,8 @@ def generate_balanced_dataset():
 
     session = IngestionSession.objects.create(
         workspace=workspace,
-        original_filename="large_shopee_orders_50k.csv",
-        storage_path="test-data/large_shopee_orders_50k.csv",
+        original_filename="large_sales_orders_50k.csv",
+        storage_path="test-data/large_sales_orders_50k.csv",
         file_size_bytes=5242880,
         total_rows=25000,
         status="COMPLETED"
@@ -86,7 +86,7 @@ def generate_balanced_dataset():
                 stock=stock,
                 cost=unit_cost,
                 price=price,
-                platform="Shopee"
+                platform="SALES_IMPORT"
             )
             products_created.append(p)
 
@@ -107,7 +107,7 @@ def generate_balanced_dataset():
                         user_id="user_default_001",
                         order_id=ord_sn,
                         amount=price,
-                        platform="Shopee",
+                        platform="SALES_IMPORT",
                         created_at=ord_dt
                     )
                     orders_created.append(o)
@@ -131,7 +131,7 @@ def generate_balanced_dataset():
                     user_id="user_default_001",
                     order_id=ord_sn,
                     amount=price,
-                    platform="Shopee",
+                    platform="SALES_IMPORT",
                     created_at=last_order_dt
                 )
                 orders_created.append(o)

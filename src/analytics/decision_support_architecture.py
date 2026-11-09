@@ -109,14 +109,23 @@ class DecisionContextBuilder:
 
         # 1. Normalize Risk Context (Module 03)
         r_class = risk_record.get("slow_moving_risk_class") or risk_record.get("risk_class")
-        r_prob = risk_record.get("risk_probability")
-        if r_class is None or r_prob is None:
+        # A rule priority is not a probability.  Probability is optional and
+        # only travels through the decision contract when an approved,
+        # calibrated model declares its lineage explicitly.
+        raw_probability = risk_record.get("risk_probability")
+        probability_status = str(risk_record.get("probability_status") or "UNAVAILABLE").upper()
+        approved_probability = probability_status == "CALIBRATED_APPROVED"
+        r_prob = raw_probability if approved_probability else None
+        if r_class is None:
             is_missing_mandatory = True
-            warnings.append("Missing mandatory Risk Detection outputs from Module 03.")
+            warnings.append("Missing mandatory slow-moving risk class from the operational assessment.")
+        if raw_probability is not None and not approved_probability:
+            warnings.append("Risk probability is withheld because calibration lineage is not approved for this decision scope.")
 
         risk_ctx = {
             "risk_class": r_class or "UNKNOWN",
-            "risk_probability": float(r_prob) if r_prob is not None else 0.0,
+            "risk_probability": float(r_prob) if r_prob is not None else None,
+            "probability_status": probability_status if approved_probability else "UNAVAILABLE",
             "risk_score": float(risk_record.get("risk_score", 0.0)),
             "risk_signals": risk_record.get("risk_signals", [])
         }
@@ -136,23 +145,22 @@ class DecisionContextBuilder:
         # 3. Normalize Capital & Aging Context (Module 05)
         cap_rec = capital_record or {}
         cap_exp = cap_rec.get("capital_exposure") if "capital_exposure" in cap_rec else cap_rec.get("inventory_value")
-        rwce = cap_rec.get("risk_weighted_exposure")
-        if rwce is None and cap_exp is not None:
-            rwce = cap_exp * risk_ctx["risk_probability"]
+        rwce = cap_rec.get("risk_weighted_exposure") if approved_probability else None
         
         if cap_exp is None:
             is_missing_mandatory = True
             warnings.append("Missing mandatory Capital Exposure outputs from Module 05.")
 
         cap_val = float(cap_exp) if cap_exp is not None else 0.0
-        rwce_val = float(rwce) if rwce is not None else 0.0
-        pae_val = float(cap_rec.get("probability_adjusted_exposure", cap_val * risk_ctx["risk_probability"]))
+        rwce_val = float(rwce) if rwce is not None else None
+        probability_adjusted = cap_rec.get("probability_adjusted_exposure") if approved_probability else None
+        pae_val = float(probability_adjusted) if probability_adjusted is not None else None
         opp_cost = cap_rec.get("estimated_opportunity_cost")
 
         capital_ctx = {
             "capital_exposure": round(cap_val, 2),
-            "risk_weighted_exposure": round(rwce_val, 2),
-            "probability_adjusted_exposure": round(pae_val, 2),
+            "risk_weighted_exposure": round(rwce_val, 2) if rwce_val is not None else None,
+            "probability_adjusted_exposure": round(pae_val, 2) if pae_val is not None else None,
             "estimated_opportunity_cost": round(float(opp_cost), 2) if opp_cost is not None else None
         }
 

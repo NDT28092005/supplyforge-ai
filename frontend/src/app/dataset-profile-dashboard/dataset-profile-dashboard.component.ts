@@ -39,6 +39,8 @@ export class DatasetProfileDashboardComponent implements OnInit, OnChanges {
   totalSkus: number = 0;
   totalPages: number = 1;
   loadingSkus: boolean = false;
+  loadingProfile: boolean = false;
+  profileLoadError = '';
   isProceeding = false;
   analysisError = '';
   private sessionUnavailable = false;
@@ -62,7 +64,7 @@ export class DatasetProfileDashboardComponent implements OnInit, OnChanges {
       this.profileData = this.ingestionState.state.datasetProfileData;
     }
 
-    this.ensureProfileData();
+    this.normalizeProfileData();
     if (this.sessionId) {
       this.loadProfile();
       this.loadSkuProfiles();
@@ -70,65 +72,68 @@ export class DatasetProfileDashboardComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    this.ensureProfileData();
+    this.normalizeProfileData();
     if (changes['sessionId'] && this.sessionId) {
       this.loadProfile();
       this.loadSkuProfiles();
     }
   }
 
-  ensureProfileData(): void {
-    if (!this.profileData) {
-      this.profileData = {};
+  normalizeProfileData(): void {
+    if (!this.profileData || typeof this.profileData !== 'object') {
+      this.profileData = null;
     }
-    this.profileData = {
-      readiness: {
-        status: 'READY',
-        readinessScore: 90,
-        checksPassed: ['Kiểm tra cấu trúc CSV', 'Mã hóa UTF-8', 'Tên cột chuẩn hóa'],
-        warnings: [],
-        ...(this.profileData.readiness || {})
-      },
-      overview: {
-        totalRecords: this.profileData.rows_received || this.profileData.rows_valid || 0,
-        uniqueSkus: this.totalSkus || 0,
-        observationPeriodDays: 30,
-        minTransactionDate: 'N/A',
-        maxTransactionDate: 'N/A',
-        ...(this.profileData.overview || {})
-      },
-      sparsity: {
-        avgZeroSalesRatePct: 20.0,
-        intermittentSkuCount: 0,
-        lumpySkuCount: 0,
-        smoothSkuCount: this.totalSkus || 0,
-        ...(this.profileData.sparsity || {})
-      },
-      ...this.profileData
-    };
+  }
+
+  get hasProfileData(): boolean {
+    return !!this.profileData && Object.keys(this.profileData).length > 0;
+  }
+
+  get readinessStatus(): string | null {
+    const value = this.profileData?.readiness?.status;
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  }
+
+  get readinessScore(): number | null {
+    const value = this.profileData?.readiness?.readinessScore;
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  get checksPassedCount(): number | null {
+    const checks = this.profileData?.readiness?.checksPassed;
+    return Array.isArray(checks) ? checks.length : null;
+  }
+
+  get canProceedToAnalysis(): boolean {
+    return this.hasProfileData && ['READY', 'READY_WITH_WARNING'].includes(this.readinessStatus || '');
+  }
+
+  displayValue(value: unknown): string | number {
+    return value === null || value === undefined || value === '' ? '—' : value as string | number;
   }
 
   loadProfile(): void {
     if (this.sessionId && !this.sessionUnavailable) {
+      this.loadingProfile = true;
+      this.profileLoadError = '';
       this.apiService.getDatasetProfile(this.sessionId).subscribe({
         next: (res) => {
+          this.loadingProfile = false;
           if (res) {
             this.profileData = {
-              ...this.profileData,
               ...res,
-              updated_rows: res.updated_rows ?? res.incremental_merge_json?.updated_rows ?? this.profileData.updated_rows ?? 0,
-              data_corrections: res.data_corrections ?? res.incremental_merge_json?.data_corrections ?? res.ingestion_history_json?.audit_trail ?? this.profileData.data_corrections ?? [],
-              readiness: { ...(this.profileData?.readiness || {}), ...(res.readiness || {}) },
-              overview: { ...(this.profileData?.overview || {}), ...(res.overview || {}) },
-              sparsity: { ...(this.profileData?.sparsity || {}), ...(res.sparsity || {}) }
+              updated_rows: res.updated_rows ?? res.incremental_merge_json?.updated_rows,
+              data_corrections: res.data_corrections ?? res.incremental_merge_json?.data_corrections ?? res.ingestion_history_json?.audit_trail,
             };
           }
         },
         error: (err: any) => {
+          this.loadingProfile = false;
           if (this.isSessionMissingError(err)) {
             this.resetMissingSession();
             return;
           }
+          this.profileLoadError = err?.error?.error || 'Không thể tải kết quả kiểm tra dữ liệu.';
           console.error('Failed to load dataset profile:', err);
         }
       });
@@ -185,41 +190,21 @@ export class DatasetProfileDashboardComponent implements OnInit, OnChanges {
 
   onProceed(): void {
     if (this.isProceeding) return;
+    if (!this.canProceedToAnalysis) {
+      this.analysisError = this.readinessStatus
+        ? 'Bộ dữ liệu chưa đạt điều kiện để chạy phân tích. Hãy xử lý các cảnh báo dữ liệu trước.'
+        : 'Chưa có kết quả kiểm tra dữ liệu để bắt đầu phân tích.';
+      return;
+    }
     this.proceedToAnalysis.emit();
     this.isProceeding = true;
     this.analysisError = '';
-    this.ingestionState.setDatasetStatus('processing', 'Đang xây dựng đánh giá rủi ro từ bộ dữ liệu vừa nhập.');
-    if (this.sessionId) {
-      this.apiService.runM3RiskAssessmentAssembly(this.sessionId).subscribe({
-        next: () => {
-          this.apiService.runM3RiskMonitoring(this.sessionId).subscribe({
-            next: () => {
-              this.isProceeding = false;
-              this.ingestionState.setDatasetStatus('ready', 'Bộ dữ liệu và các đánh giá rủi ro đã sẵn sàng.');
-              this.router.navigate(['/app/dashboard']);
-            },
-            error: (err: any) => {
-              if (this.isSessionMissingError(err)) {
-                this.resetMissingSession();
-                return;
-              }
-              this.handleAnalysisError(err?.error?.error || 'Không thể hoàn tất đánh giá rủi ro.');
-            }
-          });
-        },
-        error: (err: any) => {
-          if (this.isSessionMissingError(err)) {
-            this.resetMissingSession();
-            return;
-          }
-          this.handleAnalysisError(err?.error?.error || 'Không thể tạo đánh giá rủi ro.');
-        }
-      });
-    } else {
-      this.isProceeding = false;
-      this.ingestionState.setDatasetStatus('ready', 'Bộ dữ liệu đã sẵn sàng.');
-      this.router.navigate(['/app/dashboard']);
-    }
+    // The import worker builds and publishes the sole operational risk run.
+    // Running the legacy browser-triggered research assembly here used a
+    // different data path and could overwrite/mix the merchant result.
+    this.isProceeding = false;
+    this.ingestionState.setDatasetStatus('ready', 'Bộ dữ liệu đã sẵn sàng. Đánh giá vận hành dùng đúng phiên bản CSV đang active.');
+    this.router.navigate(['/app/dashboard']);
   }
 
   private handleAnalysisError(message: string): void {

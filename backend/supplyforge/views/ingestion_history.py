@@ -43,7 +43,7 @@ def record_ingestion_history_event(request, session_id):
 
     stage = request.data.get('stage', 'COMPLETED')
     hist_status = request.data.get('status', 'COMPLETED')
-    filename = request.data.get('filename', session.original_filename or 'shopee_upload.csv')
+    filename = request.data.get('filename', session.original_filename or 'sales_upload.csv')
     stats = request.data.get('stats')
     time_info = request.data.get('timeInfo')
     version_info = request.data.get('versionInfo')
@@ -138,8 +138,8 @@ def get_all_ingestion_history_list(request):
             history_list.append({
                 'ingestionId': s.ingestion_id or f"ING-{created_str}-00001",
                 'sessionId': str(s.id),
-                'datasetId': 'Shopee_Default_Dataset',
-                'filename': s.original_filename or 'shopee_sales.csv',
+                'datasetId': 'Default_Sales_Dataset',
+                'filename': s.original_filename or 'sales_data.csv',
                 'uploadedAt': created_iso,
                 'uploadedBy': 'merchant_default',
                 'currentStage': 'COMPLETED' if s.status == 'PROFILED' else s.status,

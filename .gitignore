@@ -58,6 +58,7 @@ notebooks/env/
 !backend/supplyforge/models/
 /predictions/
 /reports/
+/reports_NCKH/
 /backend/reports/
 frontend/.angular/
 backend/uploads/
@@ -70,3 +71,7 @@ uploads/
 ops/docs/*
 !ops/docs/operations/
 !ops/docs/operations/monitoring-and-load-test.md
+data.zip*
+reports.zip*
+scripts.zip*
+prototype_nckh_dss/*

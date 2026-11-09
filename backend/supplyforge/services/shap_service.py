@@ -24,6 +24,7 @@ from supplyforge.services.gemini_copilot import GeminiCopilotService
 from supplyforge.services.model_loader import (
     ModelLoaderService, MLServiceError, FailureType,
 )
+from supplyforge.services.temporal_candidate_model import TemporalCandidateModelService
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +64,27 @@ FEATURE_TRANSLATIONS = {
     # Baseline features
     "inventory_coverage_days": "Khả năng đáp ứng tồn kho",
     "sales_trend": "Xu hướng tăng trưởng doanh số",
-    "delay_rate": "Rủi ro nhà cung cấp giao hàng chậm",
     "expiration_days_left": "Thời hạn sử dụng còn lại",
     "inventory_ratio": "Tỷ trọng vốn lưu động",
     "sales_velocity": "Tốc độ bán hàng trung bình",
     "inventory_qty": "Số lượng tồn kho thực tế",
+    # Governed temporal demand contract (19)
+    "historical_total_qty": "Sản lượng hoàn tất tích lũy",
+    "sales_qty_7d": "Sản lượng hoàn tất 7 ngày",
+    "sales_qty_30d": "Sản lượng hoàn tất 30 ngày",
+    "sales_qty_60d": "Sản lượng hoàn tất 60 ngày",
+    "sales_qty_90d": "Sản lượng hoàn tất 90 ngày",
+    "sales_velocity_7d": "Tốc độ bán 7 ngày",
+    "sales_velocity_30d": "Tốc độ bán 30 ngày",
+    "sales_velocity_60d": "Tốc độ bán 60 ngày",
+    "zero_rate_30d": "Tỷ lệ ngày không bán 30 ngày",
+    "zero_rate_60d": "Tỷ lệ ngày không bán 60 ngày",
+    "adi_90d": "Khoảng cách giữa các ngày bán 90 ngày (ADI)",
+    "cv2_90d": "Biến động lượng bán 90 ngày (CV²)",
+    "lifetime_days": "Số ngày quan sát từ lần bán đầu",
+    "lifetime_velocity": "Tốc độ bán toàn bộ vòng đời",
+    "recent_7_to_30_ratio": "Tỷ lệ tốc độ bán 7 ngày so với 30 ngày",
+    "recent_30_to_90_ratio": "Tỷ lệ tốc độ bán 30 ngày so với 90 ngày",
 }
 
 
@@ -99,7 +116,7 @@ def compute_decision_confidence(
     confidence = 1.0
 
     # Engine penalties
-    if prediction_engine != "XGBOOST":
+    if prediction_engine not in {"XGBOOST", "TEMPORAL_DEMAND_CANDIDATE"}:
         confidence -= 0.30
     if explanation_engine != "TREESHAP":
         confidence -= 0.15
@@ -191,18 +208,21 @@ class ShapExplanationService:
             if value >= 999.0:
                 return "Không giới hạn"
             return f"{int(value)} ngày"
-        if feature_key in ["delay_rate", "inventory_ratio", "zero_rate_90d", "zero_rate_full", "promo_rate"]:
+        if feature_key in ["inventory_ratio", "zero_rate_30d", "zero_rate_60d", "zero_rate_90d", "zero_rate_full", "promo_rate"]:
             return f"{value * 100:.1f}%"
         if feature_key in ["sales_trend", "forecast_trend"]:
             return f"x{value:.2f}"
-        if feature_key in ["sales_velocity", "sales_velocity_90d", "sales_velocity_full", "expected_demand_daily"]:
+        if feature_key in [
+            "sales_velocity", "sales_velocity_7d", "sales_velocity_30d", "sales_velocity_60d",
+            "sales_velocity_90d", "sales_velocity_full", "lifetime_velocity", "expected_demand_daily",
+        ]:
             return f"{value:.2f} sp/ngày"
-        if feature_key in ["inventory_qty", "sales_7d", "sales_30d", "sales_last_30d", "past_total_sold",
+        if feature_key in ["inventory_qty", "sales_7d", "sales_30d", "sales_qty_7d", "sales_qty_30d", "sales_qty_60d", "sales_qty_90d", "historical_total_qty", "sales_last_30d", "past_total_sold",
                            "forecast_7d", "forecast_14d", "forecast_30d", "active_30d", "active_90d"]:
             return f"{int(value)} đơn vị"
-        if feature_key in ["adi"]:
+        if feature_key in ["adi", "adi_90d"]:
             return f"{value:.2f} ngày/lần"
-        if feature_key in ["cv2"]:
+        if feature_key in ["cv2", "cv2_90d", "recent_7_to_30_ratio", "recent_30_to_90_ratio"]:
             return f"{value:.4f}"
         if feature_key in ["demand_probability"]:
             return f"{value * 100:.1f}%"
@@ -363,7 +383,27 @@ class ShapExplanationService:
                 explanation_meta = {}
                 shap_contributions = []
 
-        # ---- Fallback: Linear Proxy SHAP ----
+        # ---- TreeSHAP for a governed temporal candidate ----
+        if (
+            prediction_meta.get("engine") == "TEMPORAL_DEMAND_CANDIDATE"
+            and pred_result.get("feature_vector") is not None
+        ):
+            try:
+                shap_contributions, additivity_check = ShapExplanationService._temporal_tree_shap(pred_result)
+                explanation_meta = {"engine": "TREESHAP", "status": "PRIMARY"}
+            except Exception as exc:
+                # Do not substitute the unrelated legacy linear proxy. The
+                # prediction remains valid, but its local explanation is
+                # explicitly unavailable until the TreeSHAP path is healthy.
+                logger.warning("Temporal TreeSHAP failed for SKU %s: %s", sku_id, exc)
+                shap_contributions = []
+                explanation_meta = {
+                    "engine": "EXPLANATION_UNAVAILABLE",
+                    "status": "LIMITED",
+                    "fallback_reason": FailureType.EXPLANATION_ERROR,
+                }
+
+        # ---- Fallback: Linear Proxy SHAP (legacy engines only) ----
         if not explanation_meta:
             shap_contributions = ShapExplanationService._linear_proxy_shap(pred_result)
             fallback_reason = (
@@ -415,6 +455,52 @@ class ShapExplanationService:
             "ai_explanation": ai_explanation,
         }
 
+    @staticmethod
+    def _temporal_tree_shap(pred_result):
+        """Explain the exact 19-feature estimator, never the legacy proxy."""
+        import shap
+
+        model, feature_cols = TemporalCandidateModelService().get_model_and_contract()
+        feature_vector = np.asarray(pred_result["feature_vector"], dtype=float)
+        explainer = shap.TreeExplainer(model)
+        values = explainer.shap_values(feature_vector)
+        expected = np.asarray(explainer.expected_value, dtype=float)
+        classes = [int(value) for value in model.classes_]
+        high_positions = [classes.index(0), classes.index(1)]
+
+        if isinstance(values, list):
+            row_values = np.asarray(values[high_positions[0]][0]) + np.asarray(values[high_positions[1]][0])
+            base_value = float(expected[high_positions[0]] + expected[high_positions[1]])
+        elif np.asarray(values).ndim == 3:
+            # Current SHAP tree API uses [sample, feature, output].
+            array = np.asarray(values)
+            row_values = array[0, :, high_positions[0]] + array[0, :, high_positions[1]]
+            base_value = float(expected[high_positions[0]] + expected[high_positions[1]])
+        else:
+            raise ValueError("Temporal TreeSHAP must provide one contribution vector per risk class.")
+
+        if len(row_values) != len(feature_cols):
+            raise ValueError("Temporal TreeSHAP feature count does not match the serving contract.")
+        raw_probability = float(pred_result["prediction"].get("raw_probability", 0.0))
+        additivity = validate_shap_additivity(row_values, base_value, raw_probability, tolerance=0.02)
+        raw_features = feature_vector[0]
+        contributions = []
+        for index in np.argsort(np.abs(row_values))[::-1]:
+            value = float(row_values[index])
+            if abs(value) < 0.001:
+                continue
+            feature_key = feature_cols[index]
+            feature_value = float(raw_features[index])
+            contributions.append({
+                "feature_name": FEATURE_TRANSLATIONS.get(feature_key, feature_key),
+                "feature_key": feature_key,
+                "feature_value": feature_value,
+                "formatted_value": ShapExplanationService.format_feature_value(feature_key, feature_value),
+                "shap_value": round(value, 4),
+                "impact": "Tăng rủi ro bán chậm (+)" if value > 0 else "Giảm rủi ro bán chậm (-)",
+            })
+        return contributions, additivity
+
     # ================================================================
     # Linear Proxy SHAP (Fallback Engine)
     # ================================================================
@@ -434,15 +520,12 @@ class ShapExplanationService:
 
         coef_coverage = -0.01
         coef_trend = 0.8
-        coef_delay = 2.5
         coef_expiry = -0.05
 
         coverage_c = coef_coverage * (features.get("inventory_coverage_days", 30) - 30.0)
         coverage_c = max(-2.0, min(2.0, coverage_c))
 
         trend_c = coef_trend * (features.get("sales_trend", 1.0) - 1.0)
-        delay_c = coef_delay * (features.get("delay_rate", 0.05) - 0.05)
-
         if features.get("expiration_days_left", 999) < 999.0:
             expiry_c = coef_expiry * (features["expiration_days_left"] - 30.0)
             expiry_c = max(0.0, expiry_c)
@@ -454,7 +537,6 @@ class ShapExplanationService:
         contrib_map = {
             "inventory_coverage_days": coverage_c,
             "sales_trend": trend_c,
-            "delay_rate": delay_c,
             "expiration_days_left": expiry_c,
             "inventory_ratio": ratio_c,
         }
@@ -583,10 +665,6 @@ Yêu cầu:
         if top_key in ("inventory_coverage_days", "dsls") and top_factor["shap_value"] > 0:
             recommendations.append(
                 "cần xem xét giảm giá thanh lý để giải phóng kho và bảo toàn dòng tiền"
-            )
-        elif top_key == "delay_rate" and top_factor["shap_value"] > 0:
-            recommendations.append(
-                "nên thương lượng tăng lượng an toàn (safety stock) hoặc đa dạng hóa nhà cung cấp"
             )
         elif top_key in ("expiration_days_left",) and top_factor["shap_value"] > 0:
             recommendations.append(

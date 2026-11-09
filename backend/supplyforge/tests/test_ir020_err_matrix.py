@@ -81,6 +81,64 @@ class ImportIdempotencyAndErrorMatrixTestCase(TestCase):
         # Verify only 1 IngestionSession was created for workspace
         self.assertEqual(IngestionSession.objects.filter(workspace=self.workspace).count(), 1)
 
+    def test_new_import_action_can_profile_a_previously_selected_file(self):
+        """A new client action must not be blocked by the prior file hash."""
+        csv_bytes = (
+            b'order_id,sku,product_name,selling_price,quantity,order_date\n'
+            b'ORD-NEW-ACTION-01,SKU-NEW-ACTION,Reloadable Product,199000,1,2026-08-01\n'
+        )
+        first = self.client.post(
+            '/api/v2/ingestion/upload',
+            {
+                'file': SimpleUploadedFile('reloadable.csv', csv_bytes, content_type='text/csv'),
+                'workspaceId': self.workspace.id,
+                'idempotencyKey': 'user-action-one',
+            },
+            format='multipart',
+            **self.auth,
+        )
+        self.assertEqual(first.status_code, 200)
+
+        second = self.client.post(
+            '/api/v2/ingestion/upload',
+            {
+                'file': SimpleUploadedFile('reloadable.csv', csv_bytes, content_type='text/csv'),
+                'workspaceId': self.workspace.id,
+                'idempotencyKey': 'user-action-two',
+            },
+            format='multipart',
+            **self.auth,
+        )
+        self.assertEqual(second.status_code, 200)
+        self.assertFalse(second.json().get('idempotent_retry', False))
+        self.assertNotEqual(first.json()['sessionId'], second.json()['sessionId'])
+
+    def test_same_explicit_action_key_is_idempotent(self):
+        """A transport retry for one action returns its active session."""
+        csv_bytes = (
+            b'order_id,sku,product_name,selling_price,quantity,order_date\n'
+            b'ORD-SAME-ACTION-01,SKU-SAME-ACTION,Retry Product,199000,1,2026-08-01\n'
+        )
+        request_data = {
+            'file': SimpleUploadedFile('retry.csv', csv_bytes, content_type='text/csv'),
+            'workspaceId': self.workspace.id,
+            'idempotencyKey': 'one-network-action',
+        }
+        first = self.client.post('/api/v2/ingestion/upload', request_data, format='multipart', **self.auth)
+        second = self.client.post(
+            '/api/v2/ingestion/upload',
+            {
+                **request_data,
+                'file': SimpleUploadedFile('retry.csv', csv_bytes, content_type='text/csv'),
+            },
+            format='multipart',
+            **self.auth,
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertTrue(second.json().get('idempotent_retry'))
+        self.assertEqual(first.json()['sessionId'], second.json()['sessionId'])
+
     def test_clear_allows_reimporting_an_archived_identical_file(self):
         """A deliberate reset retires the old fingerprint, not the history."""
         csv_bytes = (

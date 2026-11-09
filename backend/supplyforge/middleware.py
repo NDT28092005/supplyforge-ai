@@ -312,8 +312,6 @@ class TenantIsolationMiddleware:
             '/api/v1/about_us',
             '/api/v1/services',
             '/api/v1/blog',
-            '/api/v1/shopee/oauth/',
-            '/api/v1/shopee/webhook',
             # ERP webhooks are authenticated by their connection-specific
             # HMAC signature in the view, not by an end-user JWT.
             '/api/v1/integrations/webhooks/',
@@ -324,7 +322,6 @@ class TenantIsolationMiddleware:
     def _is_external_webhook(path):
         """Return paths authenticated by a provider signature, not JWT."""
         return path.startswith((
-            '/api/v1/shopee/webhook',
             '/api/v1/integrations/webhooks/',
         ))
 

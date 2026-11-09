@@ -5,12 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
-from datetime import timedelta
+import base64
 from urllib.parse import urlparse
 
 from django.db import IntegrityError, transaction
-from django.db.models import Count, FloatField, IntegerField, Max, Q, Sum
-from django.db.models.functions import Cast
+from django.db.models import Count, Max, Q, Sum
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -24,7 +23,7 @@ from supplyforge.models import (
     BackgroundJob, IntegrationConnection, IntegrationEvent,
     IntegrationSkuDailyMetric, IntegrationSkuMapping, IntegrationSkuMappingAudit,
     IntegrationSyncRun, IntegrationOperationalRiskSnapshot, CapitalExposureItemRecord,
-    Product,
+    Product, Workspace, WorkspaceMember,
 )
 from supplyforge.permissions import PERM_MANAGE_INTEGRATIONS, has_permission
 from supplyforge.services.integration_security import (
@@ -33,6 +32,7 @@ from supplyforge.services.integration_security import (
 )
 from supplyforge.services.odoo_connector import OdooConnector, OdooConnectorError
 from supplyforge.services.operational_analytics import OdooOperationalAnalyticsService
+from supplyforge.services.integration_health import IntegrationHealthService
 
 
 def _workspace(request):
@@ -41,19 +41,48 @@ def _workspace(request):
     return int(request.workspace_id)
 
 
-def _access_error(request, write=False):
+def _access_error(request):
+    """Odoo connections require a workspace integration administrator."""
     workspace_id = _workspace(request)
     if not workspace_id:
         return Response({'error': {'code': 'UNAUTHENTICATED', 'message': 'Yêu cầu cần workspace đã xác thực.'}}, status=status.HTTP_401_UNAUTHORIZED)
-    if not entitlement_active(workspace_id):
-        return Response({'error': {'code': 'FEATURE_NOT_ENTITLED', 'message': 'Odoo Integration là tính năng thuộc gói ERP Integrations.'}}, status=status.HTTP_403_FORBIDDEN)
-    if write and not has_permission(getattr(request, 'user_role', None), PERM_MANAGE_INTEGRATIONS):
-        return Response({'error': {'code': 'PERMISSION_DENIED', 'message': 'Chỉ OWNER hoặc ADMIN có thể quản lý kết nối ERP.'}}, status=status.HTTP_403_FORBIDDEN)
+    if not has_permission(getattr(request, 'user_role', None), PERM_MANAGE_INTEGRATIONS):
+        return Response({'error': {'code': 'PERMISSION_DENIED', 'message': 'Chỉ OWNER hoặc ADMIN có thể quản lý nguồn dữ liệu.'}}, status=status.HTTP_403_FORBIDDEN)
+    return None
+
+
+def _connection_access_error(request, connection: IntegrationConnection):
+    """Apply the ERP entitlement only after a tenant-safe connection lookup."""
+    error = _access_error(request)
+    if error:
+        return error
+    if connection.provider == IntegrationConnection.PROVIDER_ODOO and not entitlement_active(_workspace(request)):
+        return Response({
+            'error': {
+                'code': 'FEATURE_NOT_ENTITLED',
+                'message': 'Kết nối Odoo là tính năng ERP nâng cao của workspace này.',
+            },
+        }, status=status.HTTP_403_FORBIDDEN)
     return None
 
 
 def _mapping_actor(request) -> str:
     return str(getattr(request, 'user_email', '') or getattr(request, 'user_id', ''))[:128]
+
+
+def _workspace_catalog(connection: IntegrationConnection):
+    """Use workspace catalog facts; admit legacy rows only when unambiguous."""
+    workspace = connection.workspace
+    owner_id = workspace.owner_id
+    if not owner_id:
+        return Product.objects.filter(workspace=workspace)
+    owner_workspace_ids = set(Workspace.objects.filter(owner_id=owner_id).values_list('id', flat=True))
+    member_workspace_ids = set(WorkspaceMember.objects.filter(user_id=owner_id).values_list('workspace_id', flat=True))
+    if owner_workspace_ids | member_workspace_ids == {workspace.id}:
+        return Product.objects.filter(
+            Q(workspace=workspace) | Q(workspace__isnull=True, user_id=str(owner_id)),
+        )
+    return Product.objects.filter(workspace=workspace)
 
 
 def _serialize_mapping(mapping: IntegrationSkuMapping) -> dict:
@@ -108,15 +137,21 @@ def _record_mapping_audit(mapping, action: str, *, actor: str, previous_product_
 
 def _serialize(connection: IntegrationConnection) -> dict:
     last_run = connection.sync_runs.order_by('-created_at').first()
+    health = IntegrationHealthService.serialize(
+        getattr(connection, 'data_health', None) if hasattr(connection, 'data_health') else None
+    )
     return {
         'id': str(connection.id), 'provider': connection.provider, 'display_name': connection.display_name,
+        'provider_label': 'Odoo', 'provider_category': 'ERP',
         'status': connection.status, 'base_url': connection.base_url,
+        'auth_mode': connection.auth_mode,
         'company': {'id': connection.external_company_id, 'name': connection.external_company_name},
         'warehouses': [{'id': item[0], 'name': item[1]} for item in zip(connection.warehouse_ids or [], connection.warehouse_names or [])],
         'discovery': (connection.cursor_json or {}).get('discovery') or None,
         'last_successful_sync_at': connection.last_successful_sync_at.isoformat() if connection.last_successful_sync_at else None,
         'last_error': {'code': connection.last_error_code, 'message': connection.last_error_message} if connection.last_error_code else None,
         'unmapped_sku_count': connection.sku_mappings.filter(status='NEEDS_REVIEW').count(),
+        'data_health': health,
         'latest_run': ({
             'id': str(last_run.id), 'type': last_run.run_type, 'status': last_run.status,
             'summary': last_run.summary, 'error_code': last_run.error_code,
@@ -182,18 +217,42 @@ class IntegrationConnectionListCreateView(APIView):
         error = _access_error(request)
         if error:
             return error
-        connections = IntegrationConnection.objects.filter(workspace_id=_workspace(request)).prefetch_related('sync_runs', 'sku_mappings').order_by('-created_at')
-        return Response({'entitled': True, 'connections': [_serialize(item) for item in connections]})
+        erp_entitled = entitlement_active(_workspace(request))
+        if not erp_entitled:
+            return Response({
+                'error': {
+                    'code': 'FEATURE_NOT_ENTITLED',
+                    'message': 'Workspace này chưa được cấp quyền sử dụng kết nối Odoo.',
+                },
+            }, status=status.HTTP_403_FORBIDDEN)
+        connections = IntegrationConnection.objects.filter(
+            workspace_id=_workspace(request),
+        ).select_related('data_health').prefetch_related('sync_runs', 'sku_mappings').order_by('-created_at')
+        return Response({
+            'erp_entitled': erp_entitled,
+            'connections': [_serialize(item) for item in connections],
+        })
 
     def post(self, request):
-        error = _access_error(request, write=True)
+        error = _access_error(request)
         if error:
             return error
         data = request.data or {}
         provider = str(data.get('provider') or 'ODOO').upper()
-        if provider != 'ODOO':
-            return Response({'error': {'code': 'UNSUPPORTED_PROVIDER', 'message': 'Provider này chưa được hỗ trợ.'}}, status=status.HTTP_400_BAD_REQUEST)
-        required = ['display_name', 'base_url', 'database', 'username', 'api_key']
+        if provider != IntegrationConnection.PROVIDER_ODOO:
+            return Response({
+                'error': {
+                    'code': 'UNSUPPORTED_PROVIDER',
+                    'message': 'SupplyForge chỉ hỗ trợ kết nối Odoo.',
+                },
+            }, status=status.HTTP_400_BAD_REQUEST)
+        display_name = str(data.get('display_name') or 'Odoo').strip()[:128]
+        if not display_name:
+            return Response({'error': {'code': 'INVALID_CONNECTION', 'message': 'Tên nguồn dữ liệu là bắt buộc.'}}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not entitlement_active(_workspace(request)):
+            return Response({'error': {'code': 'FEATURE_NOT_ENTITLED', 'message': 'Kết nối Odoo là tính năng ERP nâng cao.'}}, status=status.HTTP_403_FORBIDDEN)
+        required = ['base_url', 'database', 'username', 'api_key']
         missing = [name for name in required if not str(data.get(name) or '').strip()]
         if missing:
             return Response({'error': {'code': 'INVALID_CONNECTION', 'message': f"Thiếu trường: {', '.join(missing)}."}}, status=status.HTTP_400_BAD_REQUEST)
@@ -202,14 +261,20 @@ class IntegrationConnectionListCreateView(APIView):
         except ValueError as exc:
             return Response({'error': {'code': 'INVALID_CONNECTION_URL', 'message': str(exc)}}, status=status.HTTP_400_BAD_REQUEST)
         webhook_secret = secrets.token_urlsafe(32)
-        credentials = {'database': str(data['database']).strip(), 'username': str(data['username']).strip(), 'api_key': str(data['api_key']).strip(), 'webhook_secret': webhook_secret}
+        credentials = {
+            'database': str(data['database']).strip(),
+            'username': str(data['username']).strip(),
+            'api_key': str(data['api_key']).strip(),
+            'webhook_secret': webhook_secret,
+        }
         connection = IntegrationConnection.objects.create(
-            workspace_id=_workspace(request), provider=provider, display_name=str(data['display_name']).strip()[:128],
+            workspace_id=_workspace(request), provider=provider, display_name=display_name,
             base_url=base_url, external_database=credentials['database'],
+            auth_mode=IntegrationConnection.AUTH_SERVICE_ACCOUNT,
             external_company_id=str(data.get('company_id') or ''), external_company_name=str(data.get('company_name') or ''),
             warehouse_ids=[str(item) for item in data.get('warehouse_ids', [])], warehouse_names=[str(item) for item in data.get('warehouse_names', [])],
             credential_encrypted=encrypt_credentials(credentials), webhook_secret_hash=webhook_secret_hash(webhook_secret),
-            created_by=str(getattr(request, 'user_email', '') or getattr(request, 'user_id', ''))[:128],
+            created_by=_mapping_actor(request),
         )
         payload = _serialize(connection)
         payload['webhook'] = {'url_path': f'/api/v1/integrations/webhooks/{connection.webhook_token}', 'secret': webhook_secret}
@@ -224,15 +289,21 @@ class IntegrationConnectionDetailView(APIView):
         connection = IntegrationConnection.objects.filter(id=connection_id, workspace_id=_workspace(request)).first()
         if not connection:
             return Response({'error': {'code': 'CONNECTION_NOT_FOUND'}}, status=status.HTTP_404_NOT_FOUND)
+        error = _connection_access_error(request, connection)
+        if error:
+            return error
         return Response(_serialize(connection))
 
     def patch(self, request, connection_id):
-        error = _access_error(request, write=True)
+        error = _access_error(request)
         if error:
             return error
         connection = IntegrationConnection.objects.filter(id=connection_id, workspace_id=_workspace(request)).first()
         if not connection:
             return Response({'error': {'code': 'CONNECTION_NOT_FOUND'}}, status=status.HTTP_404_NOT_FOUND)
+        error = _connection_access_error(request, connection)
+        if error:
+            return error
         if 'status' in request.data and str(request.data['status']).upper() in {'PAUSED', 'ACTIVE'}:
             connection.status = str(request.data['status']).upper()
         if 'warehouse_ids' in request.data:
@@ -247,14 +318,17 @@ class IntegrationConnectionDetailView(APIView):
 
 class IntegrationRunView(APIView):
     def post(self, request, connection_id, run_type):
-        error = _access_error(request, write=True)
+        error = _access_error(request)
         if error:
             return error
         connection = IntegrationConnection.objects.filter(id=connection_id, workspace_id=_workspace(request)).first()
         if not connection:
             return Response({'error': {'code': 'CONNECTION_NOT_FOUND'}}, status=status.HTTP_404_NOT_FOUND)
+        error = _connection_access_error(request, connection)
+        if error:
+            return error
         mapped_type = {
-            'validate': 'VALIDATE', 'initial-sync': 'INITIAL', 'sync': 'INCREMENTAL', 'reconcile': 'RECONCILIATION',
+            'validate': 'VALIDATE', 'initial-sync': 'INITIAL', 'sync': 'INCREMENTAL',
         }.get(run_type)
         if not mapped_type:
             return Response({'error': {'code': 'INVALID_RUN_TYPE'}}, status=status.HTTP_400_BAD_REQUEST)
@@ -270,10 +344,15 @@ class IntegrationSkuMappingView(APIView):
         error = _access_error(request)
         if error:
             return error
-        qs = IntegrationSkuMapping.objects.filter(
-            connection_id=connection_id,
-            connection__workspace_id=_workspace(request),
-        )
+        connection = IntegrationConnection.objects.filter(
+            id=connection_id, workspace_id=_workspace(request),
+        ).first()
+        if not connection:
+            return Response({'error': {'code': 'CONNECTION_NOT_FOUND'}}, status=status.HTTP_404_NOT_FOUND)
+        error = _connection_access_error(request, connection)
+        if error:
+            return error
+        qs = IntegrationSkuMapping.objects.filter(connection=connection)
         filter_name = str(request.query_params.get('status') or IntegrationSkuMapping.STATUS_REVIEW).upper()
         filters = {
             'ALL': Q(),
@@ -301,7 +380,15 @@ class IntegrationSkuMappingView(APIView):
         })
 
     def patch(self, request, connection_id, mapping_id):
-        error = _access_error(request, write=True)
+        error = _access_error(request)
+        if error:
+            return error
+        connection = IntegrationConnection.objects.filter(
+            id=connection_id, workspace_id=_workspace(request),
+        ).first()
+        if not connection:
+            return Response({'error': {'code': 'CONNECTION_NOT_FOUND'}}, status=status.HTTP_404_NOT_FOUND)
+        error = _connection_access_error(request, connection)
         if error:
             return error
         payload = request.data or {}
@@ -346,9 +433,8 @@ class IntegrationSkuMappingView(APIView):
                 canonical_product_id = str(payload.get('canonical_product_id') or '').strip()
                 if not canonical_product_id:
                     return Response({'error': {'code': 'CANONICAL_PRODUCT_REQUIRED', 'message': 'Hãy chọn SKU chuẩn nội bộ trước khi xác nhận.'}}, status=status.HTTP_400_BAD_REQUEST)
-                target = Product.objects.filter(
+                target = _workspace_catalog(mapping.connection).filter(
                     id=canonical_product_id,
-                    user_id=str(mapping.connection.workspace.owner_id or ''),
                 ).exclude(item_sku__isnull=True).exclude(item_sku='').first()
                 if not target:
                     return Response({'error': {'code': 'CANONICAL_PRODUCT_NOT_FOUND', 'message': 'SKU chuẩn đã chọn không tồn tại trong workspace hiện tại.'}}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
@@ -363,7 +449,7 @@ class IntegrationSkuMappingView(APIView):
                 if conflicting_mapping:
                     return Response({'error': {
                         'code': 'CANONICAL_PRODUCT_ALREADY_LINKED',
-                        'message': f'SKU chuẩn {target.item_sku} đã liên kết với SKU Odoo {conflicting_mapping.external_sku}.',
+                        'message': f'SKU chuẩn {target.item_sku} đã liên kết với SKU nguồn {conflicting_mapping.external_sku}.',
                     }}, status=status.HTTP_409_CONFLICT)
 
                 if mapping.status == IntegrationSkuMapping.STATUS_CONFIRMED and mapping.canonical_product_id == target.id:
@@ -444,6 +530,9 @@ class IntegrationSkuCandidateView(APIView):
         ).first()
         if not connection:
             return Response({'error': {'code': 'CONNECTION_NOT_FOUND'}}, status=status.HTTP_404_NOT_FOUND)
+        error = _connection_access_error(request, connection)
+        if error:
+            return error
         search = str(request.query_params.get('q') or '').strip()
         if len(search) < 2:
             return Response({'items': []})
@@ -451,9 +540,7 @@ class IntegrationSkuCandidateView(APIView):
             limit = min(50, max(5, int(request.query_params.get('limit', 20))))
         except (TypeError, ValueError):
             return Response({'error': {'code': 'INVALID_LIMIT'}}, status=status.HTTP_400_BAD_REQUEST)
-        products = Product.objects.filter(
-            user_id=str(connection.workspace.owner_id or ''),
-        ).exclude(item_sku__isnull=True).exclude(item_sku='').filter(
+        products = _workspace_catalog(connection).exclude(item_sku__isnull=True).exclude(item_sku='').filter(
             Q(item_sku__icontains=search) | Q(product_name__icontains=search),
         ).order_by('item_sku')[:limit]
         return Response({'items': [{
@@ -475,6 +562,9 @@ class IntegrationOverviewView(APIView):
         connection = IntegrationConnection.objects.filter(id=connection_id, workspace_id=_workspace(request)).first()
         if not connection:
             return Response({'error': {'code': 'CONNECTION_NOT_FOUND'}}, status=status.HTTP_404_NOT_FOUND)
+        error = _connection_access_error(request, connection)
+        if error:
+            return error
         today = timezone.localdate()
         metrics = IntegrationSkuDailyMetric.objects.filter(connection=connection)
         latest_date = metrics.aggregate(value=Max('metric_date'))['value']
@@ -519,6 +609,10 @@ def _operational_connection(request, connection_id):
     ).first()
     if not connection:
         return None, Response({'error': {'code': 'CONNECTION_NOT_FOUND'}}, status=status.HTTP_404_NOT_FOUND)
+    if connection.provider != IntegrationConnection.PROVIDER_ODOO:
+        return None, Response({'error': {'code': 'OPERATION_NOT_AVAILABLE', 'message': 'Bảng phân tích ERP chỉ khả dụng cho kết nối Odoo.'}}, status=status.HTTP_409_CONFLICT)
+    if not entitlement_active(_workspace(request)):
+        return None, Response({'error': {'code': 'FEATURE_NOT_ENTITLED', 'message': 'Kết nối Odoo là tính năng ERP nâng cao.'}}, status=status.HTTP_403_FORBIDDEN)
     return connection, None
 
 
@@ -526,6 +620,30 @@ def _operational_source_payload(connection, snapshot):
     freshness_age_minutes = None
     if connection.last_successful_sync_at:
         freshness_age_minutes = max(0, int((timezone.now() - connection.last_successful_sync_at).total_seconds() // 60))
+    source_key = f'ODOO:{connection.id}'
+    quality = {
+        'state': 'QUALITY_UNAVAILABLE',
+        'message': 'Chưa thể kiểm chứng chất lượng cảnh báo từ dữ liệu nguồn này.',
+    }
+    try:
+        from supplyforge.services.slow_moving_quality_monitoring import SlowMovingQualityMonitoringService
+
+        quality_report = SlowMovingQualityMonitoringService.report(
+            workspace_id=connection.workspace_id,
+            source_key=source_key,
+        )
+        quality = {
+            'state': quality_report['state'],
+            'metrics': {
+                key: quality_report.get('metrics', {}).get(key)
+                for key in ('matured_eligible_skus', 'opened_high_risk_alert_count', 'high_risk_precision')
+            },
+            'notification': quality_report.get('notification'),
+        }
+    except Exception:
+        # Source data remains readable even if an optional reporting query is
+        # temporarily unavailable; the UI must not infer that it is validated.
+        pass
     return {
         'type': 'ODOO_OPERATIONS',
         'connection_id': str(connection.id),
@@ -541,7 +659,57 @@ def _operational_source_payload(connection, snapshot):
         'status': snapshot.status if snapshot else 'PENDING',
         'risk_engine': snapshot.risk_engine_version if snapshot else 'odoo_operational_rules_v1',
         'coverage': snapshot.coverage if snapshot else {},
+        'quality': quality,
     }
+
+
+_OPERATIONAL_CURSOR_SORT_FIELDS = {
+    'risk_score': 'priority_score',
+    'capital_exposure': 'capital_exposure_vnd',
+    'dsls': 'days_since_last_sale',
+}
+
+
+def _encode_operational_risk_cursor(*, sort_by: str, descending: bool, record) -> str:
+    """Encode only the stable sort position for Odoo's current queue."""
+    field = _OPERATIONAL_CURSOR_SORT_FIELDS[sort_by]
+    payload = {
+        'sort_by': sort_by,
+        'descending': bool(descending),
+        'metric': str(getattr(record, field)),
+        'external_sku': record.external_sku,
+        'id': str(record.id),
+    }
+    return base64.urlsafe_b64encode(
+        json.dumps(payload, separators=(',', ':')).encode('utf-8')
+    ).decode('ascii').rstrip('=')
+
+
+def _decode_operational_risk_cursor(value: str, *, sort_by: str, descending: bool) -> dict:
+    try:
+        padded = f"{value}{'=' * (-len(value) % 4)}"
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode('ascii')).decode('utf-8'))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError('cursor không hợp lệ.') from exc
+    if payload.get('sort_by') != sort_by or bool(payload.get('descending')) != descending:
+        raise ValueError('cursor không đúng với cách sắp xếp đang dùng.')
+    if not payload.get('external_sku') or not payload.get('id') or payload.get('metric') in (None, ''):
+        raise ValueError('cursor thiếu vị trí bản ghi.')
+    return payload
+
+
+def _after_operational_risk_cursor(queryset, *, sort_by: str, descending: bool, cursor: dict):
+    field = _OPERATIONAL_CURSOR_SORT_FIELDS[sort_by]
+    metric_lookup = f'{field}__lt' if descending else f'{field}__gt'
+    return queryset.filter(
+        Q(**{metric_lookup: cursor['metric']})
+        | Q(**{field: cursor['metric'], 'external_sku__gt': cursor['external_sku']})
+        | Q(**{
+            field: cursor['metric'],
+            'external_sku': cursor['external_sku'],
+            'id__gt': cursor['id'],
+        })
+    )
 
 
 class IntegrationOperationalRiskView(APIView):
@@ -554,7 +722,10 @@ class IntegrationOperationalRiskView(APIView):
         snapshot = IntegrationOperationalRiskSnapshot.objects.filter(connection=connection).first()
         source = _operational_source_payload(connection, snapshot)
         if not snapshot or snapshot.status != 'READY':
-            return Response({'total_count': 0, 'limit': 50, 'offset': 0, 'assessments': [], 'source': source})
+            return Response({
+                'total_count': 0, 'limit': 50, 'offset': 0, 'assessments': [], 'source': source,
+                'pagination': {'mode': 'cursor', 'has_next': False, 'next_cursor': None},
+            })
 
         query = snapshot.assessments.all()
         risk_class = str(request.query_params.get('risk_class') or '').upper()
@@ -570,42 +741,77 @@ class IntegrationOperationalRiskView(APIView):
         capital_band = str(request.query_params.get('capital_band') or '').upper()
         aging_band = str(request.query_params.get('aging_band') or '').upper()
         sort_by = str(request.query_params.get('sort_by') or '-risk_score')
-        needs_metrics = capital_band or aging_band or sort_by.lstrip('-') in {'capital_exposure', 'dsls'}
-        if needs_metrics:
-            query = query.annotate(
-                list_capital_exposure=Cast('evidence__capital_exposure_vnd', FloatField()),
-                list_dsls=Cast('evidence__dsls', IntegerField()),
-            )
         if capital_band == 'LOW':
-            query = query.filter(list_capital_exposure__lt=10_000_000)
+            query = query.filter(capital_exposure_vnd__lt=10_000_000)
         elif capital_band == 'MID':
-            query = query.filter(list_capital_exposure__gte=10_000_000, list_capital_exposure__lte=50_000_000)
+            query = query.filter(capital_exposure_vnd__gte=10_000_000, capital_exposure_vnd__lte=50_000_000)
         elif capital_band == 'HIGH':
-            query = query.filter(list_capital_exposure__gt=50_000_000)
+            query = query.filter(capital_exposure_vnd__gt=50_000_000)
         if aging_band == 'FRESH':
-            query = query.filter(list_dsls__lte=30)
+            query = query.filter(days_since_last_sale__lte=30)
         elif aging_band == 'AGING':
-            query = query.filter(list_dsls__gt=30, list_dsls__lte=60)
+            query = query.filter(days_since_last_sale__gt=30, days_since_last_sale__lte=60)
         elif aging_band == 'AT_RISK':
-            query = query.filter(list_dsls__gt=60, list_dsls__lte=90)
+            query = query.filter(days_since_last_sale__gt=60, days_since_last_sale__lte=90)
         elif aging_band == 'CRITICAL':
-            query = query.filter(list_dsls__gt=90)
+            query = query.filter(days_since_last_sale__gt=90)
 
         sort_map = {
-            'risk_score': 'risk_score', '-risk_score': '-risk_score',
+            'risk_score': 'priority_score', '-risk_score': '-priority_score',
             'risk_probability': 'risk_probability', '-risk_probability': '-risk_probability',
-            'capital_exposure': 'list_capital_exposure', '-capital_exposure': '-list_capital_exposure',
-            'dsls': 'list_dsls', '-dsls': '-list_dsls',
+            'capital_exposure': 'capital_exposure_vnd', '-capital_exposure': '-capital_exposure_vnd',
+            'dsls': 'days_since_last_sale', '-dsls': '-days_since_last_sale',
         }
-        query = query.order_by(sort_map.get(sort_by, '-risk_score'), 'external_sku')
+        raw_sort = sort_by.lstrip('-')
+        descending = sort_by.startswith('-')
+        if sort_by not in sort_map:
+            raw_sort, descending = 'risk_score', True
+            sort_by = '-risk_score'
+        query = query.order_by(sort_map[sort_by], 'external_sku', 'id')
         try:
             limit = min(100, max(1, int(request.query_params.get('limit', 50))))
             offset = max(0, int(request.query_params.get('offset', 0)))
         except (TypeError, ValueError):
             return Response({'error': {'code': 'INVALID_PAGINATION', 'message': 'limit và offset phải là số nguyên hợp lệ.'}}, status=status.HTTP_400_BAD_REQUEST)
 
-        total_count = query.count()
-        rows = query[offset:offset + limit]
+        cursor_mode = str(request.query_params.get('pagination') or '').lower() == 'cursor' or bool(request.query_params.get('cursor'))
+        if cursor_mode:
+            if raw_sort not in _OPERATIONAL_CURSOR_SORT_FIELDS:
+                return Response({
+                    'error': {
+                        'code': 'UNSUPPORTED_CURSOR_SORT',
+                        'message': 'Cách sắp xếp này chưa hỗ trợ duyệt danh sách lớn.',
+                    },
+                }, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                cursor_value = request.query_params.get('cursor')
+                query = query.filter(**{f'{_OPERATIONAL_CURSOR_SORT_FIELDS[raw_sort]}__isnull': False})
+                if cursor_value:
+                    query = _after_operational_risk_cursor(
+                        query,
+                        sort_by=raw_sort,
+                        descending=descending,
+                        cursor=_decode_operational_risk_cursor(
+                            cursor_value, sort_by=raw_sort, descending=descending,
+                        ),
+                    )
+            except ValueError as exc:
+                return Response({'error': {'code': 'INVALID_CURSOR', 'message': str(exc)}}, status=status.HTTP_400_BAD_REQUEST)
+        total_count = None if cursor_mode else query.count()
+        rows = list(query.only(
+            'id', 'external_sku', 'canonical_sku', 'product_name', 'category',
+            'risk_class', 'risk_score', 'priority_score', 'risk_probability',
+            'sellable_stock_quantity', 'capital_exposure_vnd', 'days_since_last_sale',
+            'primary_signals', 'supporting_signals', 'evidence', 'created_at',
+        )[:limit + 1] if cursor_mode else query.only(
+            'id', 'external_sku', 'canonical_sku', 'product_name', 'category',
+            'risk_class', 'risk_score', 'priority_score', 'risk_probability',
+            'sellable_stock_quantity', 'capital_exposure_vnd', 'days_since_last_sale',
+            'primary_signals', 'supporting_signals', 'evidence', 'created_at',
+        )[offset:offset + limit])
+        has_next = cursor_mode and len(rows) > limit
+        if has_next:
+            rows = rows[:limit]
         assessments = []
         for record in rows:
             evidence = record.evidence if isinstance(record.evidence, dict) else {}
@@ -616,17 +822,36 @@ class IntegrationOperationalRiskView(APIView):
                 'canonical_sku_id': record.canonical_sku,
                 'product_name': record.product_name,
                 'category': record.category,
-                'risk': {'class': record.risk_class, 'score': record.risk_score, 'probability': record.risk_probability},
+                'risk': {
+                    'class': record.risk_class,
+                    'score': record.risk_score,
+                    'priority_score': record.priority_score if record.priority_score is not None else record.risk_score,
+                    'probability': record.risk_probability,
+                    'has_calibrated_probability': record.risk_probability is not None,
+                },
                 'primary_signals': record.primary_signals,
                 'supporting_signals': record.supporting_signals,
                 'evidence': evidence,
-                'capital_exposure_vnd': evidence.get('capital_exposure_vnd', 0),
-                'stock_quantity': evidence.get('stock_quantity', 0),
+                'capital_exposure_vnd': float(record.capital_exposure_vnd) if record.capital_exposure_vnd is not None else evidence.get('capital_exposure_vnd'),
+                'stock_quantity': float(record.sellable_stock_quantity) if record.sellable_stock_quantity is not None else evidence.get('stock_quantity', 0),
                 'unit_cost': evidence.get('unit_cost', 0),
                 'model': {'name': 'Odoo operational rules', 'version': snapshot.risk_engine_version},
                 'assessment_timestamp': snapshot.calculated_at.isoformat(),
             })
-        return Response({'total_count': total_count, 'limit': limit, 'offset': offset, 'assessments': assessments, 'source': source})
+        return Response({
+            'total_count': total_count,
+            'limit': limit,
+            'offset': offset if not cursor_mode else None,
+            'assessments': assessments,
+            'source': source,
+            'pagination': {
+                'mode': 'cursor' if cursor_mode else 'offset',
+                'has_next': bool(has_next),
+                'next_cursor': _encode_operational_risk_cursor(
+                    sort_by=raw_sort, descending=descending, record=rows[-1],
+                ) if has_next and rows else None,
+            },
+        })
 
 
 class IntegrationOperationalRiskSummaryView(APIView):
@@ -743,7 +968,10 @@ class IntegrationOperationalExecutiveSummaryView(APIView):
 @require_http_methods(['POST'])
 def integration_webhook(request, webhook_token):
     connection = IntegrationConnection.objects.filter(webhook_token=webhook_token, status='ACTIVE').first()
-    if not connection or not entitlement_active(connection.workspace_id):
+    if not connection or (
+        connection.provider == IntegrationConnection.PROVIDER_ODOO
+        and not entitlement_active(connection.workspace_id)
+    ):
         from supplyforge.metrics import record_erp_webhook
         record_erp_webhook('unavailable')
         return JsonResponse({'error': 'Connection unavailable.'}, status=404)

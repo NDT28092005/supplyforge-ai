@@ -83,8 +83,14 @@ class ConcurrentImportAndDatasetConsistencyTestCase(TestCase):
             "ORD-001,SKU-A,Product A,100000,2,2026-05-01\n"
             "ORD-002,SKU-B,Product B,200000,1,2026-05-02\n"
         )
+        session_initial = IngestionSession.objects.create(
+            workspace=self.workspace,
+            original_filename="initial_file.csv",
+            status="PROCESSING",
+        )
         res_1 = DynamicFileImportService.process_batch_import(
-            io.BytesIO(csv_1.encode('utf-8')), {}, user_id, session_type='INITIAL', force_reset=True
+            io.BytesIO(csv_1.encode('utf-8')), {}, user_id,
+            session_type='INITIAL', force_reset=True, session_id=session_initial.id,
         )
 
         self.assertEqual(res_1["status"], "DATA_READY")

@@ -50,6 +50,12 @@ class TestDiscountSimulationEngine(TestCase):
                 "aging_bucket": "SEVERELY_STALE"
             }
         )
+        self.ctx_discount.update({
+            "demand_context": {"sales_velocity_30d": 1.0},
+            "has_enough_demand": True,
+            "has_positive_recent_demand": True,
+            "observation_period_days": 30,
+        })
         self.el_discount = self.el_engine.evaluate_sku_eligibility(self.ctx_discount)
         self.st_discount = self.strat_engine.evaluate_sku_strategy(self.ctx_discount, self.el_discount)
 
@@ -98,7 +104,7 @@ class TestDiscountSimulationEngine(TestCase):
         # 40% or 50% discount will cause price (60k/50k) to fall below unit cost (70k) -> margin rate < 5% -> BLOCKED
         sc_50 = next(s for s in scenarios if s["scenario_id"] == "DISC_50")
         self.assertEqual(sc_50["status"], ScenarioStatus.BLOCKED.value)
-        self.assertIn("Margin rate", sc_50["blocking_reason"])
+        self.assertIn("Biên lợi nhuận", sc_50["blocking_reason"])
 
     def test_ac02_ac12_not_applicable_sku(self):
         """AC-02, AC-12: Non-applicable SKU returns empty scenarios and SIMULATION_NOT_APPLICABLE."""
@@ -106,6 +112,34 @@ class TestDiscountSimulationEngine(TestCase):
 
         self.assertEqual(res["evaluation_status"], "SIMULATION_NOT_APPLICABLE")
         self.assertEqual(res["scenarios"], [])
+
+    def test_zero_observed_demand_remains_zero_at_every_discount(self):
+        """Inventory must never be used as a substitute for absent demand."""
+        self.ctx_discount["demand_context"] = {"sales_velocity_30d": 0.0}
+        res = self.sim_engine.simulate_sku_discount(self.ctx_discount, self.st_discount)
+
+        self.assertEqual(res["evaluation_status"], "READY")
+        self.assertTrue(res["scenarios"])
+        self.assertTrue(all(scenario["simulated_quantity"] == 0 for scenario in res["scenarios"]))
+        self.assertTrue(all(scenario["capital_recovery"] == 0 for scenario in res["scenarios"]))
+
+    def test_sales_velocity_is_used_directly_as_daily_velocity(self):
+        """Regression: never divide an already daily velocity by its window."""
+        signal = self.sim_engine.observed_demand_signal({
+            "demand_context": {"sales_velocity_30d": 1.0},
+        })
+        scenario = self.sim_engine.simulate_single_scenario(
+            self.ctx_discount, discount_rate=0.15, duration_days=14,
+        )
+
+        self.assertEqual(signal["source_field"], "sales_velocity_30d")
+        self.assertEqual(signal["observed_daily_velocity"], 1.0)
+        self.assertEqual(signal["daily_velocity"], 1.0)
+        self.assertNotIn("observed_units", signal)
+        # The default is the observed baseline. A price-response uplift is
+        # only allowed through an explicit approved assumption.
+        self.assertEqual(scenario["expected_units_sold"], 14.0)
+        self.assertEqual(scenario["demand_response_status"], "BASELINE_OBSERVED_VELOCITY")
 
     def test_ac15_ac16_portfolio_and_artifacts(self):
         """AC-15, AC-16: Portfolio simulation & deliverable artifact generation."""

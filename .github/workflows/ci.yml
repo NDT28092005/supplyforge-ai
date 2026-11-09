@@ -27,8 +27,17 @@ jobs:
           filters: |
             frontend:
               - 'frontend/**'
+              - '.github/workflows/ci.yml'
             backend:
               - 'backend/**'
+              - 'src/**'
+              - 'config/**'
+              - 'contracts/**'
+              - 'schemas/**'
+              - 'models/**'
+              - 'docker-compose.yml'
+              - 'infra/**'
+              - '.github/workflows/ci.yml'
 
   # 2. Pipeline kiểm thử Frontend (Angular)
   frontend-ci:
@@ -55,11 +64,19 @@ jobs:
       - name: Compile and Build
         run: npm run build
 
+      - name: Audit Production Dependencies
+        run: npm audit --omit=dev --audit-level=high
+
   # 3. Pipeline kiểm thử Backend (Django)
   backend-ci:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.backend == 'true' }}
     runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: "ci-secret-key-for-django-testing"
+      DEBUG: "True"
+      USE_SQLITE: "1"
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/backend
     defaults:
       run:
         working-directory: backend
@@ -79,10 +96,31 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Django Tests
+      - name: Verify Dependency Resolution
+        run: pip check
+
+      - name: Validate Django Configuration and Migrations
         run: |
-          python manage.py test supplyforge
-        env:
-          SECRET_KEY: "ci-secret-key-for-django-testing"
-          DEBUG: "True"
-          DB_ENGINE: "django.db.backends.sqlite3"
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+
+      - name: Run Django Tests
+        run: python manage.py test supplyforge --verbosity 2
+
+      - name: Verify Model Artifact Manifest
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(Path('../models/model_manifest.json').read_text(encoding='utf-8'))
+          for filename, expected in manifest['artifact_sha256'].items():
+              actual = hashlib.sha256((Path('../models') / filename).read_bytes()).hexdigest()
+              assert actual == expected, f'checksum mismatch: {filename}'
+          PY
+
+      - name: Build Image and Smoke-Test Packaged Model Runtime
+        run: |
+          docker build --tag supplyforge-ci:${{ github.sha }} -f Dockerfile ..
+          docker run --rm supplyforge-ci:${{ github.sha }} python -c "from supplyforge.services.model_loader import ModelLoaderService; assert ModelLoaderService.runtime_status()['state'] == 'READY'"

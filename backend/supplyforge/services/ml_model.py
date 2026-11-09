@@ -24,6 +24,7 @@ Architecture:
 
 import math
 import logging
+import numpy as np
 from datetime import datetime, date, timedelta
 from django.db import connection
 from supplyforge.models import Product
@@ -31,6 +32,10 @@ from supplyforge.services.model_loader import (
     ModelLoaderService, FeatureStoreLoader,
     MLServiceError, FailureType,
 )
+from supplyforge.services.temporal_candidate_model import (
+    TemporalCandidateModelService, TemporalCandidateUnavailable,
+)
+from supplyforge.services.temporal_feature_service import FeatureContractIncomplete, TemporalFeatureService
 from supplyforge.metrics import record_prediction
 
 logger = logging.getLogger(__name__)
@@ -126,11 +131,6 @@ class HybridModelPipeline:
         else:
             expiration_days_left = 999.0  # Non-perishable default
 
-        # 4. Supplier Risk Feature (Phase 4: Supplier)
-        # Use deterministic hash of SKU identifier to simulate delay rates (0% to 20%)
-        sku_hash = abs(hash(str(product.id)))
-        delay_rate = (sku_hash % 21) / 100.0
-
         return {
             "inventory_qty": inventory_qty,
             "cost_price": cost_price,
@@ -141,7 +141,6 @@ class HybridModelPipeline:
             "inventory_coverage_days": round(coverage_days, 1),
             "inventory_ratio": round(inventory_ratio, 4),
             "expiration_days_left": float(expiration_days_left),
-            "delay_rate": round(delay_rate, 2),
             "sales_trend": round(sales_trend, 2)
         }
 
@@ -174,46 +173,105 @@ class HybridModelPipeline:
             )
             raise
 
-        # ---- Tier 1: Feature Store Lookup + Validation ----
-        feature_store_result = None
-        feature_vector = None
-        feature_completeness = 0.0
-        data_provenance = {"source": "django_orm", "snapshot_date": None, "is_offline_snapshot": False}
-
-        try:
-            feature_store_result = ModelLoaderService.lookup_sku_features(str(sku_id))
-            if feature_store_result is not None:
-                feature_vector = feature_store_result["feature_vector"]
-                feature_completeness = feature_store_result["feature_completeness"]
-                data_provenance = {
-                    "source": "gold_feature_store",
-                    "snapshot_date": feature_store_result["snapshot_date"],
-                    "is_offline_snapshot": feature_store_result["is_offline_snapshot"],
-                }
-        except MLServiceError as e:
-            if e.is_fallback_eligible:
-                logger.warning(
-                    "Feature Store lookup failed for SKU %s [%s]: %s",
-                    sku_id, e.failure_type, e.message
-                )
-            else:
-                record_prediction(
-                    model="xgboost",
-                    model_version="v1",
-                    status="failed",
-                    duration=time.monotonic() - t_pred_start,
-                    error_type=getattr(e, 'failure_type', 'ML_ERROR')
-                )
-                raise  # SYSTEM_ERROR — propagate
-
-        # ---- Tier 2: Prediction ----
+        # ---- Tier 1: Governed temporal candidate (19-feature contract) ----
+        # A SHADOW/CANARY candidate may be evaluated independently, but it may
+        # not replace the established decision path until the manifest is ACTIVE.
         prediction_meta = {}
         risk_probability = None
         risk_level = None
         base_value = None
+        temporal_candidate_status = None
+        data_provenance = {"source": "django_orm", "snapshot_date": None, "is_offline_snapshot": False}
+        feature_vector = None
+        feature_completeness = 0.0
+        try:
+            temporal_service = TemporalCandidateModelService()
+            candidate_status = temporal_service.status()
+            temporal_candidate_status = {
+                "available": candidate_status.available,
+                "code": candidate_status.code,
+                "detail": candidate_status.detail,
+                "model_name": candidate_status.model_name,
+                "model_version": candidate_status.model_version,
+            }
+            canonical_sku = product.canonical_sku or product.item_sku
+            if candidate_status.available and candidate_status.model_version:
+                temporal_prediction = temporal_service.predict(
+                    canonical_sku,
+                    user_id=str(product.user_id),
+                    workspace_id=workspace_id,
+                )
+                # SHADOW/CANARY predictions are retained as immutable cohorts
+                # and are evaluated only after their 60-day outcome window.
+                # Telemetry failures must never affect a merchant prediction.
+                try:
+                    from supplyforge.services.temporal_shadow_monitoring import TemporalShadowMonitoringService
+                    TemporalShadowMonitoringService.record_prediction(
+                        workspace_id=workspace_id,
+                        prediction=temporal_prediction,
+                    )
+                except Exception:
+                    logger.exception("Temporal candidate telemetry failed safely for SKU %s", sku_id)
+                if temporal_prediction["serving_state"] == "ACTIVE":
+                    risk_probability = temporal_prediction["risk_probability"]
+                    risk_level = temporal_prediction["risk_class"]
+                    base_value = None
+                    prediction_meta = {
+                        "engine": "TEMPORAL_DEMAND_CANDIDATE",
+                        "model_version": temporal_prediction["model_version"],
+                        "status": "PRIMARY",
+                        "calibrated": True,
+                        "calibration_method": "isotonic",
+                        "raw_probability": round(temporal_prediction["raw_high_risk_probability"], 4),
+                        "feature_schema_version": temporal_prediction["feature_schema_version"],
+                    }
+                    data_provenance = temporal_prediction["data_provenance"]
+                    feature_vector = np.array(
+                        [[temporal_prediction["feature_values"][name] for name in TemporalFeatureService().feature_columns]],
+                        dtype=float,
+                    )
+                    feature_completeness = 1.0
+        except (TemporalCandidateUnavailable, FeatureContractIncomplete) as exc:
+            temporal_candidate_status = {"available": False, "detail": str(exc)}
+            logger.info("Temporal candidate unavailable for SKU %s: %s", sku_id, exc)
+        except Exception as exc:
+            temporal_candidate_status = {"available": False, "detail": "Candidate evaluation failed safely."}
+            logger.exception("Temporal candidate evaluation failed for SKU %s: %s", sku_id, exc)
+
+        # ---- Tier 2: Legacy feature-store model (compatibility path) ----
+        feature_store_result = None
+
+        if risk_probability is None:
+            feature_vector = None
+            feature_completeness = 0.0
+            try:
+                feature_store_result = ModelLoaderService.lookup_sku_features(str(sku_id))
+                if feature_store_result is not None:
+                    feature_vector = feature_store_result["feature_vector"]
+                    feature_completeness = feature_store_result["feature_completeness"]
+                    data_provenance = {
+                        "source": "gold_feature_store",
+                        "snapshot_date": feature_store_result["snapshot_date"],
+                        "is_offline_snapshot": feature_store_result["is_offline_snapshot"],
+                    }
+            except MLServiceError as e:
+                if e.is_fallback_eligible:
+                    logger.warning(
+                        "Feature Store lookup failed for SKU %s [%s]: %s",
+                        sku_id, e.failure_type, e.message
+                    )
+                else:
+                    record_prediction(
+                        model="xgboost",
+                        model_version="v1",
+                        status="failed",
+                        duration=time.monotonic() - t_pred_start,
+                        error_type=getattr(e, 'failure_type', 'ML_ERROR')
+                    )
+                    raise  # SYSTEM_ERROR — propagate
 
         # Attempt Primary Engine (XGBoost + Isotonic Calibration)
-        if feature_vector is not None:
+        if risk_probability is None and feature_vector is not None:
             try:
                 model = ModelLoaderService.get_model()
                 le = ModelLoaderService.get_label_encoder()
@@ -320,6 +378,7 @@ class HybridModelPipeline:
                 "status": "FALLBACK",
                 "fallback_reason": fallback_reason,
                 "calibrated": False,
+                "decision_action_allowed": False,
             }
 
             logger.info(
@@ -346,6 +405,8 @@ class HybridModelPipeline:
             "feature_vector": feature_vector,
             "feature_completeness": feature_completeness,
             "data_provenance": data_provenance,
+            "temporal_candidate_status": temporal_candidate_status,
+            "model_runtime": ModelLoaderService.runtime_status(),
         }
 
     # ================================================================
@@ -366,7 +427,6 @@ class HybridModelPipeline:
         # Coefficients (heuristic)
         coef_coverage = -0.01
         coef_trend = 0.8
-        coef_delay = 2.5
         coef_expiry = -0.05
 
         # Calculate contribution in log-odds space
@@ -374,8 +434,6 @@ class HybridModelPipeline:
         coverage_contrib = max(-2.0, min(2.0, coverage_contrib))
 
         trend_contrib = coef_trend * (features["sales_trend"] - 1.0)
-        delay_contrib = coef_delay * (features["delay_rate"] - 0.05)
-
         if features["expiration_days_left"] < 999.0:
             expiry_contrib = coef_expiry * (features["expiration_days_left"] - 30.0)
             expiry_contrib = max(0.0, expiry_contrib)
@@ -383,7 +441,7 @@ class HybridModelPipeline:
             expiry_contrib = 0.0
 
         # Sigmoid activation
-        log_odds = base_log_odds + coverage_contrib + trend_contrib + delay_contrib + expiry_contrib
+        log_odds = base_log_odds + coverage_contrib + trend_contrib + expiry_contrib
         probability = 1.0 / (1.0 + math.exp(-log_odds))
         probability = max(0.05, min(0.95, probability))
 

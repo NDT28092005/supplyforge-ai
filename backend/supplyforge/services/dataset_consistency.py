@@ -35,7 +35,11 @@ class DatasetConsistencyValidator:
                 - min_date
                 - max_date
         """
-        after_sku_count = Product.objects.filter(user_id=user_id).count()
+        workspace_id = getattr(session, 'workspace_id', None)
+        after_sku_count = Product.objects.filter(
+            user_id=user_id,
+            workspace_id=workspace_id,
+        ).count()
 
         new_sku_count = import_stats.get('new_sku_count', 0)
         updated_sku_count = import_stats.get('updated_sku_count', 0)

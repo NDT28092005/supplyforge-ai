@@ -51,6 +51,12 @@ class TestRecoveryValueEstimationEngine(TestCase):
                 "aging_bucket": "SEVERELY_STALE"
             }
         )
+        self.ctx_critical.update({
+            "demand_context": {"sales_velocity_30d": 1.0},
+            "has_enough_demand": True,
+            "has_positive_recent_demand": True,
+            "observation_period_days": 30,
+        })
         self.el_critical = self.el_engine.evaluate_sku_eligibility(self.ctx_critical)
         self.st_critical = self.strat_engine.evaluate_sku_strategy(self.ctx_critical, self.el_critical)
         self.sim_critical = self.sim_engine.simulate_sku_discount(self.ctx_critical, self.st_critical)
@@ -62,9 +68,11 @@ class TestRecoveryValueEstimationEngine(TestCase):
         self.assertEqual(res["sku"], "SKU_CRITICAL")
         self.assertEqual(res["capital_exposure"], 7000000.0)
         self.assertGreater(res["gross_recovery_value"], 0.0)
-        self.assertGreater(res["recovery_cost"], 0.0)
-        self.assertEqual(res["net_recovery_value"], round(res["gross_recovery_value"] - res["recovery_cost"], 2))
-        self.assertEqual(res["residual_exposure"], round(max(0.0, 7000000.0 - res["net_recovery_value"]), 2))
+        # No global fee default is injected when this analytical scenario has
+        # no approved channel-cost profile.
+        self.assertEqual(res["recovery_cost"], 0.0)
+        self.assertEqual(res["net_recovery_value"], res["projected_net_contribution"])
+        self.assertEqual(res["residual_exposure"], round(max(0.0, 7000000.0 - res["projected_inventory_cost_rotation"]), 2))
         self.assertGreaterEqual(res["recovery_gap"], 0.0)
 
     def test_ac10_ac11_assumptions_provenance_and_confidence(self):

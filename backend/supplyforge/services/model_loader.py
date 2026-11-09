@@ -22,6 +22,8 @@ Failure Classification:
   SYSTEM_ERROR        — DB/infra/programming bug → NOT fallback eligible
 """
 
+import hashlib
+import importlib.metadata
 import json
 import logging
 import threading
@@ -400,6 +402,9 @@ class ModelLoaderService:
         with open(manifest_path, "r", encoding="utf-8") as f:
             cls._manifest = json.load(f)
 
+        cls._validate_manifest_artifacts(project_root, cls._manifest)
+        cls._validate_runtime_versions(cls._manifest)
+
         # 2. Locate and load risk classifier artifact
         rc_meta = cls._manifest.get("risk_classifier")
         if not rc_meta:
@@ -499,6 +504,59 @@ class ModelLoaderService:
             "loaded" if cls._lgb_model else "none"
         )
 
+    @staticmethod
+    def _validate_manifest_artifacts(project_root: Path, manifest: dict) -> None:
+        """Refuse mutable or tampered model files before unpickling them."""
+        checksums = manifest.get('artifact_sha256')
+        if not isinstance(checksums, dict) or not checksums:
+            raise MLServiceError(
+                FailureType.MODEL_INCOMPATIBLE,
+                'Model manifest must declare artifact_sha256 checksums.',
+            )
+        for artifact_name, expected_checksum in checksums.items():
+            artifact_path = project_root / 'models' / artifact_name
+            if not artifact_path.is_file():
+                raise MLServiceError(
+                    FailureType.MODEL_UNAVAILABLE,
+                    f'Model artifact not found: {artifact_path}',
+                )
+            actual_checksum = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+            if actual_checksum != expected_checksum:
+                raise MLServiceError(
+                    FailureType.MODEL_INCOMPATIBLE,
+                    f'Checksum mismatch for model artifact: {artifact_name}',
+                )
+
+    @staticmethod
+    def _validate_runtime_versions(manifest: dict) -> None:
+        """Persisted pickle files are ABI-sensitive, so versions are exact."""
+        expected_versions = manifest.get('runtime_versions', {})
+        if not isinstance(expected_versions, dict):
+            raise MLServiceError(FailureType.MODEL_INCOMPATIBLE, 'Invalid runtime_versions manifest entry.')
+        distribution_names = {
+            'scikit_learn': 'scikit-learn',
+            'xgboost': 'xgboost',
+            'lightgbm': 'lightgbm',
+            'shap': 'shap',
+            'joblib': 'joblib',
+        }
+        for package_key, distribution_name in distribution_names.items():
+            expected = expected_versions.get(package_key)
+            if not expected:
+                continue
+            try:
+                actual = importlib.metadata.version(distribution_name)
+            except importlib.metadata.PackageNotFoundError as exc:
+                raise MLServiceError(
+                    FailureType.MODEL_UNAVAILABLE,
+                    f'Required model runtime dependency is missing: {distribution_name}',
+                ) from exc
+            if actual != expected:
+                raise MLServiceError(
+                    FailureType.MODEL_INCOMPATIBLE,
+                    f'{distribution_name} runtime {actual} does not match artifact manifest {expected}',
+                )
+
     # ---- Public API ----
 
     @classmethod
@@ -560,6 +618,39 @@ class ModelLoaderService:
         """Returns MLServiceError if loading failed, None otherwise."""
         cls._load_once()
         return cls._load_error
+
+    @classmethod
+    def runtime_status(cls) -> dict:
+        """Return an explicit serving state for readiness and decision guards."""
+        cls._load_once()
+        manifest = cls._manifest or {}
+        risk_model = manifest.get('risk_classifier', {})
+        if cls._load_error:
+            return {
+                'state': 'UNAVAILABLE',
+                'reason': cls._load_error.failure_type,
+                'detail': cls._load_error.message,
+                'model_version': risk_model.get('model_version'),
+                'explainability': 'UNAVAILABLE',
+                'decision_actions_allowed': False,
+            }
+        if cls._shap_explainer is None:
+            return {
+                'state': 'DEGRADED',
+                'reason': FailureType.EXPLANATION_ERROR,
+                'detail': 'TreeSHAP explainer is unavailable; proxy explanations are not decision-safe.',
+                'model_version': risk_model.get('model_version'),
+                'explainability': 'UNAVAILABLE',
+                'decision_actions_allowed': False,
+            }
+        return {
+            'state': 'READY',
+            'reason': None,
+            'detail': 'Primary model and TreeSHAP explanation engine are ready.',
+            'model_version': risk_model.get('model_version'),
+            'explainability': 'READY',
+            'decision_actions_allowed': True,
+        }
 
     @classmethod
     def lookup_sku_features(cls, sku_id: str):

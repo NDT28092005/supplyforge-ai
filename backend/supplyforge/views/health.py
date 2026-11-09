@@ -102,6 +102,17 @@ def health_ready(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+def model_readiness(request):
+    """Explicit ML state; clients must not infer fallback from risk scores."""
+    from supplyforge.services.model_loader import ModelLoaderService
+
+    runtime = ModelLoaderService.runtime_status()
+    http_code = 200 if runtime['state'] == 'READY' else 503
+    return Response({'status': runtime['state'].lower(), 'model': runtime}, status=http_code)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def health_dependencies(request):
     """
     GET /health/dependencies & /api/v1/health/dependencies (Dependency Health Check)
@@ -191,11 +202,11 @@ def check_data(request):
         }, status=401)
 
     user_id = str(request.user_id)
-    p_count = Product.objects.filter(user_id=user_id).count()
+    p_count = Product.objects.filter(workspace_id=request.workspace_id).count()
     r_count = SlowMovingRiskAssessment.objects.filter(
         session__workspace_id=request.workspace_id
     ).count()
-    o_count = Order.objects.filter(user_id=user_id).count()
+    o_count = Order.objects.filter(workspace_id=request.workspace_id).count()
 
     has_data = (p_count > 0) or (r_count > 0) or (o_count > 0)
     return Response({

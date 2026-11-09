@@ -46,6 +46,11 @@ class TestActionEligibilityEngine(TestCase):
                 "aging_risk_level": "CRITICAL_AGING"
             }
         )
+        self.ctx_critical.update({
+            "has_enough_demand": True,
+            "has_positive_recent_demand": True,
+            "observation_period_days": 90,
+        })
 
         # SKU 2: Low Risk -> HOLD / MONITOR
         self.ctx_low = self.builder.build_sku_decision_context(
@@ -74,7 +79,7 @@ class TestActionEligibilityEngine(TestCase):
         self.assertEqual(res["evaluation_status"], "READY")
         self.assertIn("CLEARANCE", res["eligible_actions"])
         self.assertIn("DISCOUNT", res["eligible_actions"])
-        self.assertIn("STOP_REPLENISHMENT", res["eligible_actions"])
+        self.assertIn("STOP_REPLENISHMENT", res["requires_review_actions"])
         self.assertNotIn("HOLD", res["eligible_actions"])
 
     def test_ac04_low_risk_sku_eligibility(self):
@@ -101,6 +106,11 @@ class TestActionEligibilityEngine(TestCase):
                 "aging_bucket": "EXTREMELY_STALE"
             }
         )
+        ctx_high_cap.update({
+            "has_enough_demand": True,
+            "has_positive_recent_demand": True,
+            "observation_period_days": 90,
+        })
 
         res = self.engine.evaluate_sku_eligibility(ctx_high_cap)
 
@@ -109,6 +119,21 @@ class TestActionEligibilityEngine(TestCase):
         clearance_eval = next(a for a in res["action_evaluations"] if a["action_id"] == "CLEARANCE")
         self.assertEqual(clearance_eval["status"], ActionStatus.REQUIRES_REVIEW.value)
         self.assertTrue(any(r["rule"] == "REQUIRES_EXECUTIVE_REVIEW" for r in clearance_eval["reasons"]))
+
+    def test_zero_recent_demand_blocks_price_actions_but_keeps_stop_replenishment(self):
+        """No observed recent demand is a valid signal, not a reason to invent demand."""
+        self.ctx_critical.update({
+            "has_enough_demand": False,
+            "has_positive_recent_demand": False,
+            "observation_period_days": 30,
+        })
+        res = self.engine.evaluate_sku_eligibility(self.ctx_critical)
+
+        self.assertNotIn("DISCOUNT", res["eligible_actions"])
+        self.assertNotIn("CLEARANCE", res["eligible_actions"])
+        # Unknown open purchase orders require a merchant review before the
+        # replenishment stop is put into effect.
+        self.assertIn("STOP_REPLENISHMENT", res["requires_review_actions"])
 
     def test_ac10_hard_constraint_blocking(self):
         """AC-10: Hard blocking when DecisionContext status is NOT_READY."""

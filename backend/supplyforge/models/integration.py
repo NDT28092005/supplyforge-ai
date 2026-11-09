@@ -1,4 +1,4 @@
-"""Workspace-scoped, provider-neutral commerce integration records."""
+"""Workspace-scoped Odoo integration records."""
 
 import uuid
 
@@ -9,6 +9,9 @@ class WorkspaceEntitlement(models.Model):
     """Internal feature grant, intentionally separate from a future billing provider."""
 
     FEATURE_ERP_INTEGRATIONS = 'ERP_INTEGRATIONS'
+    FEATURE_SUPPLIER_RETURN_WRITE = 'SUPPLIER_RETURN_WRITE'
+    # The field deliberately remains extensible: a feature code is an
+    # operations entitlement, not a database enum requiring a deploy migration.
     FEATURE_CHOICES = [(FEATURE_ERP_INTEGRATIONS, 'ERP integrations')]
 
     workspace = models.ForeignKey('supplyforge.Workspace', on_delete=models.CASCADE, related_name='entitlements')
@@ -27,7 +30,11 @@ class WorkspaceEntitlement(models.Model):
 
 class IntegrationConnection(models.Model):
     PROVIDER_ODOO = 'ODOO'
-    PROVIDER_CHOICES = [(PROVIDER_ODOO, 'Odoo')]
+    PROVIDER_CHOICES = [
+        (PROVIDER_ODOO, 'Odoo'),
+    ]
+    AUTH_SERVICE_ACCOUNT = 'SERVICE_ACCOUNT'
+    AUTH_CHOICES = [(AUTH_SERVICE_ACCOUNT, 'Service account')]
     STATUS_DRAFT = 'DRAFT'
     STATUS_VALIDATING = 'VALIDATING'
     STATUS_ACTIVE = 'ACTIVE'
@@ -44,7 +51,9 @@ class IntegrationConnection(models.Model):
     provider = models.CharField(max_length=32, choices=PROVIDER_CHOICES)
     display_name = models.CharField(max_length=128)
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_DRAFT, db_index=True)
-    base_url = models.URLField(max_length=512)
+    base_url = models.URLField(max_length=512, blank=True, default='')
+    auth_mode = models.CharField(max_length=32, choices=AUTH_CHOICES, default=AUTH_SERVICE_ACCOUNT)
+    sync_interval_minutes = models.PositiveSmallIntegerField(default=15)
     external_database = models.CharField(max_length=128, blank=True, default='')
     external_company_id = models.CharField(max_length=128, blank=True, default='')
     external_company_name = models.CharField(max_length=255, blank=True, default='')
@@ -65,15 +74,34 @@ class IntegrationConnection(models.Model):
         db_table = 'integration_connections'
         indexes = [
             models.Index(fields=['workspace', 'provider', 'status'], name='int_conn_ws_prov_status_idx'),
+            models.Index(fields=['status', 'last_successful_sync_at'], name='int_conn_status_sync_idx'),
         ]
+
+
+class IntegrationDataHealthSnapshot(models.Model):
+    """Latest Odoo freshness, mapping and inventory coverage facts."""
+
+    connection = models.OneToOneField(IntegrationConnection, on_delete=models.CASCADE, related_name='data_health')
+    source_data_as_of = models.DateTimeField(null=True, blank=True)
+    source_observed_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=32, default='NO_DATA', db_index=True)
+    mapped_sku_count = models.PositiveIntegerField(default=0)
+    total_sku_count = models.PositiveIntegerField(default=0)
+    mapping_coverage_rate = models.DecimalField(max_digits=8, decimal_places=6, default=0)
+    verified_inventory_sku_count = models.PositiveIntegerField(default=0)
+    missing_cost_sku_count = models.PositiveIntegerField(default=0)
+    details_json = models.JSONField(default=dict, blank=True)
+    calculated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'integration_data_health_snapshots'
 
 
 class IntegrationSyncRun(models.Model):
     TYPE_VALIDATE = 'VALIDATE'
     TYPE_INITIAL = 'INITIAL'
     TYPE_INCREMENTAL = 'INCREMENTAL'
-    TYPE_RECONCILIATION = 'RECONCILIATION'
-    TYPE_CHOICES = [(TYPE_VALIDATE, 'Validate'), (TYPE_INITIAL, 'Initial'), (TYPE_INCREMENTAL, 'Incremental'), (TYPE_RECONCILIATION, 'Reconciliation')]
+    TYPE_CHOICES = [(TYPE_VALIDATE, 'Validate'), (TYPE_INITIAL, 'Initial'), (TYPE_INCREMENTAL, 'Incremental')]
     STATUS_PENDING = 'PENDING'
     STATUS_RUNNING = 'RUNNING'
     STATUS_COMPLETED = 'COMPLETED'
@@ -194,11 +222,10 @@ class IntegrationSkuMappingAudit(models.Model):
 
 
 class IntegrationSkuDailyMetric(models.Model):
-    """Provider-neutral operational facts used by ERP-backed screens.
+    """Odoo operational facts used by ERP-backed screens.
 
-    A metric is deliberately scoped to an integration connection and warehouse.
-    This prevents a later SAP adapter, or a second legal entity, from mutating
-    the CSV/legacy product projection owned by another source.
+    A metric is deliberately scoped to an integration connection and warehouse
+    so separate legal entities cannot mutate each other's read model.
     """
 
     connection = models.ForeignKey(
@@ -291,8 +318,23 @@ class IntegrationOperationalRiskAssessment(models.Model):
     product_name = models.CharField(max_length=512, blank=True, default='')
     category = models.CharField(max_length=100, blank=True, default='ERP')
     risk_class = models.CharField(max_length=20, db_index=True)
-    risk_probability = models.FloatField()
+    # Operational rules produce an attention priority, not a calibrated
+    # likelihood. A probability is populated only by an approved calibrated
+    # model, which Odoo's deterministic read model deliberately is not.
+    risk_probability = models.FloatField(null=True, blank=True)
     risk_score = models.FloatField(db_index=True)
+    # Keep the current Odoo queue on indexed columns.  ``evidence`` remains
+    # the immutable explanation payload, but it must not be cast on every
+    # list/filter/sort request once a merchant has a large catalogue.
+    priority_score = models.FloatField(null=True, blank=True, db_index=True)
+    sellable_stock_quantity = models.DecimalField(
+        max_digits=18, decimal_places=4, null=True, blank=True,
+    )
+    capital_exposure_vnd = models.DecimalField(
+        max_digits=20, decimal_places=2, null=True, blank=True, db_index=True,
+    )
+    days_since_last_sale = models.PositiveIntegerField(null=True, blank=True, db_index=True)
+    eligibility_status = models.CharField(max_length=32, blank=True, default='', db_index=True)
     primary_signals = models.JSONField(default=list)
     supporting_signals = models.JSONField(default=list)
     evidence = models.JSONField(default=dict)
@@ -314,5 +356,13 @@ class IntegrationOperationalRiskAssessment(models.Model):
             models.Index(
                 fields=['snapshot', '-risk_score', 'external_sku'],
                 name='int_op_risk_score_sku_idx',
+            ),
+            models.Index(
+                fields=['snapshot', 'risk_class', '-capital_exposure_vnd', 'external_sku'],
+                name='int_op_risk_class_cap_idx',
+            ),
+            models.Index(
+                fields=['snapshot', 'risk_class', '-days_since_last_sale', 'external_sku'],
+                name='int_op_risk_class_dsls_idx',
             ),
         ]

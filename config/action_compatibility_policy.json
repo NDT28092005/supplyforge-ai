@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "active_statuses": ["DRAFT", "CONFIRMED", "IN_PROGRESS"],
+  "passive_strategies": ["HOLD", "MONITOR", "REVIEW", "STOP_REPLENISHMENT"],
+  "conflicting_strategy_groups": [
+    ["DISCOUNT", "CLEARANCE", "PROMOTION", "BUNDLE"],
+    ["REPOSITION", "RETURN_TO_SUPPLIER", "DISCOUNT", "CLEARANCE", "PROMOTION", "BUNDLE"]
+  ],
+  "scope_rules": {
+    "warehouse_code": "Different explicit warehouses may run independently. A missing warehouse conflicts conservatively.",
+    "channel": "Different explicit channels may run independently. A missing channel conflicts conservatively."
+  }
+}

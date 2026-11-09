@@ -7,14 +7,15 @@
     "SEVERE_AGING": "Tuổi tồn kho đọng lâu vượt ngưỡng an toàn.",
     "HIGH_CAPITAL_EXPOSURE": "Quy mô vốn bị đóng băng trong hàng tồn kho vượt quá 10M VNĐ.",
     "VERY_LOW_DEMAND": "Tốc độ bán cực thấp hoặc không có giao dịch trong 30 ngày gần nhất.",
-    "HIGH_RECOVERY_VALUE": "Phương án tạo giá trị thu hồi vốn tối ưu.",
-    "HIGH_RECOVERY_OPPORTUNITY": "Tiềm năng giải phóng vốn tài chính cao.",
+    "HIGH_INVENTORY_COST_ROTATION": "Kịch bản có tỷ lệ giá vốn tồn dự kiến quay vòng cao, trong giới hạn dữ liệu và lợi nhuận.",
+    "HIGH_RECOVERY_VALUE": "Nhãn cũ: xem giá trị này là kịch bản giá vốn tồn quay vòng, không phải tiền thực nhận.",
+    "HIGH_RECOVERY_OPPORTUNITY": "Nhãn cũ: cần lập kịch bản có dữ liệu chi phí đầy đủ trước khi đánh giá quay vòng tồn.",
     "WITHIN_DISCOUNT_LIMIT": "Mức chiết khấu tuân thủ giới hạn an toàn lợi nhuận.",
-    "IMMEDIATE_CAPITAL_RELEASE": "Cần ưu tiên xử lý tức thì để giải phóng dòng tiền."
+    "IMMEDIATE_CAPITAL_RELEASE": "Nhãn cũ: cần ưu tiên rà soát phương án giảm tồn; không phải dự báo dòng tiền."
   },
   "standard_limitations": [
-    "Expected recovery value is simulation-based projection under scenario assumptions.",
-    "Actual cash release depends on merchant execution and market conditions.",
-    "Demand elasticity multipliers represent scenario assumptions, not official sales forecasts."
+    "Giá vốn tồn dự kiến quay vòng là kết quả kịch bản, không phải doanh thu, tiền thực nhận hay bút toán giải phóng vốn.",
+    "Kết quả thực tế cần được merchant ghi nhận hoặc đối soát ERP; số liệu quan sát không tự chứng minh tác động nhân quả.",
+    "Hệ số phản ứng giá chỉ được dùng khi có giả định được phê duyệt; nếu không, kịch bản dùng vận tốc bán quan sát làm đường cơ sở."
   ]
 }

@@ -1,0 +1,43 @@
+{
+  "schema_version": "slow-moving-alert-quality-v1",
+  "primary_horizon_days": 60,
+  "sensitivity_horizon_days": [30, 60, 90],
+  "label_grace_days": 14,
+  "high_risk_future_quantity_max": 5,
+  "critical_future_quantity": 0,
+  "confidence": {
+    "method": "wilson_one_sided",
+    "z_score": 1.645
+  },
+  "pilot": {
+    "minimum_matured_eligible_skus": 100,
+    "minimum_matured_opened_high_risk_alerts": 30,
+    "minimum_distinct_decision_cohorts": 3
+  },
+  "notification": {
+    "minimum_matured_eligible_skus": 500,
+    "minimum_matured_opened_high_risk_alerts": 100,
+    "minimum_matured_opened_critical_alerts": 30,
+    "minimum_distinct_decision_cohorts": 3,
+    "minimum_high_risk_precision": 0.7,
+    "minimum_high_risk_precision_wilson_lower": 0.6,
+    "minimum_high_risk_recall": 0.6,
+    "minimum_critical_precision": 0.8,
+    "minimum_critical_precision_wilson_lower": 0.65,
+    "minimum_eligible_data_coverage": 0.8,
+    "maximum_opened_alert_rate": 0.15,
+    "minimum_feedback_records": 30,
+    "maximum_adverse_feedback_rate": 0.15
+  },
+  "rollback": {
+    "minimum_opened_alerts_per_cohort": 20,
+    "consecutive_breaches": 2,
+    "minimum_high_risk_precision": 0.7,
+    "minimum_high_risk_precision_wilson_lower": 0.6,
+    "maximum_label_revision_rate": 0.02
+  },
+  "diagnostics": {
+    "minimum_slice_size": 30
+  },
+  "selection_boundary": "Quality gates assess immutable, mature outcomes only. Merchant feedback, live outcomes and held-out reports cannot alter score weights, eligibility thresholds or outcome labels."
+}

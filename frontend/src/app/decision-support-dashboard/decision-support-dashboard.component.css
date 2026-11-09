@@ -509,3 +509,312 @@
   justify-content: flex-end;
   gap: 10px;
 }
+
+:host {
+  display: block;
+  font-family: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+}
+
+/* Match the capital workspace: neutral surfaces for navigation and color only
+   where it communicates a financial or operational signal. */
+.decision-inbox-segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.decision-inbox-segments button {
+  background: #ffffff;
+  border: 1px solid #dce4ee;
+  border-radius: 0.625rem;
+  color: #475569;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.45rem 0.75rem;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.decision-inbox-segments button:hover,
+.decision-inbox-segments button.is-active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+}
+
+.decision-inbox-segments button:focus-visible,
+.decision-drawer button:focus-visible {
+  outline: 3px solid rgba(29, 95, 209, 0.24);
+  outline-offset: 2px;
+}
+
+.decision-drawer-backdrop {
+  align-items: stretch;
+  background: rgba(15, 23, 42, 0.44);
+  display: flex;
+  inset: 0;
+  justify-content: flex-end;
+  position: fixed;
+  z-index: 50;
+}
+
+.decision-drawer {
+  animation: decision-drawer-enter 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  background: #f4f7fb;
+  box-shadow: -24px 0 56px rgba(15, 23, 42, 0.2);
+  color: #0f172a;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  outline: none;
+  width: min(37.5rem, 100vw);
+}
+
+@keyframes decision-drawer-enter {
+  from { transform: translateX(2rem); opacity: 0.6; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.decision-drawer__header {
+  align-items: flex-start;
+  background: #ffffff;
+  border-bottom: 1px solid #dce4ee;
+  display: flex;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem 1rem;
+}
+
+.decision-drawer__eyebrow,
+.decision-brief__label,
+.decision-drawer__footer-label {
+  color: #64748b;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.decision-drawer__title {
+  color: #0f172a;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0.3rem 0 0;
+}
+
+.decision-drawer__subhead {
+  color: #94a3b8;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.6875rem;
+  margin: 0.3rem 0 0;
+}
+
+.decision-drawer__close,
+.decision-drawer__secondary-actions button,
+.decision-evidence__open,
+.decision-simulation__open {
+  background: #ffffff;
+  border: 1px solid #dce4ee;
+  border-radius: 0.625rem;
+  color: #334155;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.55rem 0.75rem;
+}
+
+.decision-drawer__close:hover,
+.decision-drawer__secondary-actions button:hover,
+.decision-evidence__open:hover,
+.decision-simulation__open:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.decision-steps {
+  background: #ffffff;
+  border-bottom: 1px solid #dce4ee;
+  display: grid;
+  gap: 0.25rem;
+  grid-template-columns: repeat(3, 1fr);
+  list-style: none;
+  margin: 0;
+  padding: 0.75rem 1.5rem;
+}
+
+.decision-steps li {
+  align-items: center;
+  color: #94a3b8;
+  display: flex;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.decision-steps span {
+  align-items: center;
+  background: #e2e8f0;
+  border-radius: 50%;
+  color: #64748b;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.625rem;
+  height: 1.125rem;
+  justify-content: center;
+  width: 1.125rem;
+}
+
+.decision-steps strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.decision-steps .is-current { color: #0f172a; }
+.decision-steps .is-current span { background: #e2e8f0; color: #0f172a; }
+.decision-steps .is-complete { color: #0f766e; }
+.decision-steps .is-complete span { background: #ccfbf1; color: #0f766e; }
+
+.decision-drawer__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1rem;
+  overflow-y: auto;
+  padding: 1rem 1.5rem 1.5rem;
+}
+
+.decision-brief {
+  background: #ffffff;
+  border: 1px solid #dce4ee;
+  border-radius: 0.875rem;
+  box-shadow: 0 12px 28px -28px rgba(15, 35, 63, 0.6);
+  color: #0f172a;
+  padding: 1.125rem;
+}
+
+.decision-brief__meta { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.decision-brief__label { color: #64748b; margin-top: 1rem; }
+.decision-brief__title { color: #0f172a; font-size: 1.125rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.3; margin: 0.35rem 0 0; }
+.decision-brief__tradeoff { color: #475569; font-size: 0.8125rem; line-height: 1.5; margin: 0.5rem 0 0; }
+.decision-brief__guardrail { background: #fffbeb; border: 1px solid #fde68a; border-radius: 0.5rem; color: #92400e; font-size: 0.75rem; line-height: 1.45; margin: 1rem 0 0; padding: 0.625rem 0.75rem; }
+
+.decision-impact {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.decision-impact div,
+.decision-simulation__results div {
+  background: #ffffff;
+  border: 1px solid #dce4ee;
+  border-radius: 0.625rem;
+  padding: 0.75rem;
+}
+
+.decision-impact span,
+.decision-simulation__results span { color: #64748b; display: block; font-size: 0.6875rem; line-height: 1.25; }
+.decision-impact strong,
+.decision-simulation__results strong { color: #0f172a; display: block; font-family: 'IBM Plex Mono', monospace; font-size: 0.8125rem; font-variant-numeric: tabular-nums; line-height: 1.3; margin-top: 0.35rem; }
+.decision-impact strong.decision-impact__label { font-family: 'Be Vietnam Pro', system-ui, sans-serif; font-variant-numeric: normal; font-weight: 600; }
+
+.decision-section {
+  background: #ffffff;
+  border: 1px solid #dce4ee;
+  border-radius: 0.875rem;
+  box-shadow: 0 12px 28px -28px rgba(15, 35, 63, 0.6);
+  padding: 1rem;
+}
+
+.decision-section__heading h3 { color: #0f172a; font-size: 0.875rem; font-weight: 700; margin: 0; }
+.decision-section__heading p { color: #64748b; font-size: 0.75rem; line-height: 1.45; margin: 0.3rem 0 0; }
+
+.decision-alternative {
+  align-items: flex-start;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.decision-alternative h4 { color: #334155; font-size: 0.8125rem; font-weight: 700; margin: 0; }
+.decision-alternative p { color: #64748b; font-size: 0.75rem; line-height: 1.45; margin: 0.25rem 0 0; }
+.decision-alternative__tag { background: #fffbeb; border: 1px solid #fde68a; border-radius: 999px; color: #92400e; flex: 0 0 auto; font-size: 0.625rem; font-weight: 700; padding: 0.2rem 0.4rem; }
+
+.decision-evidence__open,
+.decision-simulation__open { margin-top: 0.875rem; width: 100%; }
+.decision-evidence__content { color: #475569; font-size: 0.8125rem; line-height: 1.55; margin-top: 0.875rem; }
+.decision-evidence__content > p { margin: 0; }
+.decision-evidence__codes { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.75rem; }
+.decision-evidence__codes span { background: #f1f5f9; border-radius: 0.25rem; color: #475569; font-size: 0.6875rem; padding: 0.25rem 0.375rem; }
+.decision-evidence__list { border-top: 1px solid #e2e8f0; margin: 0.875rem 0 0; }
+.decision-evidence__list div { border-bottom: 1px solid #e2e8f0; display: grid; gap: 0.5rem; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); padding: 0.625rem 0; }
+.decision-evidence__list dt { color: #64748b; font-size: 0.6875rem; overflow-wrap: anywhere; }
+.decision-evidence__list dd { color: #334155; font-size: 0.75rem; margin: 0; overflow-wrap: anywhere; }
+.decision-evidence__list small { color: #64748b; display: block; font-size: 0.6875rem; line-height: 1.35; margin-top: 0.2rem; }
+.decision-evidence__guidance { background: #f8fafc; border-left: 3px solid #94a3b8; color: #475569; font-size: 0.75rem; line-height: 1.45; margin: 0.875rem 0 0; padding: 0.625rem 0.75rem; }
+.decision-evidence__guidance strong { color: #334155; display: block; margin-bottom: 0.25rem; }
+.decision-evidence__guidance span { display: block; margin-top: 0.2rem; }
+
+.decision-simulation { margin-top: 0.875rem; }
+.decision-simulation__notice { background: #f8fafc; border: 1px solid #dce4ee; border-radius: 0.5rem; color: #334155; font-size: 0.75rem; line-height: 1.45; margin: 0.75rem 0 0; padding: 0.625rem 0.75rem; }
+.decision-simulation__notice.is-warning { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.decision-simulation__results { display: grid; gap: 0.5rem; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0.75rem; }
+
+.decision-drawer__footer {
+  background: #ffffff;
+  border-top: 1px solid #dce4ee;
+  box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.05);
+  padding: 0.875rem 1.5rem 1.125rem;
+}
+
+.decision-drawer__footer > div:first-child p:last-child { color: #64748b; font-size: 0.75rem; line-height: 1.4; margin: 0.2rem 0 0; }
+.decision-drawer__primary-action { background: #0f172a; border: 1px solid #0f172a; border-radius: 0.625rem; color: #ffffff; cursor: pointer; font-size: 0.8125rem; font-weight: 700; margin-top: 0.75rem; padding: 0.7rem 0.875rem; width: 100%; }
+.decision-drawer__primary-action:hover { background: #334155; border-color: #334155; }
+.decision-drawer__primary-action:disabled { background: #e2e8f0; border-color: #e2e8f0; color: #64748b; cursor: not-allowed; }
+
+/* A compact operating brief, not another dashboard card: it answers whether
+   the merchant can use this decision and exactly what must be refreshed. */
+.decision-data-contract { border: 1px solid #dce3e8; border-left: 4px solid #64748b; border-radius: .875rem; overflow: hidden; }
+.decision-data-contract--ready { background: #f3faf7; border-color: #b7dfcf; border-left-color: #047857; }
+.decision-data-contract--needs-data { background: #fffaf0; border-color: #f1d39a; border-left-color: #b45309; }
+.decision-data-contract--check-source { background: #f8fafc; border-left-color: #475569; }
+.decision-data-contract__headline { align-items: start; display: flex; gap: 1rem; justify-content: space-between; padding: 1rem 1rem .8rem; }
+.decision-data-contract__headline h3 { color: #17212b; font-size: .9rem; font-weight: 750; margin: 0; }.decision-data-contract__headline p { color: #53616d; font-size: .78rem; line-height: 1.5; margin: .3rem 0 0; max-width: 38rem; }.decision-data-contract__headline > span { color: #53616d; font-size: .75rem; line-height: 1.35; max-width: 10rem; text-align: right; }
+.decision-data-contract__facts { background: rgba(255,255,255,.54); border-bottom: 1px solid rgba(148,163,184,.2); border-top: 1px solid rgba(148,163,184,.2); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }.decision-data-contract__facts > div { padding: .7rem 1rem; }.decision-data-contract__facts > div:nth-child(odd) { border-right: 1px solid rgba(148,163,184,.2); }.decision-data-contract__facts > div:nth-child(-n+2) { border-bottom: 1px solid rgba(148,163,184,.2); }.decision-data-contract__facts dt { color: #53616d; font-size: .7rem; font-weight: 700; }.decision-data-contract__facts dd { color: #8a4b08; font-size: .76rem; line-height: 1.35; margin: .22rem 0 0; }.decision-data-contract__facts .is-ready dd { color: #086c55; }
+.decision-data-contract__reasons { color: #7c4210; font-size: .76rem; line-height: 1.45; list-style: disc; margin: .8rem 1rem .45rem 2rem; }.decision-data-contract__refresh-rule { color: #53616d; font-size: .75rem; line-height: 1.45; margin: .75rem 1rem 1rem; }
+@media (max-width: 560px) { .decision-data-contract__headline { flex-direction: column; gap: .4rem; }.decision-data-contract__headline > span { max-width: none; text-align: left; }.decision-data-contract__facts { grid-template-columns: 1fr; }.decision-data-contract__facts > div:nth-child(odd) { border-right: 0; }.decision-data-contract__facts > div:not(:last-child) { border-bottom: 1px solid rgba(148,163,184,.2); } }
+.decision-drawer__secondary-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+.decision-drawer__secondary-actions button { flex: 1; }
+
+/* A plan started from a decision stays attached to that decision flow. */
+.plan-modal-overlay--from-decision {
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 0;
+  z-index: 60;
+}
+
+.plan-modal-panel--from-decision {
+  border-radius: 0;
+  box-shadow: -24px 0 56px rgba(15, 23, 42, 0.2);
+  height: 100dvh;
+  max-height: none;
+  max-width: 37.5rem;
+}
+
+@media (max-width: 640px) {
+  .decision-drawer-backdrop { align-items: flex-end; }
+  .decision-drawer { border-radius: 1.25rem 1.25rem 0 0; height: min(94dvh, 50rem); width: 100%; }
+  .decision-drawer__header, .decision-drawer__body, .decision-drawer__footer { padding-left: 1rem; padding-right: 1rem; }
+  .decision-steps { padding-left: 1rem; padding-right: 1rem; }
+  .decision-steps li { font-size: 0.625rem; }
+  .plan-modal-overlay--from-decision { align-items: flex-end; }
+  .plan-modal-panel--from-decision { border-radius: 1.25rem 1.25rem 0 0; height: min(94dvh, 50rem); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .decision-drawer { animation: none; }
+  .decision-inbox-segments button { transition: none; }
+}

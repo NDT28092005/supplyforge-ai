@@ -1,7 +1,7 @@
 """
 SupplyForge AI — Celery Background Tasks
 ===========================================
-All long-running tasks for file imports and Shopee sync operations.
+All long-running tasks for file imports and Odoo sync operations.
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ def run_integration_sync(self, run_id: str) -> dict:
     from supplyforge.models import BackgroundJob, IntegrationConnection, IntegrationSyncRun
     from supplyforge.services.integration_security import decrypt_credentials
     from supplyforge.services.integration_sync import OdooMetricProjectionService
+    from supplyforge.services.integration_health import IntegrationHealthService
     from supplyforge.services.odoo_connector import OdooConnector, OdooConnectorError
 
     started_monotonic = time.monotonic()
@@ -71,9 +72,9 @@ def run_integration_sync(self, run_id: str) -> dict:
         connection.save(update_fields=['status', 'updated_at'])
         if job:
             BackgroundJob.objects.filter(id=job.id).update(status='RUNNING', progress_pct=20, current_stage='INTEGRATION_SYNC')
-        credentials = decrypt_credentials(connection.credential_encrypted)
         if connection.provider != 'ODOO':
-            raise OdooConnectorError('Provider chưa có worker đồng bộ.')
+            raise ValueError('SupplyForge chỉ hỗ trợ kết nối Odoo.')
+        credentials = decrypt_credentials(connection.credential_encrypted)
         connector = OdooConnector(connection.base_url, credentials['database'], credentials['username'], credentials['api_key'])
         projection = OdooMetricProjectionService(connection, connector)
         if run.run_type == 'VALIDATE':
@@ -86,7 +87,9 @@ def run_integration_sync(self, run_id: str) -> dict:
         # Validation alone only proves that the service account is valid. A
         # connection becomes active after the merchant has selected a company
         # and at least one warehouse, preventing empty scheduled pulls.
-        connection.status = 'ACTIVE' if connection.external_company_id and connection.warehouse_ids else 'DRAFT'
+        connection.status = (
+            'ACTIVE' if connection.external_company_id and connection.warehouse_ids else 'DRAFT'
+        ) if connection.provider == 'ODOO' else 'ACTIVE'
         connection.last_successful_sync_at = timezone.now()
         connection.last_error_code = ''
         connection.last_error_message = ''
@@ -101,7 +104,7 @@ def run_integration_sync(self, run_id: str) -> dict:
         connection.save(update_fields=['status', 'last_successful_sync_at', 'last_error_code', 'last_error_message', 'cursor_json', 'updated_at'])
         # A sync worker is the only place that materialises the operational
         # dashboard source. CSV/LightGBM assessments remain untouched.
-        if run.run_type in {'INITIAL', 'INCREMENTAL'}:
+        if run.run_type in {'INITIAL', 'INCREMENTAL'} and connection.provider == 'ODOO':
             try:
                 from supplyforge.services.operational_analytics import OdooOperationalAnalyticsService
                 summary['operational_analytics'] = OdooOperationalAnalyticsService.refresh(connection)
@@ -115,6 +118,28 @@ def run_integration_sync(self, run_id: str) -> dict:
                     'status': 'FAILED',
                     'reason': 'ANALYTICS_REFRESH_FAILED',
                 }
+            try:
+                from supplyforge.services.erp_inventory_snapshot import ErpInventorySnapshotProjectionService
+                summary['inventory_snapshot_projection'] = ErpInventorySnapshotProjectionService.refresh(connection)
+            except Exception:
+                logger.exception('ERP inventory snapshot projection failed for connection=%s', connection.id)
+                summary['inventory_snapshot_projection'] = {
+                    'status': 'FAILED',
+                    'reason': 'INVENTORY_SNAPSHOT_PROJECTION_FAILED',
+                }
+            try:
+                from supplyforge.services.action_outcome_reconciliation import ActionOutcomeReconciliationService
+                summary['action_outcome_reconciliation'] = ActionOutcomeReconciliationService.reconcile_connection(
+                    connection=connection
+                )
+            except Exception:
+                logger.exception('ERP action outcome reconciliation failed for connection=%s', connection.id)
+                summary['action_outcome_reconciliation'] = {
+                    'status': 'FAILED',
+                    'reason': 'ACTION_OUTCOME_RECONCILIATION_FAILED',
+                }
+        if run.run_type in {'INITIAL', 'INCREMENTAL'}:
+            summary['data_health'] = IntegrationHealthService.refresh(connection)
         run.status, run.finished_at, run.summary, run.cursor_after = 'COMPLETED', timezone.now(), summary, connection.cursor_json
         run.save(update_fields=['status', 'finished_at', 'summary', 'cursor_after'])
         if job:
@@ -130,12 +155,12 @@ def run_integration_sync(self, run_id: str) -> dict:
         return summary
     except Exception as exc:
         logger.exception('Integration sync failed for run=%s', run_id)
-        code = 'ODOO_SYNC_FAILED' if run.run_type != 'VALIDATE' else 'CONNECTION_VALIDATION_FAILED'
-        public_message = str(exc)[:512] if isinstance(exc, OdooConnectorError) else 'Không thể xác thực hoặc đọc dữ liệu Odoo.'
+        code = f'{connection.provider}_SYNC_FAILED' if run.run_type != 'VALIDATE' else 'CONNECTION_VALIDATION_FAILED'
+        public_message = str(exc)[:512] if isinstance(exc, (OdooConnectorError, ValueError)) else 'Không thể xác thực hoặc đọc dữ liệu từ Odoo.'
         IntegrationConnection.objects.filter(id=connection.id).update(status='ERROR', last_error_code=code, last_error_message=public_message)
         IntegrationSyncRun.objects.filter(id=run.id).update(status='FAILED', finished_at=timezone.now(), error_code=code, error_message=public_message)
         if job:
-            BackgroundJob.objects.filter(id=job.id).update(status='FAILED', error_message='Đồng bộ Odoo thất bại.', completed_at=timezone.now())
+            BackgroundJob.objects.filter(id=job.id).update(status='FAILED', error_message=f'Đồng bộ {connection.display_name} thất bại.', completed_at=timezone.now())
         from supplyforge.metrics import record_erp_sync
         record_erp_sync(
             provider=connection.provider,
@@ -156,11 +181,13 @@ def run_integration_sync(self, run_id: str) -> dict:
     acks_late=True,
 )
 def refresh_integration_operational_analytics(self, connection_id: str) -> dict:
-    """Refresh the ERP dashboard source after SKU mapping governance changes."""
+    """Refresh the affected read model after a governed SKU mapping change."""
     from supplyforge.models import IntegrationConnection
-    from supplyforge.services.operational_analytics import OdooOperationalAnalyticsService
 
     connection = IntegrationConnection.objects.get(id=connection_id)
+    if connection.provider != IntegrationConnection.PROVIDER_ODOO:
+        raise ValueError('SupplyForge chỉ hỗ trợ kết nối Odoo.')
+    from supplyforge.services.operational_analytics import OdooOperationalAnalyticsService
     return OdooOperationalAnalyticsService.refresh(connection)
 
 
@@ -228,12 +255,28 @@ def enqueue_due_integration_syncs() -> dict:
     """Schedule 15-minute incremental pulls without overlapping a connection."""
     from supplyforge.models import IntegrationConnection, IntegrationSyncRun
 
-    due_before = timezone.now() - timedelta(minutes=15)
-    connections = IntegrationConnection.objects.filter(status='ACTIVE').exclude(external_company_id='').filter(
-        last_successful_sync_at__lt=due_before,
-    ).exclude(sync_runs__status__in=['PENDING', 'RUNNING']).distinct()
+    # The indexed coarse filter keeps Beat from scanning every active source;
+    # the per-connection interval below remains the final due decision.
+    earliest_due_before = timezone.now() - timedelta(minutes=1)
+    connections = IntegrationConnection.objects.filter(
+        status='ACTIVE', last_successful_sync_at__lte=earliest_due_before,
+    ).exclude(
+        sync_runs__status__in=['PENDING', 'RUNNING'],
+    ).distinct()
     queued = 0
     for connection in connections.iterator():
+        # Odoo remains scoped to a selected company and warehouse. Seller
+        # sources already receive their scope through OAuth, so they do not
+        # inherit this ERP-only gate.
+        if connection.provider == IntegrationConnection.PROVIDER_ODOO and (
+            not connection.external_company_id or not connection.warehouse_ids
+        ):
+            continue
+        due_before = timezone.now() - timedelta(
+            minutes=max(1, connection.sync_interval_minutes)
+        )
+        if connection.last_successful_sync_at and connection.last_successful_sync_at > due_before:
+            continue
         run = IntegrationSyncRun.objects.create(
             connection=connection,
             run_type='INCREMENTAL',
@@ -254,6 +297,116 @@ def enqueue_due_integration_syncs() -> dict:
         job.save(update_fields=['celery_task_id', 'updated_at'])
         queued += 1
     return {'queued': queued, 'evaluated_at': timezone.now().isoformat()}
+
+
+@shared_task(
+    name='supplyforge.tasks.send_due_action_plan_reminders',
+    queue='decision_worker',
+    max_retries=2,
+    default_retry_delay=60,
+    acks_late=True,
+)
+def send_due_action_plan_reminders() -> dict:
+    """Deliver in-app/email deadline reminders with an idempotent delivery ledger."""
+    from supplyforge.services.action_execution import ActionReminderService
+    return ActionReminderService.send_due_reminders()
+
+
+@shared_task(
+    bind=True,
+    name='supplyforge.tasks.submit_supplier_return_request',
+    queue='integration_worker',
+    max_retries=2,
+    default_retry_delay=60,
+    acks_late=True,
+)
+def submit_supplier_return_request(self, request_id: int) -> dict:
+    """Send exactly one approved return request through the narrow Odoo write surface."""
+    from supplyforge.services.supplier_return import SupplierReturnService
+    try:
+        return SupplierReturnService.submit(request_id)
+    except (ValueError, Exception) as exc:
+        # The persisted request carries the visible failure; retries only cover
+        # transient connector faults rather than approval/data validation errors.
+        if isinstance(exc, ValueError):
+            raise
+        raise self.retry(exc=exc)
+
+
+@shared_task(
+    name='supplyforge.tasks.mature_temporal_shadow_predictions',
+    queue='ml_worker',
+    acks_late=True,
+)
+def mature_temporal_shadow_predictions() -> dict:
+    """Mature eligible SHADOW/CANARY cohorts once per day.
+
+    The task only reconstructs the predeclared 60-day demand label and emits
+    monitoring quality. It neither retrains a candidate nor interprets the
+    result as inventory, capital, or causal action impact.
+    """
+    from supplyforge.services.temporal_shadow_monitoring import TemporalShadowMonitoringService
+
+    lock_key = 'sf:temporal-shadow-monitoring:daily'
+    try:
+        acquired = cache.add(lock_key, '1', timeout=55 * 60)
+    except Exception:
+        acquired = True
+    if not acquired:
+        return {'status': 'SKIPPED', 'reason': 'monitoring_already_running'}
+    try:
+        maturity = TemporalShadowMonitoringService.mature_outcomes()
+        quality = TemporalShadowMonitoringService.quality_report()
+        alerts = sum(1 for cohort in quality['cohorts'] if cohort['drift_status'] == 'ALERT')
+        summary = {
+            'status': 'COMPLETED',
+            'evaluated_at': timezone.now().isoformat(),
+            'maturity': maturity,
+            'matured_prediction_count': quality['matured_prediction_count'],
+            'cohort_count': quality['cohort_count'],
+            'probability_drift_alert_count': alerts,
+            'scope': quality['scope'],
+        }
+        logger.info('Temporal SHADOW monitoring completed: %s', summary)
+        return summary
+    finally:
+        try:
+            cache.delete(lock_key)
+        except Exception:
+            pass
+
+
+@shared_task(
+    name='supplyforge.tasks.mature_slow_moving_outcomes',
+    queue='data_worker',
+    acks_late=True,
+)
+def mature_slow_moving_outcomes() -> dict:
+    """Mature slow-moving 30/60/90-day outcome cohorts without retuning rules."""
+    from supplyforge.services.slow_moving_outcomes import SlowMovingOutcomeService
+
+    lock_key = 'sf:slow-moving-outcomes:daily'
+    try:
+        acquired = cache.add(lock_key, '1', timeout=55 * 60)
+    except Exception:
+        acquired = True
+    if not acquired:
+        return {'status': 'SKIPPED', 'reason': 'monitoring_already_running'}
+    try:
+        maturity = SlowMovingOutcomeService.mature_outcomes()
+        summary = {
+            'status': 'COMPLETED',
+            'evaluated_at': timezone.now().isoformat(),
+            'maturity': maturity,
+            'scope': 'Future net fulfilled demand only; no inventory, capital, or causal action claim.',
+        }
+        logger.info('Slow-moving outcome maturation completed: %s', summary)
+        return summary
+    finally:
+        try:
+            cache.delete(lock_key)
+        except Exception:
+            pass
 
 
 class ImportCancelled(RuntimeError):
@@ -473,6 +626,20 @@ def _stage_profile(job: BackgroundJob, context: dict) -> dict:
     session.column_types_json = profile.column_types
     session.preview_rows_json = profile.preview_rows
     session.missing_values_json = profile.missing_values
+    # Keep the source's final observed date as the later decision cutoff.
+    # Import completion time is operational metadata, not demand evidence.
+    try:
+        session.date_range_start = (
+            datetime.strptime(profile.date_range_start, '%Y-%m-%d').date()
+            if profile.date_range_start else None
+        )
+        session.date_range_end = (
+            datetime.strptime(profile.date_range_end, '%Y-%m-%d').date()
+            if profile.date_range_end else None
+        )
+    except (TypeError, ValueError):
+        session.date_range_start = None
+        session.date_range_end = None
     session.dataset_profile_json = {
         'totalRows': profile.total_rows,
         'totalColumns': profile.total_columns,
@@ -481,7 +648,10 @@ def _stage_profile(job: BackgroundJob, context: dict) -> dict:
         'previewRows': profile.preview_rows,
         'missingValues': profile.missing_values,
         'uniqueSkus': getattr(profile, 'unique_skus', getattr(profile, 'unique_sku_count', 0)),
-        'dateRange': getattr(profile, 'date_range', {}),
+        'dateRange': {
+            'start': profile.date_range_start,
+            'end': profile.date_range_end,
+        },
     }
     if session.raw_storage_path:
         extension = os.path.splitext(session.original_filename)[1].lower() or '.csv'
@@ -492,7 +662,7 @@ def _stage_profile(job: BackgroundJob, context: dict) -> dict:
     session.status = 'PROFILED'
     session.save(update_fields=[
         'total_rows', 'total_columns', 'headers_json', 'column_types_json',
-        'preview_rows_json', 'missing_values_json', 'dataset_profile_json',
+        'preview_rows_json', 'missing_values_json', 'date_range_start', 'date_range_end', 'dataset_profile_json',
         'lake_storage_path', 'status', 'updated_at'
     ])
 
@@ -565,12 +735,30 @@ def _stage_import(job: BackgroundJob, context: dict) -> dict:
                 workspace_id=job.workspace_id,
                 force_reset=session.session_type == 'INITIAL',
                 chunk_size=settings.INGESTION_CHUNK_ROW_SIZE,
+                # Publish one operational run only after the dataset version
+                # is active; the legacy hook uses a different source path.
+                run_post_import_hooks=False,
                 progress_callback=lambda payload: progress_report({
                     **payload,
                     **silver_progress,
                 }),
             )
             LakehouseIngestionService.record_import_result(dataset_version, import_res)
+
+        # The importer has the mapped business-date column, so it is more
+        # authoritative than profiler heuristics when defining CSV as-of time.
+        temporal_range = import_res.get('temporal_range') or {}
+        try:
+            incoming_start = temporal_range.get('incoming_start')
+            incoming_end = temporal_range.get('incoming_end')
+            if incoming_start:
+                session.date_range_start = datetime.strptime(incoming_start, '%Y-%m-%d').date()
+            if incoming_end:
+                session.date_range_end = datetime.strptime(incoming_end, '%Y-%m-%d').date()
+            if incoming_start or incoming_end:
+                session.save(update_fields=['date_range_start', 'date_range_end', 'updated_at'])
+        except (TypeError, ValueError):
+            logger.warning('Could not persist CSV temporal range for session=%s.', session.id)
 
         gold_payload = LakehouseIngestionService.materialize_gold(dataset_version)
         dataset_version = LakehouseIngestionService.promote(dataset_version)
@@ -589,19 +777,36 @@ def _stage_ml_inference(job: BackgroundJob, context: dict) -> dict:
     session = job.ingestion_session
     _update_stage_progress(job, 'ML_INFERENCE', 30, 'PROCESSING', 85)
 
-    from supplyforge.views.risk_assessment_api import _auto_populate_assessments_from_products
     try:
-        if session:
-            _auto_populate_assessments_from_products(str(session.id))
+        dataset_version_id = context.get('dataset_version_id')
+        if dataset_version_id:
+            from supplyforge.models import DatasetVersion
+            from supplyforge.services.slow_moving_run_service import SlowMovingRunService
+
+            version = DatasetVersion.objects.get(
+                id=dataset_version_id,
+                workspace_id=job.workspace_id,
+            )
+            slow_moving_run = SlowMovingRunService.run_csv_for_dataset(version)
             # The capital read model is calculated by the worker immediately
             # after risk assessments are persisted, never by a dashboard GET.
             from supplyforge.services.capital_exposure_service import CapitalExposureAnalysisService
 
             CapitalExposureAnalysisService.ensure_current_analysis(job.workspace_id)
-        context['ml_result'] = {'status': 'SUCCESS'}
+            context['ml_result'] = {
+                'status': 'SUCCESS',
+                'slow_moving_run_id': str(slow_moving_run.id),
+                'analysis_as_of': slow_moving_run.analysis_as_of.isoformat(),
+            }
+        else:
+            context['ml_result'] = {'status': 'SKIPPED', 'reason': 'DATASET_VERSION_MISSING'}
     except Exception as e:
-        logger.warning(f"Batch ML Inference notice for job {job.id}: {e}")
-        context['ml_result'] = {'status': 'SKIPPED_OR_BASELINE'}
+        # Publishing a current risk run is a required operational stage.  Do
+        # not mark an import successful while the dashboard would otherwise
+        # serve an older source or no trustworthy assessment at all.
+        logger.exception('Slow-moving operational run failed for import job %s.', job.id)
+        context['ml_result'] = {'status': 'FAILED', 'reason': str(e)[:512]}
+        raise
 
     dataset_version_id = context.get('dataset_version_id')
     if dataset_version_id:
@@ -811,135 +1016,9 @@ def process_file_import_async(self, file_path, mapping_rule, user_id):
         raise e
 
 
-@shared_task(
-    bind=True,
-    queue='integration_worker',
-    max_retries=2,
-    default_retry_delay=60,
-    acks_late=True,
-)
-def sync_shopee_products_task(self, connection_id: int) -> dict | None:
-    """
-    Celery task: delta-sync products & variations for a given ShopeeConnection.
-    """
-    lock_key = f'shopee_sync_products_lock:{connection_id}'
+@shared_task(queue='data_worker', acks_late=True)
+def capture_slow_moving_candidate_shadow(run_id: str) -> dict:
+    """Capture governed SHADOW/CANARY diagnostics outside the rule run path."""
+    from supplyforge.services.slow_moving_candidate_shadow import SlowMovingCandidateShadowService
 
-    if not _acquire_redis_lock(lock_key):
-        logger.info(
-            '[CeleryTask] sync_shopee_products_task SKIPPED for connection_id=%d — lock held.',
-            connection_id,
-        )
-        return None
-
-    try:
-        from supplyforge.models import SyncLog
-        from supplyforge.services.shopee_sync import ShopeeSyncService
-
-        last_sync = (
-            SyncLog.objects
-            .filter(
-                connection_id=connection_id,
-                sync_type='PRODUCT',
-                event_type='SYNC_COMPLETED',
-            )
-            .order_by('-finished_at')
-            .values_list('finished_at', flat=True)
-            .first()
-        )
-
-        if last_sync:
-            time_from = int(last_sync.timestamp())
-        else:
-            time_from = int(time.time()) - (30 * 24 * 3600)
-
-        time_to = int(time.time())
-
-        logger.info(
-            '[CeleryTask] sync_shopee_products_task START connection_id=%d window=[%d → %d]',
-            connection_id, time_from, time_to,
-        )
-
-        stats = ShopeeSyncService.sync_products(connection_id, time_from, time_to)
-
-        logger.info(
-            '[CeleryTask] sync_shopee_products_task DONE connection_id=%d stats=%s',
-            connection_id, stats,
-        )
-        return stats
-
-    except Exception as exc:
-        logger.exception(
-            '[CeleryTask] sync_shopee_products_task FAILED connection_id=%d',
-            connection_id,
-        )
-        raise self.retry(exc=exc)
-
-    finally:
-        _release_redis_lock(lock_key)
-
-
-@shared_task(
-    bind=True,
-    queue='integration_worker',
-    max_retries=2,
-    default_retry_delay=60,
-    acks_late=True,
-)
-def sync_shopee_orders_task(self, connection_id: int) -> dict | None:
-    """
-    Celery task: delta-sync orders for a given ShopeeConnection.
-    """
-    lock_key = f'shopee_sync_orders_lock:{connection_id}'
-
-    if not _acquire_redis_lock(lock_key):
-        logger.info(
-            '[CeleryTask] sync_shopee_orders_task SKIPPED for connection_id=%d — lock held.',
-            connection_id,
-        )
-        return None
-
-    try:
-        from supplyforge.models import SyncLog
-        from supplyforge.services.shopee_sync import ShopeeSyncService
-
-        last_sync = (
-            SyncLog.objects
-            .filter(
-                connection_id=connection_id,
-                sync_type='ORDER',
-                event_type='SYNC_COMPLETED',
-            )
-            .order_by('-finished_at')
-            .values_list('finished_at', flat=True)
-            .first()
-        )
-
-        if last_sync:
-            time_from = int(last_sync.timestamp())
-        else:
-            time_from = int(time.time()) - (15 * 24 * 3600)
-
-        time_to = int(time.time())
-
-        logger.info(
-            '[CeleryTask] sync_shopee_orders_task START connection_id=%d window=[%d → %d]',
-            connection_id, time_from, time_to,
-        )
-
-        stats = ShopeeSyncService.sync_orders(connection_id, time_from, time_to)
-
-        logger.info(
-            '[CeleryTask] sync_shopee_orders_task DONE connection_id=%d stats=%s',
-            connection_id, stats,
-        )
-        return stats
-
-    except Exception as exc:
-        logger.exception(
-            '[CeleryTask] sync_shopee_orders_task FAILED connection_id=%d',
-            connection_id,
-        )
-        raise self.retry(exc=exc)
-
-    finally:
-        _release_redis_lock(lock_key)
+    return SlowMovingCandidateShadowService.capture_run(str(run_id))

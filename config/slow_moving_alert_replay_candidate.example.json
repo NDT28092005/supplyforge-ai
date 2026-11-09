@@ -1,0 +1,11 @@
+{
+  "schema_version": "slow-moving-alert-replay-v1",
+  "version": "proposal-example-v1",
+  "risk_boundaries": {
+    "medium_at_or_above": 40,
+    "high_at_or_above": 65,
+    "critical_at_or_above": 85
+  },
+  "consecutive_runs_to_open": 2,
+  "eligibility_context_policy": "UNCHANGED"
+}

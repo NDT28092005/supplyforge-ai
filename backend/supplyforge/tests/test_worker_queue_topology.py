@@ -7,8 +7,6 @@ from supplyforge.tasks import (
     process_integration_event,
     refresh_integration_operational_analytics,
     run_integration_sync,
-    sync_shopee_orders_task,
-    sync_shopee_products_task,
 )
 
 
@@ -31,8 +29,6 @@ class WorkerQueueTopologyTests(SimpleTestCase):
             refresh_integration_operational_analytics,
             process_integration_event,
             enqueue_due_integration_syncs,
-            sync_shopee_products_task,
-            sync_shopee_orders_task,
         ):
             self.assertEqual(task.queue, 'integration_worker')
 

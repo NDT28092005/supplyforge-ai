@@ -45,6 +45,8 @@ class TestRecoveryStrategyEngine(TestCase):
                 "aging_bucket": "SEVERELY_STALE"
             }
         )
+        self.ctx_critical["has_positive_recent_demand"] = True
+        self.ctx_critical["observation_period_days"] = 90
         self.el_critical = self.el_engine.evaluate_sku_eligibility(self.ctx_critical)
 
         # SKU 2: Low Risk SKU

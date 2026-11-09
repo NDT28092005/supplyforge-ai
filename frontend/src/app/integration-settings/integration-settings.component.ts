@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '../api.service';
 import { PageMotionDirective } from '../core/motion/page-motion.directive';
 
-type RunType = 'validate' | 'initial-sync' | 'sync' | 'reconcile';
+type RunType = 'validate' | 'initial-sync' | 'sync';
 type MappingFilter = 'NEEDS_REVIEW' | 'LINKED' | 'IGNORED';
 type MappingAction = 'CONFIRM' | 'IGNORE' | 'REOPEN' | 'UNLINK';
 
@@ -58,6 +58,17 @@ interface OdooConnection {
   unmapped_sku_count: number;
   latest_run: any;
   discovery?: any;
+  provider_label?: string;
+  provider_category?: string;
+  auth_mode?: string;
+  data_health?: {
+    status: string;
+    source_data_as_of: string | null;
+    source_observed_at: string | null;
+    mapping: { mapped_sku_count: number; total_sku_count: number; coverage_rate: number };
+    verified_inventory_sku_count: number;
+    missing_cost_sku_count: number;
+  } | null;
 }
 
 @Component({
@@ -69,6 +80,7 @@ interface OdooConnection {
 })
 export class IntegrationSettingsComponent implements OnInit, OnDestroy {
   connections: OdooConnection[] = [];
+  erpEntitled = false;
   activeConnectionId = '';
   overview: any = null;
   mappings: SkuMapping[] = [];
@@ -138,6 +150,7 @@ export class IntegrationSettingsComponent implements OnInit, OnDestroy {
       next: (response) => {
         this.isLoading = false;
         this.entitled = true;
+        this.erpEntitled = Boolean(response?.erp_entitled);
         this.connections = Array.isArray(response?.connections) ? response.connections : [];
         if (!this.activeConnectionId || !this.connections.some(item => item.id === this.activeConnectionId)) {
           this.activeConnectionId = this.connections[0]?.id || '';
@@ -149,7 +162,7 @@ export class IntegrationSettingsComponent implements OnInit, OnDestroy {
         this.isLoading = false;
         const payload = error?.error?.error;
         this.entitled = payload?.code !== 'FEATURE_NOT_ENTITLED';
-        this.errorMessage = payload?.message || 'Không thể tải cấu hình kết nối ERP.';
+        this.errorMessage = payload?.message || 'Không thể tải cấu hình nguồn dữ liệu.';
       },
     });
   }
@@ -356,7 +369,7 @@ export class IntegrationSettingsComponent implements OnInit, OnDestroy {
         this.mappingDialog = null;
         this.mappingNote = '';
         const refreshNote = updated?.operational_refresh?.status === 'QUEUED'
-          ? ' Danh mục Odoo đang được làm mới.'
+          ? ' Dữ liệu liên kết đang được làm mới.'
           : '';
         this.successMessage = this.mappingActionMessage(action, updated?.canonical_sku || mapping.external_sku) + refreshNote;
         this.loadMappings(this.mappingPagination.page);
@@ -429,12 +442,40 @@ export class IntegrationSettingsComponent implements OnInit, OnDestroy {
 
   runLabel(runType: RunType): string {
     const messages: Record<RunType, string> = {
-      validate: 'Đang xác thực quyền đọc và tải danh sách company, kho.',
+      validate: 'Đang xác thực quyền đọc và tải danh sách công ty, kho.',
       'initial-sync': 'Đang nạp lịch sử vận hành trong 12 tháng.',
       sync: 'Đang đồng bộ phần dữ liệu thay đổi gần đây.',
-      reconcile: 'Đang đối soát tồn khả dụng giữa Odoo và SupplyForge.',
     };
     return messages[runType];
+  }
+
+  providerName(connection: OdooConnection | undefined | null): string {
+    return connection?.provider_label || connection?.display_name || 'Nguồn dữ liệu';
+  }
+
+  statusLabel(status: string): string {
+    const labels: Record<string, string> = {
+      ACTIVE: 'Đang hoạt động', DRAFT: 'Chờ kết nối', VALIDATING: 'Đang xác thực',
+      ERROR: 'Cần xử lý', PAUSED: 'Tạm dừng', DISCONNECTED: 'Đã ngắt kết nối',
+    };
+    return labels[status] || 'Chưa rõ trạng thái';
+  }
+
+  healthStatusLabel(status: string | undefined): string {
+    const labels: Record<string, string> = {
+      READY: 'Dữ liệu sẵn sàng', STALE: 'Dữ liệu cần làm mới',
+      MAPPING_REQUIRED: 'Cần liên kết SKU', INVENTORY_REQUIRED: 'Thiếu dữ liệu tồn kho',
+      NO_DATA: 'Chưa có dữ liệu',
+    };
+    return labels[status || ''] || 'Đang kiểm tra dữ liệu';
+  }
+
+  runTypeLabel(type: string | undefined): string {
+    const labels: Record<string, string> = {
+      VALIDATE: 'Xác thực nguồn', INITIAL: 'Nạp dữ liệu ban đầu',
+      INCREMENTAL: 'Đồng bộ dữ liệu mới',
+    };
+    return labels[type || ''] || 'Chưa có lượt chạy';
   }
 
   formatNumber(value: number | undefined | null): string {

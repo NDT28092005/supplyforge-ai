@@ -11,13 +11,18 @@ GET  /api/v2/ingestion/sessions        List all sessions for workspace
 import logging
 import os
 import json
+import hashlib
 
+from django.conf import settings
+from django.core import signing
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
+from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 
-from supplyforge.models import IngestionSession, Workspace
+from supplyforge.models import IngestionSession, TenantDeletionAudit, Workspace
 from supplyforge.services.csv_profiler import StreamingCSVProfiler, humanize_bytes
 from supplyforge.services.ingestion import DynamicFileImportService
 from supplyforge.services.storage_backend import StorageBackend
@@ -136,26 +141,42 @@ def ingestion_upload(request):
         file_obj.seek(0)
 
     hdr_key = request.headers.get('Idempotency-Key') if hasattr(request, 'headers') and hasattr(request.headers, 'get') else None
-    idempotency_key = hdr_key or request.data.get('idempotencyKey') or file_hash
+    client_idempotency_key = str(hdr_key or request.data.get('idempotencyKey') or '').strip()
+    idempotency_key = client_idempotency_key or file_hash
 
-    # Check for Idempotent retry within workspace (IR-020)
-    existing_session = IngestionSession.objects.filter(
+    # A key identifies one user action, not the file itself.  File hashes are
+    # still used as a compatibility fallback for older clients, but a new
+    # explicit import action must be able to profile the same CSV again.
+    active_statuses = ['UPLOADING', 'PROFILING', 'PROFILED', 'MAPPING', 'QUEUED', 'PROCESSING']
+    active_sessions = IngestionSession.objects.filter(
         workspace=workspace,
         file_hash=file_hash,
-        status__in=['PROFILED', 'COMPLETED', 'PROCESSING', 'MAPPING']
-    ).order_by('-created_at').first()
+        status__in=active_statuses,
+    )
+    if client_idempotency_key:
+        existing_session = active_sessions.filter(
+            idempotency_key=client_idempotency_key,
+        ).order_by('-created_at').first()
+    else:
+        # Preserve the historic hash-only behaviour for integrations that do
+        # not send an action key yet.  The browser client always sends one.
+        existing_session = IngestionSession.objects.filter(
+            workspace=workspace,
+            file_hash=file_hash,
+            status__in=['PROFILED', 'COMPLETED', 'PROCESSING', 'MAPPING'],
+        ).order_by('-created_at').first()
 
     # Compatibility recovery for workspaces cleared before sessions were
     # retired. A completed upload without any operational facts is not an
     # idempotent retry; it is a historical fingerprint that must not block a
     # deliberate re-import of the same CSV.
-    if existing_session and existing_session.status == 'COMPLETED':
+    if not client_idempotency_key and existing_session and existing_session.status == 'COMPLETED':
         from supplyforge.models import Order, Product, SlowMovingRiskAssessment
 
         active_user_id = str(request.user_id)
         has_operational_data = (
-            Product.objects.filter(user_id=active_user_id).exists()
-            or Order.objects.filter(user_id=active_user_id).exists()
+            Product.objects.filter(user_id=active_user_id, workspace_id=workspace.id).exists()
+            or Order.objects.filter(user_id=active_user_id, workspace_id=workspace.id).exists()
             or SlowMovingRiskAssessment.objects.filter(
                 session__workspace_id=workspace.id,
             ).exists()
@@ -642,29 +663,141 @@ def clear_data(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(['POST', 'DELETE'])
-def tenant_delete_data(request):
-    """
-    POST /api/v1/tenant/delete-data & DELETE /api/v1/tenant/delete-data (TEN-004)
-    Purges all 7 layers of tenant data under the TEN-004 policy.
-    """
+def _require_delete_dataset_permission(request):
+    """Keep authorization identical for preview, confirmation and legacy calls."""
+    role = getattr(request, 'user_role', None)
+    from supplyforge.permissions import has_permission, PERM_DELETE_DATASET
+    if has_permission(role, PERM_DELETE_DATASET):
+        return None
+    return Response({
+        "error": f"Tài khoản của bạn với vai trò '{role}' không có quyền xóa dữ liệu (cần quyền ADMIN/OWNER).",
+        "code": "PERMISSION_DENIED"
+    }, status=status.HTTP_403_FORBIDDEN)
+
+
+@api_view(['POST'])
+def tenant_delete_data_preview(request):
+    """Create a short-lived, auditable preview for workspace deletion."""
     workspace, context_error = _require_tenant_context(request)
     if context_error:
         return context_error
-    role = getattr(request, 'user_role', None)
-    from supplyforge.permissions import has_permission, PERM_DELETE_DATASET
-    if not has_permission(role, PERM_DELETE_DATASET):
-        return Response({
-            "error": f"Tài khoản của bạn với vai trò '{role}' không có quyền xóa dữ liệu (cần quyền ADMIN/OWNER).",
-            "code": "PERMISSION_DENIED"
-        }, status=status.HTTP_403_FORBIDDEN)
-
-    workspace_id = workspace.id
-    user_id = request.user_id
+    permission_error = _require_delete_dataset_permission(request)
+    if permission_error:
+        return permission_error
 
     from supplyforge.services.tenant_data_deletion import TenantDataDeletionService
-    res = TenantDataDeletionService.purge_tenant_data(workspace_id=workspace_id, user_id=user_id)
-    return Response(res, status=status.HTTP_200_OK)
+    preview = TenantDataDeletionService.preview_tenant_data(workspace.id)
+    audit = TenantDeletionAudit.objects.create(
+        workspace=workspace,
+        actor_id=request.user_id,
+        preview_json=preview,
+    )
+    token = signing.dumps(
+        {
+            'audit_request_id': str(audit.request_id),
+            'workspace_id': workspace.id,
+            'actor_id': request.user_id,
+        },
+        salt='supplyforge.tenant-deletion.confirmation',
+    )
+    return Response({
+        'status': 'PREVIEWED',
+        'requestId': str(audit.request_id),
+        'confirmationToken': token,
+        'confirmationRequired': workspace.slug,
+        'expiresInSeconds': 900,
+        'preview': preview,
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+def tenant_delete_data_confirm(request):
+    """Execute a previewed deletion once the owner re-confirms its workspace."""
+    workspace, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
+    permission_error = _require_delete_dataset_permission(request)
+    if permission_error:
+        return permission_error
+    if not settings.TENANT_DATA_DELETION_ENABLED:
+        return Response({
+            'error': 'Chức năng xóa dữ liệu tenant đang bị khóa bởi cấu hình triển khai.',
+            'code': 'TENANT_DELETION_DISABLED',
+        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    token = str(request.data.get('confirmationToken', '')).strip()
+    confirmation = str(request.data.get('confirmation', '')).strip()
+    if not token or not confirmation:
+        return Response({
+            'error': 'Cần confirmationToken và chuỗi xác nhận workspace.',
+            'code': 'CONFIRMATION_REQUIRED',
+        }, status=status.HTTP_400_BAD_REQUEST)
+    if confirmation != (workspace.slug or ''):
+        return Response({
+            'error': 'Chuỗi xác nhận không khớp workspace hiện tại.',
+            'code': 'CONFIRMATION_MISMATCH',
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        payload = signing.loads(
+            token,
+            salt='supplyforge.tenant-deletion.confirmation',
+            max_age=900,
+        )
+    except signing.SignatureExpired:
+        return Response({'error': 'Yêu cầu xác nhận đã hết hạn.', 'code': 'CONFIRMATION_EXPIRED'}, status=400)
+    except signing.BadSignature:
+        return Response({'error': 'Token xác nhận không hợp lệ.', 'code': 'CONFIRMATION_INVALID'}, status=400)
+
+    if payload.get('workspace_id') != workspace.id or payload.get('actor_id') != request.user_id:
+        return Response({'error': 'Token xác nhận không thuộc phiên hiện tại.', 'code': 'CONFIRMATION_INVALID'}, status=403)
+
+    with transaction.atomic():
+        audit = TenantDeletionAudit.objects.select_for_update().filter(
+            request_id=payload.get('audit_request_id'),
+            workspace=workspace,
+            actor_id=request.user_id,
+            status=TenantDeletionAudit.STATUS_PREVIEWED,
+        ).first()
+        if audit is None:
+            return Response({
+                'error': 'Yêu cầu xác nhận đã được sử dụng hoặc không tồn tại.',
+                'code': 'CONFIRMATION_ALREADY_USED',
+            }, status=status.HTTP_409_CONFLICT)
+
+        audit.status = TenantDeletionAudit.STATUS_CONFIRMED
+        audit.confirmation_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
+        audit.save(update_fields=['status', 'confirmation_hash'])
+
+        from supplyforge.services.tenant_data_deletion import TenantDataDeletionService
+        result = TenantDataDeletionService.purge_tenant_data(workspace.id, user_id=request.user_id)
+        audit.status = TenantDeletionAudit.STATUS_EXECUTED
+        audit.purged_counts_json = result['purged_counts']
+        audit.executed_at = timezone.now()
+        audit.save(update_fields=['status', 'purged_counts_json', 'executed_at'])
+
+    result['requestId'] = str(audit.request_id)
+    return Response(result, status=status.HTTP_200_OK)
+
+
+@api_view(['POST', 'DELETE'])
+def tenant_delete_data(request):
+    """Retired destructive endpoint kept only to direct clients to the safe flow."""
+    workspace, context_error = _require_tenant_context(request)
+    if context_error:
+        return context_error
+    permission_error = _require_delete_dataset_permission(request)
+    if permission_error:
+        return permission_error
+
+    code = 'TENANT_DELETION_DISABLED' if not settings.TENANT_DATA_DELETION_ENABLED else 'TENANT_DELETION_CONFIRMATION_REQUIRED'
+    http_status = status.HTTP_503_SERVICE_UNAVAILABLE if not settings.TENANT_DATA_DELETION_ENABLED else status.HTTP_410_GONE
+    return Response({
+        'error': 'Dùng luồng preview và confirm để xóa dữ liệu workspace.',
+        'code': code,
+        'previewEndpoint': '/api/v1/tenant/delete-data/preview',
+        'confirmEndpoint': '/api/v1/tenant/delete-data/confirm',
+    }, status=http_status)
 
 
 @api_view(['GET'])

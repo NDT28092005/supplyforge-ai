@@ -248,11 +248,13 @@ class HighSecurityDatabaseTests(TestCase):
         Product.objects.create(
             id='product-manager-a',
             user_id=str(owner.id),
+            workspace=workspace_a,
             third_party_id='third-party-a',
         )
         Product.objects.create(
             id='product-manager-b',
             user_id='other-user',
+            workspace=workspace_b,
             third_party_id='third-party-b',
         )
         CopilotConversation.objects.create(

@@ -1,0 +1,158 @@
+<section sfPageMotion class="procurement-page px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+  <header data-motion="priority" class="procurement-header">
+    <div>
+      <p class="section-label">Kế hoạch mua hàng</p>
+      <h1>Không để vốn quay lại kẹt trong kho</h1>
+      <p>Kiểm tra ngày hết tồn, lượng cần đặt và vốn cần chuẩn bị từ tồn kho, nhu cầu bán và điều khoản nhà cung cấp đã xác thực.</p>
+    </div>
+    <div class="horizon-chip">Kỳ kế hoạch {{ horizonDays }} ngày</div>
+  </header>
+
+  <form data-motion="panel" class="control-strip" (ngSubmit)="loadPlan()">
+    <label>
+      <span>SKU</span>
+      <input name="sku" [(ngModel)]="sku" placeholder="Ví dụ: SKU-001" autocomplete="off" />
+    </label>
+    <label>
+      <span>Kênh bán để kiểm tra giá</span>
+      <input name="channel" [(ngModel)]="channel" placeholder="Ví dụ: Kênh bán trực tiếp" autocomplete="off" />
+    </label>
+    <label>
+      <span>Kho (bắt buộc khi SKU có nhiều kho)</span>
+      <input name="warehouseCode" [(ngModel)]="warehouseCode" placeholder="Ví dụ: WH-HCM" autocomplete="off" />
+    </label>
+    <label>
+      <span>Kỳ dự báo</span>
+      <select name="horizon" [(ngModel)]="horizonDays">
+        <option [ngValue]="30">30 ngày</option>
+        <option [ngValue]="90">90 ngày</option>
+      </select>
+    </label>
+    <button type="submit" [disabled]="isLoading">{{ isLoading ? 'Đang đối chiếu...' : 'Lập kế hoạch' }}</button>
+  </form>
+
+  <section data-motion="panel" class="portfolio-panel" aria-labelledby="portfolio-title">
+    <div class="panel-heading">
+      <div>
+        <p class="section-label">Danh mục cần review</p>
+        <h2 id="portfolio-title">Ưu tiên mua hàng và PO đang cần quyết định</h2>
+      </div>
+      <button type="button" (click)="loadPortfolio()" [disabled]="isPortfolioLoading">
+        {{ isPortfolioLoading ? 'Đang đối chiếu...' : 'Làm mới danh mục' }}
+      </button>
+    </div>
+    <p *ngIf="portfolioError" class="notice notice-error" role="alert">{{ portfolioError }}</p>
+    <ng-container *ngIf="portfolio">
+      <p class="portfolio-boundary">{{ portfolio.coverage?.message }} {{ portfolio.boundary }}</p>
+      <div *ngIf="portfolio.budget?.status !== 'READY'" class="notice notice-warning">
+        <strong>Chưa thể đối chiếu vốn cho đơn mua mới.</strong>
+        <p>{{ portfolio.budget?.reason }}</p>
+      </div>
+      <div *ngIf="portfolio.budget?.status === 'READY'" class="budget-line">
+        <span>Ngân sách còn lại sau các đơn được đưa vào review</span>
+        <strong>{{ formatCurrency(portfolio.budget?.remaining_after_selected_orders) }}</strong>
+        <small>Cam kết chưa có ngày thanh toán: {{ formatCurrency(portfolio.budget?.undated_open_commitment) }} — chưa được gán vào một ngày dòng tiền.</small>
+      </div>
+      <div *ngIf="portfolio.items?.length; else emptyPortfolio" class="portfolio-list">
+        <article *ngFor="let item of portfolio.items" class="portfolio-item">
+          <div>
+            <strong>{{ item.sku }}</strong>
+            <span class="status-pill" [class.is-blocked]="item.portfolio_state === 'DATA_NEEDED' || item.portfolio_state === 'REVIEW_BUDGET'">
+              {{ portfolioStateLabel(item.portfolio_state) }}
+            </span>
+          </div>
+          <dl>
+            <div><dt>Hết hàng dự kiến</dt><dd>{{ item.estimated_stockout_date || 'Chưa xác định' }}</dd></div>
+            <div><dt>Lượng nên đặt</dt><dd>{{ formatQuantity(item.recommended_order_quantity) }}</dd></div>
+            <div><dt>Vốn cần review</dt><dd>{{ formatCurrency(item.capital_required) }}</dd></div>
+          </dl>
+          <p *ngFor="let reason of item.portfolio_reasons">{{ reason }}</p>
+          <div *ngIf="item.slow_moving_conflict?.status === 'REVIEW_REQUIRED'" class="notice notice-warning">
+            <strong>Liên kết cảnh báo tồn chậm</strong>
+            <p>{{ item.slow_moving_conflict.message }}</p>
+            <ul><li *ngFor="let step of item.slow_moving_conflict.owner_resolution_checklist">{{ step }}</li></ul>
+          </div>
+        </article>
+      </div>
+      <ng-template #emptyPortfolio><p class="notice">Chưa có SKU nào đủ bằng chứng tồn kho, điều khoản nhà cung cấp hoặc quyết định tạm dừng tái nhập để lập danh mục.</p></ng-template>
+    </ng-container>
+  </section>
+
+  <p *ngIf="errorMessage" role="alert" class="notice notice-error">{{ errorMessage }}</p>
+
+  <ng-container *ngIf="forecast">
+    <div *ngIf="forecast.status === 'DATA_UNAVAILABLE'" data-motion="panel" class="notice notice-warning">
+      <strong>Chưa thể đề xuất đơn mua cho SKU này.</strong>
+      <p>Hệ thống không thay số liệu thiếu bằng ước lượng. Bổ sung: {{ getMissing(forecast).join(', ') }}.</p>
+    </div>
+
+    <div *ngIf="forecast.status === 'READY'" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <article data-motion="panel" class="metric-card metric-card--urgent">
+        <span>Ngày dự kiến hết hàng</span>
+        <strong>{{ forecast.estimated_stockout_date || 'Chưa xác định' }}</strong>
+        <small>Từ vận tốc bán quan sát được</small>
+      </article>
+      <article data-motion="panel" class="metric-card">
+        <span>Lượng nên đặt</span>
+        <strong>{{ formatQuantity(forecast.recommended_order_quantity) }}</strong>
+        <small>Đã làm tròn theo MOQ và bội số đặt</small>
+      </article>
+      <article data-motion="panel" class="metric-card">
+        <span>Vốn cần chuẩn bị</span>
+        <strong>{{ formatCurrency(forecast.capital_required) }}</strong>
+        <small>Giá mua theo điều khoản nhà cung cấp</small>
+      </article>
+      <article data-motion="panel" class="metric-card">
+        <span>Đơn mua đang mở</span>
+        <strong>{{ formatQuantity(forecast.open_purchase_order_quantity) }}</strong>
+        <small>{{ forecast.recommendation === 'ORDER' ? 'Cần đặt bổ sung' : 'Có thể hoãn đặt thêm' }}</small>
+      </article>
+    </div>
+
+    <div *ngIf="forecast.unconfirmed_open_purchase_order_quantity > 0 || forecast.late_open_purchase_order_quantity > 0"
+      data-motion="panel" class="notice notice-warning supply-warning">
+      <strong>Không coi toàn bộ đơn mua đang mở là tồn kho chắc chắn.</strong>
+      <p>
+        {{ formatQuantity(forecast.scheduled_before_replenishment_quantity) }} đơn vị có ngày nhận dự kiến trước ngày dự kiến nhận hàng mới
+        ({{ forecast.proposed_receipt_date }}). Còn {{ formatQuantity(forecast.unconfirmed_open_purchase_order_quantity) }} đơn vị chưa có ngày nhận và
+        {{ formatQuantity(forecast.late_open_purchase_order_quantity) }} đơn vị nhận sau mốc này cần được bộ phận mua hàng xác nhận lại.
+      </p>
+    </div>
+  </ng-container>
+
+  <section *ngIf="pricing" data-motion="panel" class="pricing-panel">
+    <div class="panel-heading">
+      <div>
+        <p class="section-label">Hàng rào lợi nhuận</p>
+        <h2>Phương án giá cho {{ sku }}</h2>
+      </div>
+      <span [class.is-blocked]="pricing.status !== 'READY'" class="status-pill">{{ pricing.status === 'READY' ? 'Đủ dữ liệu' : 'Cần bổ sung dữ liệu' }}</span>
+    </div>
+    <div *ngIf="pricing.status !== 'READY'" class="notice notice-warning">
+      {{ pricing.message || 'Chưa thể tính giá sàn.' }} {{ getMissing(pricing).join(', ') }}
+    </div>
+    <div *ngIf="pricing.status === 'READY'" class="option-grid">
+      <article *ngFor="let option of pricing.options" class="price-option" [class.is-blocked]="option.status === 'BLOCKED'">
+        <div class="price-option__top"><h3>{{ option.label }}</h3><span>{{ option.status === 'AVAILABLE' ? 'Có thể thực hiện' : option.status === 'REQUIRES_APPROVAL' ? 'Cần phê duyệt' : 'Bị chặn' }}</span></div>
+        <strong>{{ formatCurrency(option.price) }}</strong>
+        <dl>
+          <div><dt>Giá sàn</dt><dd>{{ formatCurrency(option.price_floor) }}</dd></div>
+          <div><dt>Biên sau chi phí</dt><dd>{{ option.estimated_margin_rate | percent:'1.1-1' }}</dd></div>
+          <div><dt>Thời gian</dt><dd>{{ option.duration_days }} ngày</dd></div>
+        </dl>
+        <p *ngFor="let warning of option.warnings">{{ warning }}</p>
+      </article>
+    </div>
+  </section>
+
+  <section *ngIf="cashFlow" data-motion="panel" class="cash-panel">
+    <div><p class="section-label">Dòng tiền đã cam kết</p><h2>Lịch thanh toán {{ cashFlow.horizon_days }} ngày</h2></div>
+    <div class="cash-figures">
+      <div><span>Đã có lịch</span><strong>{{ formatCurrency(cashFlow.total_scheduled_payment) }}</strong></div>
+      <div *ngIf="cashFlow.undated_open_purchase_commitment > 0" class="cash-figures__undated">
+        <span>Chưa có ngày thanh toán</span><strong>{{ formatCurrency(cashFlow.undated_open_purchase_commitment) }}</strong>
+      </div>
+    </div>
+    <p>{{ cashFlow.scope }}</p>
+  </section>
+</section>

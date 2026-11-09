@@ -24,10 +24,7 @@ _EXPORTS = {
     'SkuNormalizationService': ('.sku_tinder', 'SkuNormalizationService'),
     'GeminiCopilotService': ('.gemini_copilot', 'GeminiCopilotService'),
     'OdooIntegrationService': ('.odoo', 'OdooIntegrationService'),
-    'ShopeeClient': ('.shopee_client', 'ShopeeClient'),
-    'ShopeeAPIError': ('.shopee_client', 'ShopeeAPIError'),
-    'verify_webhook_signature': ('.shopee_client', 'verify_webhook_signature'),
-    'ShopeeSyncService': ('.shopee_sync', 'ShopeeSyncService'),
+    'CommercialFactSnapshotService': ('.commercial_fact_snapshot', 'CommercialFactSnapshotService'),
 }
 
 __all__ = list(_EXPORTS)

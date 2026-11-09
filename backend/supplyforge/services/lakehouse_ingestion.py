@@ -9,7 +9,7 @@ import os
 import re
 import tempfile
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, time
 
 from django.conf import settings
 from django.db import transaction
@@ -354,17 +354,14 @@ class LakehouseIngestionService:
             return parsed if parsed > 0 else 0.0
 
         def capital_exposure(evidence: dict) -> tuple[float, bool]:
+            readiness = evidence.get('inventory_readiness') or {}
+            # New assessment writers always attach the readiness payload. A
+            # legacy immutable record with an explicit capital value remains
+            # readable, but no estimate is reconstructed when it is absent.
+            if readiness and readiness.get('status') != 'READY':
+                return 0.0, False
             observed_capital = as_positive_float(evidence.get('capital_exposure_vnd'))
-            if observed_capital:
-                return observed_capital, True
-
-            stock = as_positive_float(evidence.get('stock_quantity'))
-            unit_cost = as_positive_float(evidence.get('unit_cost'))
-            if stock and unit_cost:
-                return stock * unit_cost, True
-
-            sold_90d = as_positive_float(evidence.get('sold_90d'))
-            return sold_90d * 150000, False
+            return observed_capital, observed_capital > 0
 
         risk_priority = {
             'CRITICAL': 1.0,
@@ -449,7 +446,7 @@ class LakehouseIngestionService:
             'agedSkuCount': aged_sku_count,
             'riskCapitalByClassVnd': risk_capital_by_class,
             'capitalStatus': 'OBSERVED' if has_observed_inventory else (
-                'ESTIMATED' if total_skus else 'NO_DATA'
+                'INVENTORY_INCOMPLETE' if total_skus else 'NO_DATA'
             ),
             'topRiskSkus': [
                 candidate[3]
@@ -514,7 +511,13 @@ class LakehouseIngestionService:
             )
             locked_version.status = DatasetVersion.STATUS_ACTIVE
             locked_version.activated_at = now
-            locked_version.data_as_of = now
+            # CSV assessments are a historical as-of calculation.  Do not
+            # use the worker completion time as if it were demand evidence.
+            source_end = locked_version.ingestion_session.date_range_end
+            locked_version.data_as_of = (
+                timezone.make_aware(datetime.combine(source_end, time.max))
+                if source_end else now
+            )
             locked_version.save(update_fields=[
                 'status', 'activated_at', 'data_as_of', 'updated_at',
             ])

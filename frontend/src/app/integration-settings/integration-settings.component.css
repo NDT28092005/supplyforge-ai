@@ -29,7 +29,7 @@ h3 { font-size: .9rem; }
 
 .connection-panel, .connection-detail, .warehouse-card, .mapping-card, .webhook-panel, .entitlement-panel { background: #fff; padding: clamp(1rem, 2.2vw, 1.5rem); }
 .panel-heading { align-items: flex-start; display: flex; gap: 1rem; justify-content: space-between; }
-
+.catalog-copy { color: #64748b; font-size: .76rem; line-height: 1.6; margin-top: .35rem; max-width: 44rem; }
 .button { align-items: center; border: 1px solid transparent; border-radius: .65rem; cursor: pointer; display: inline-flex; font: 600 .75rem 'Be Vietnam Pro', sans-serif; justify-content: center; min-height: 2.45rem; padding: .6rem .85rem; transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease; }
 .button:disabled { cursor: not-allowed; opacity: .5; }
 .button--primary { background: #4f46e5; color: #fff; }

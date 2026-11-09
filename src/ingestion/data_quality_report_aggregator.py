@@ -308,7 +308,7 @@ class DataQualityReportAggregator:
                 'field': 'trans_date',
                 'message': f"Dữ liệu đã quá hạn ({freshness_status.get('freshnessDays', 30)} ngày)",
                 'affectedRecords': freshness_status.get('summary', {}).get('totalRecords', 0),
-                'actionableRecommendation': "Upload dữ liệu bán hàng mới nhất từ Shopee/Lazada.",
+                'actionableRecommendation': "Nạp dữ liệu bán hàng mới nhất từ hệ thống nguồn.",
             })
             seq += 1
         elif f_status == 'STALE':

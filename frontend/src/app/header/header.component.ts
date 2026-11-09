@@ -33,7 +33,6 @@ export class HeaderComponent implements OnInit {
   @Output() openLogin = new EventEmitter<void>();
   @Output() logout = new EventEmitter<void>();
   @Output() navigateStage = new EventEmitter<string>();
-  @Output() demoLogin = new EventEmitter<void>();
 
   // In-App Notification Center State (NOTI-001 & NOTI-002)
   isNotificationOpen: boolean = false;
@@ -146,9 +145,6 @@ export class HeaderComponent implements OnInit {
     this.logout.emit();
   }
 
-  onDemoLoginClick(): void {
-    this.demoLogin.emit();
-  }
 
   onLogoClick(): void {
     this.closeMobileMenu();

@@ -1,0 +1,42 @@
+{
+  "schema_version": "temporal-demand-risk-v2",
+  "task": "future_fulfilled_demand_risk",
+  "class_order": ["CRITICAL", "HIGH_RISK", "MEDIUM_RISK", "LOW_RISK"],
+  "feature_columns": [
+    "historical_total_qty",
+    "sales_qty_7d",
+    "sales_qty_30d",
+    "sales_qty_60d",
+    "sales_qty_90d",
+    "sales_velocity_7d",
+    "sales_velocity_30d",
+    "sales_velocity_60d",
+    "sales_velocity_90d",
+    "zero_rate_30d",
+    "zero_rate_60d",
+    "zero_rate_90d",
+    "dsls",
+    "adi_90d",
+    "cv2_90d",
+    "lifetime_days",
+    "lifetime_velocity",
+    "recent_7_to_30_ratio",
+    "recent_30_to_90_ratio"
+  ],
+  "label_definition": {
+    "horizon_days": 60,
+    "eligibility": "historical fulfilled quantity > 5",
+    "CRITICAL": "future fulfilled quantity = 0",
+    "HIGH_RISK": "future fulfilled quantity 1 to 5",
+    "MEDIUM_RISK": "future fulfilled quantity 6 to 25",
+    "LOW_RISK": "future fulfilled quantity > 25"
+  },
+  "source_policy": {
+    "accepted_order_statuses": ["COMPLETED", "SHIPPED"],
+    "legacy_return_identifier_excluded": true,
+    "return_handling": "NET_SALES_MINUS_RETURN_EVENTS",
+    "exclude_non_accounting_orders": true,
+    "feature_time_boundary": "All features use events at or before decision cutoff only.",
+    "pii_columns_prohibited": ["buyerId", "buyerUserName", "phone", "name", "city", "district", "ward", "address"]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": "temporal-demand-promotion-v1",
+  "description": "Predeclared gates for approving a mature SHADOW temporal demand-risk candidate for ACTIVE serving.",
+  "minimum_matured_predictions": 100,
+  "minimum_matured_cohorts": 3,
+  "minimum_high_risk_precision": 0.6,
+  "minimum_high_risk_recall": 0.7,
+  "minimum_precision_at_5pct": 0.6,
+  "maximum_high_risk_brier": 0.25,
+  "maximum_high_risk_ece": 0.12,
+  "maximum_probability_psi": 0.2,
+  "require_no_probability_drift_alert": true,
+  "selection_boundary": "Promotion review assesses only mature SHADOW/CANARY cohorts. It cannot change the Ground Truth target, operating-mode selection, feature contract, or benchmark test metrics."
+}

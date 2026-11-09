@@ -86,7 +86,7 @@ class IngestionHistoryTracker:
             session_record = {
                 'ingestionId': ing_id,
                 'sessionId': session_id,
-                'datasetId': dataset_id or 'Shopee_Default_Dataset',
+                'datasetId': dataset_id or 'Default_Sales_Dataset',
                 'filename': filename,
                 'uploadedAt': now_iso,
                 'uploadedBy': user,
